@@ -436,72 +436,318 @@
   }
 
   /* ------------------------------------------------------------------------
-     Document de facture imprimable — servi à la fois par « Imprimer / PDF »
-     sur la facture en cours et par la réédition depuis l'historique.
-     La fenêtre d'impression du navigateur permet « Enregistrer au format PDF ».
+     Document de facture — reproduction du modèle du domaine.
+
+     Tout est dessiné en CSS et en SVG : ni image ni ressource externe, pour
+     que la facture s'ouvre et s'imprime partout, même hors ligne. Les polices
+     sont chargées depuis Google Fonts avec des équivalents système en secours.
+
+     Servi à la fois par « Imprimer / PDF » sur la facture en cours et par la
+     réédition depuis l'historique.
      ------------------------------------------------------------------------ */
+
+  const MV_RIB = '20013';          /* RIB du domaine, affiché sous l'émetteur */
+  const PAYMENT_DAYS = 14;         /* délai de paiement accordé aux clients   */
+
+  /* Blason circulaire du domaine */
+  const SVG_CREST = `
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="cg" cx="50%" cy="38%" r="65%">
+      <stop offset="0%" stop-color="#2C5C46"/><stop offset="100%" stop-color="#14392C"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#E8CE85"/><stop offset="45%" stop-color="#C9A227"/>
+      <stop offset="100%" stop-color="#8E6C15"/>
+    </linearGradient>
+  </defs>
+  <circle cx="100" cy="100" r="96" fill="url(#gold)"/>
+  <circle cx="100" cy="100" r="88" fill="url(#cg)"/>
+  <circle cx="100" cy="100" r="82" fill="none" stroke="url(#gold)" stroke-width="1.6"/>
+  <g fill="url(#gold)">
+    <path d="M100 34c-11 15-11 28 0 40 11-12 11-25 0-40Z"/>
+    <circle cx="78" cy="86" r="8"/><circle cx="100" cy="80" r="8"/><circle cx="122" cy="86" r="8"/>
+    <circle cx="88" cy="102" r="8"/><circle cx="112" cy="102" r="8"/>
+    <circle cx="100" cy="118" r="8"/>
+  </g>
+  <path d="M52 92c10 10 22 12 32 6M148 92c-10 10-22 12-32 6" stroke="url(#gold)"
+        stroke-width="2.4" fill="none" stroke-linecap="round"/>
+  <path d="M28 138h144l-14 20H42Z" fill="#14392C" stroke="url(#gold)" stroke-width="1.6"/>
+  <text x="100" y="152" text-anchor="middle" font-family="Cinzel, Georgia, serif"
+        font-size="15" font-weight="700" letter-spacing="1.4" fill="#E8CE85">MARLOWE</text>
+  <text x="100" y="172" text-anchor="middle" font-family="Cinzel, Georgia, serif"
+        font-size="10" letter-spacing="4" fill="#C9A227">VINEYARD</text>
+</svg>`;
+
+  /* Grappe et feuillage, coin supérieur gauche */
+  const SVG_GRAPES = `
+<svg viewBox="0 0 200 180" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="lf" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#D9C169"/><stop offset="100%" stop-color="#8E7C2E"/>
+    </linearGradient>
+    <radialGradient id="bg1" cx="35%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#6B4A6B"/><stop offset="100%" stop-color="#2B1B2E"/>
+    </radialGradient>
+  </defs>
+  <g fill="url(#lf)" opacity=".95">
+    <path d="M18 20c22-12 44-8 56 8-14 16-38 20-56 10-6-6-6-14 0-18Z"/>
+    <path d="M8 52c24-8 46 0 54 18-18 12-42 10-56-4-3-6-2-12 2-14Z"/>
+    <path d="M74 8c16 4 26 18 24 34-16 2-30-8-34-24-1-7 4-11 10-10Z"/>
+  </g>
+  <path d="M60 44c14 10 24 26 28 44" stroke="#8E7C2E" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+  <g fill="url(#bg1)">
+    <circle cx="96" cy="80" r="13"/><circle cx="122" cy="76" r="13"/>
+    <circle cx="84" cy="102" r="13"/><circle cx="109" cy="99" r="13"/><circle cx="134" cy="95" r="13"/>
+    <circle cx="96" cy="123" r="13"/><circle cx="121" cy="120" r="13"/>
+    <circle cx="108" cy="143" r="13"/>
+  </g>
+  <g fill="#FFFFFF" opacity=".18">
+    <circle cx="92" cy="75" r="4"/><circle cx="118" cy="71" r="4"/><circle cx="105" cy="94" r="4"/>
+    <circle cx="92" cy="118" r="4"/><circle cx="104" cy="138" r="4"/>
+  </g>
+</svg>`;
+
+  /* Paysage du domaine, en filigrane au bas de la page */
+  const SVG_LANDSCAPE = `
+<svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMax meet">
+  <g fill="#8A6E3A">
+    <path d="M0 210c120-40 220-30 330-8s210 26 330 2 240-24 240-24V300H0Z" opacity=".22"/>
+    <path d="M0 244c150-34 280-18 400 4s250 22 500-10v62H0Z" opacity=".3"/>
+  </g>
+  <g stroke="#7A5F2E" stroke-width="2" opacity=".35" fill="none">
+    <path d="M40 296c60-22 140-34 220-34"/><path d="M20 300c70-28 160-42 250-42"/>
+    <path d="M620 262c90 0 170 12 240 34"/><path d="M640 258c90 0 180 14 250 42"/>
+  </g>
+  <g fill="#6E5526" opacity=".72">
+    <path d="M330 300V196h30v104Z"/>
+    <path d="M300 300v-74h180v74Z"/>
+    <path d="M292 226 390 170l98 56Z"/>
+    <path d="M322 186 360 164l38 22Z"/>
+    <rect x="404" y="250" width="18" height="50"/><rect x="352" y="250" width="18" height="50"/>
+    <rect x="330" y="206" width="14" height="16"/>
+  </g>
+  <g fill="#5E4A22" opacity=".66">
+    <ellipse cx="250" cy="252" rx="16" ry="42"/><ellipse cx="286" cy="262" rx="12" ry="32"/>
+    <ellipse cx="520" cy="256" rx="15" ry="38"/><ellipse cx="556" cy="266" rx="11" ry="28"/>
+  </g>
+  <g fill="#6E5526" opacity=".52">
+    <ellipse cx="700" cy="272" rx="34" ry="26"/><rect x="694" y="272" width="12" height="28"/>
+    <ellipse cx="180" cy="276" rx="30" ry="22"/><rect x="175" y="276" width="10" height="24"/>
+  </g>
+</svg>`;
+
+  /* Ornement d'angle, retourné par CSS aux quatre coins */
+  const SVG_CORNER = `
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <g fill="none" stroke="#8E6C15" stroke-width="2.4" stroke-linecap="round">
+    <path d="M4 66C4 32 32 4 66 4"/>
+    <path d="M14 70C14 42 42 14 70 14" opacity=".55"/>
+    <path d="M26 52c-8-12-4-26 10-30 7 10 4 24-10 30Z"/>
+    <path d="M52 30c12-6 26-2 30 10-12 5-26 2-30-10Z"/>
+  </g>
+  <path d="M26 52c-8-12-4-26 10-30 7 10 4 24-10 30Z" fill="#C9A227" fill-opacity=".38"/>
+  <path d="M52 30c12-6 26-2 30 10-12 5-26 2-30-10Z" fill="#C9A227" fill-opacity=".34"/>
+  <circle cx="40" cy="40" r="3.6" fill="#8E6C15"/>
+</svg>`;
+
+  const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+
+  /* Numéro au format du domaine : FAC-année-000012 */
+  function invoiceRef(num, dateFR) {
+    const year = (parseFR(dateFR) || new Date()).getFullYear();
+    const digits = String(num).replace(/\D/g, '');
+    return `FAC-${year}-${digits.padStart(6, '0')}`;
+  }
+
+  const money = n => Number(n || 0).toLocaleString('fr-FR') + '$';
+
   function openInvoiceDoc(inv) {
     const w = window.open('', '_blank');
     if (!w) { toast('Le navigateur a bloqué la fenêtre. Autorisez les pop-ups.'); return; }
 
-    /* Sans le détail des lignes (cas d'une facture archivée), on imprime
-       une ligne récapitulative plutôt qu'un tableau vide. */
-    const lines = (inv.rows && inv.rows.length)
+    const issued = parseFR(inv.date) || new Date();
+    const due = addDays(issued, PAYMENT_DAYS);
+    const dueFR = `${pad(due.getDate())}/${pad(due.getMonth() + 1)}/${due.getFullYear()}`;
+
+    const remise = Number(inv.remise) || 0;
+
+    /* Sans le détail des lignes — cas d'une facture rééditée depuis
+       l'historique, qui n'en conserve que le total — on imprime une ligne
+       récapitulative plutôt qu'un tableau vide. */
+    const detailed = inv.rows && inv.rows.length;
+    const lines = detailed
       ? inv.rows.map(l => `<tr>
-          <td>${esc(l.desc)}${l.ref ? ` <span style="color:#999;font-size:11px;">(${esc(l.ref)})</span>` : ''}</td>
-          <td class="num">${l.qty.toLocaleString('fr-FR')}</td>
-          <td class="num">${l.pu.toLocaleString('fr-FR')} $</td>
-          <td class="num">${l.tva}%</td>
-          <td class="num">${Math.round(l.ttc).toLocaleString('fr-FR')} $</td>
+          <td class="prod">${esc(l.desc)}</td>
+          <td>${l.qty.toLocaleString('fr-FR')}</td>
+          <td>${money(l.pu)}</td>
+          <td>${money(Math.round(l.ht))}</td>
         </tr>`).join('')
-      : `<tr><td>Commande — facture n°${esc(inv.num)}</td>
-          <td class="num">—</td><td class="num">—</td><td class="num">—</td>
-          <td class="num">${Number(inv.total).toLocaleString('fr-FR')} $</td></tr>`;
+      : `<tr><td class="prod">Commande — ${esc(invoiceRef(inv.num, inv.date))}</td>
+          <td>—</td><td>—</td><td>${money(inv.total)}</td></tr>`;
+
+    const totalHT = detailed
+      ? Math.round(inv.rows.reduce((s, l) => s + l.ht, 0))
+      : Number(inv.total);
+    /* Le montant dû part du TTC : la TVA s'applique ligne par ligne,
+       la réduction sur l'ensemble. */
+    const net = Math.round(Number(inv.total) * (1 - remise / 100));
+    const tva = detailed ? Math.round(Number(inv.total) - totalHT) : 0;
 
     w.document.write(`<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
-<title>Facture n°${esc(inv.num)} — Marlowe Vineyard</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${esc(invoiceRef(inv.num, inv.date))} — Marlowe Vineyard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,600&family=Great+Vibes&display=swap" rel="stylesheet">
 <style>
-  @page{margin:18mm;}
-  body{font-family:Georgia,'Times New Roman',serif;color:#1a1a1a;margin:0;}
-  /* Marges à l'écran seulement : à l'impression c'est @page qui les fixe. */
-  @media screen{body{max-width:800px;margin:0 auto;padding:40px 32px;}}
-  .head{display:flex;justify-content:space-between;align-items:flex-start;
-    border-bottom:2px solid #8E7C4E;padding-bottom:18px;margin-bottom:28px;}
-  .brand{font-size:24px;letter-spacing:2px;}
-  .brand small{display:block;font-size:10px;letter-spacing:3px;color:#8E7C4E;
-    text-transform:uppercase;font-family:Arial,sans-serif;margin-top:4px;}
-  .meta{text-align:right;font-size:12px;line-height:1.9;font-family:Arial,sans-serif;}
-  .meta b{font-size:16px;}
-  h2{font-size:13px;text-transform:uppercase;letter-spacing:2px;color:#8E7C4E;
-    font-family:Arial,sans-serif;margin:0 0 10px;}
-  .box{border:1px solid #ddd;padding:14px 16px;margin-bottom:28px;font-size:14px;}
-  table{width:100%;border-collapse:collapse;font-size:14px;}
-  th{text-align:left;font-family:Arial,sans-serif;font-size:11px;text-transform:uppercase;
-    letter-spacing:1px;color:#666;border-bottom:1px solid #ccc;padding:9px 0;}
-  td{padding:11px 0;border-bottom:1px solid #eee;}
-  .num{text-align:right;}
-  .total{margin-top:26px;text-align:right;font-size:20px;}
-  .total span{font-size:11px;text-transform:uppercase;letter-spacing:2px;
-    color:#8E7C4E;font-family:Arial,sans-serif;display:block;}
-  footer{margin-top:44px;padding-top:14px;border-top:1px solid #ddd;
-    font-size:10.5px;color:#777;font-family:Arial,sans-serif;text-align:center;}
+  @page{size:A4;margin:0;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:#3A342A;font-family:'Cormorant Garamond',Georgia,serif;color:#4A3B22;}
+  @media screen{body{padding:26px 0;}}
+
+  .sheet{
+    width:210mm;min-height:297mm;margin:0 auto;position:relative;overflow:hidden;
+    background:
+      radial-gradient(ellipse 68% 52% at 50% 38%, rgba(252,243,214,.70), transparent 72%),
+      radial-gradient(ellipse 130% 95% at 50% 106%, rgba(138,106,44,.34), transparent 62%),
+      radial-gradient(ellipse 40% 30% at 8% 96%, rgba(138,106,44,.22), transparent 70%),
+      linear-gradient(160deg,#E6D4A6 0%,#DDC894 38%,#D4BB82 70%,#C8AC70 100%);
+    box-shadow:0 18px 60px rgba(0,0,0,.5);
+  }
+  @media print{.sheet{box-shadow:none;margin:0;}}
+
+  /* Grain du papier */
+  .sheet::after{
+    content:'';position:absolute;inset:0;pointer-events:none;opacity:.30;
+    background-image:
+      radial-gradient(1px 1px at 12% 18%, rgba(120,95,45,.5), transparent),
+      radial-gradient(1px 1px at 72% 34%, rgba(120,95,45,.4), transparent),
+      radial-gradient(1px 1px at 38% 68%, rgba(120,95,45,.45), transparent),
+      radial-gradient(1px 1px at 88% 82%, rgba(120,95,45,.4), transparent),
+      radial-gradient(2px 2px at 55% 12%, rgba(140,110,55,.25), transparent),
+      radial-gradient(2px 2px at 22% 88%, rgba(140,110,55,.25), transparent);
+  }
+
+  /* Encadrement doré */
+  /* border-image laisse le centre transparent : le parchemin et le paysage
+     restent visibles derrière le cadre. */
+  .band{position:absolute;inset:0;z-index:4;pointer-events:none;border:9mm solid;
+    border-image:linear-gradient(150deg,#8E6C15,#E8CE85 20%,#B8912F 42%,#EFDDA0 58%,#B8912F 76%,#8E6C15) 1;}
+  .band::before{content:'';position:absolute;inset:2.5mm;border:1.1px solid rgba(122,95,46,.75);}
+  .band::after{content:'';position:absolute;inset:4.5mm;border:.7px solid rgba(122,95,46,.4);}
+
+  .corner{position:absolute;width:13mm;height:13mm;z-index:5;opacity:.9;}
+  .corner svg{width:100%;height:100%;display:block;}
+  .c-tl{top:10mm;left:10mm;}
+  .c-tr{top:10mm;right:10mm;transform:scaleX(-1);}
+  .c-bl{bottom:10mm;left:10mm;transform:scaleY(-1);}
+  .c-br{bottom:10mm;right:10mm;transform:scale(-1,-1);}
+
+  .inner{position:relative;z-index:2;padding:13mm 17mm 0;}
+
+  .grapes{position:absolute;top:8mm;left:8mm;width:36mm;opacity:.95;z-index:5;}
+  .grapes svg{width:100%;height:auto;display:block;}
+
+  .crest{width:33mm;margin:0 auto 4mm;}
+  .crest svg{width:100%;height:auto;display:block;
+    filter:drop-shadow(0 4px 10px rgba(80,60,20,.35));}
+
+  h1{font-family:'Cinzel',Georgia,serif;font-size:19pt;font-weight:600;letter-spacing:.09em;
+    text-align:center;color:#9C7A1C;text-shadow:0 1px 0 rgba(255,250,230,.6);}
+  h2{font-family:'Cormorant Garamond',Georgia,serif;font-size:23pt;font-weight:700;
+    text-align:center;color:#3E3118;margin-top:1mm;}
+
+  .rule{height:1px;background:linear-gradient(90deg,transparent,rgba(122,95,46,.55),transparent);
+    margin:5mm 0 4mm;}
+
+  .refs{display:flex;justify-content:space-between;align-items:flex-start;
+    font-size:10.5pt;font-weight:600;line-height:1.75;}
+  .refs .r{text-align:right;padding-top:5mm;}
+
+  /* Filigrane */
+  .wm{position:absolute;top:78mm;left:0;right:0;text-align:center;z-index:1;
+    font-family:'Cinzel',Georgia,serif;font-size:52pt;font-weight:700;letter-spacing:.08em;
+    color:rgba(150,118,48,.34);}
+
+  .parties{display:flex;justify-content:space-between;margin-top:7mm;
+    font-size:10.5pt;line-height:1.7;position:relative;z-index:2;}
+  .parties .lbl{font-family:'Cinzel',Georgia,serif;font-size:8pt;letter-spacing:.18em;
+    color:#8A6E2A;margin-bottom:1mm;}
+  .parties .cl{text-align:right;}
+  .parties b{font-weight:700;color:#3E3118;}
+
+  table{width:100%;border-collapse:collapse;margin-top:6mm;font-size:10.5pt;position:relative;z-index:2;}
+  thead th{background:#17392C;color:#EFE1BE;font-family:'Cinzel',Georgia,serif;
+    font-size:9.5pt;font-weight:600;letter-spacing:.04em;padding:2.6mm 3mm;text-align:center;}
+  thead th:first-child{text-align:center;}
+  tbody td{padding:2.1mm 3mm;text-align:center;font-weight:600;color:#4A3B22;}
+  tbody td.prod{font-weight:700;color:#3E3118;}
+  tbody tr:first-child td{padding-top:3.4mm;}
+  .spacer td{height:5mm;padding:0;}
+
+  .bottom{position:absolute;left:17mm;right:17mm;bottom:15mm;z-index:3;
+    display:flex;justify-content:space-between;align-items:flex-end;gap:8mm;}
+  .sig{font-family:'Great Vibes','Segoe Script','Brush Script MT','Apple Chancery',cursive;font-size:30pt;color:#3E3118;line-height:1;
+    transform:rotate(-2deg);white-space:nowrap;}
+  .sig small{display:block;font-family:'Cinzel',Georgia,serif;font-size:7pt;letter-spacing:.16em;
+    color:#8A6E2A;transform:rotate(2deg);margin-top:2mm;}
+  .totals{text-align:left;font-size:12pt;font-weight:700;line-height:1.65;color:#3E3118;white-space:nowrap;}
+  .totals .fin{font-size:13.5pt;}
+  .totals .tva{display:block;font-size:8.5pt;font-weight:600;color:#7A5F2E;}
+
+  .landscape{position:absolute;left:0;right:0;bottom:0;height:100mm;z-index:1;opacity:.95;}
+  .landscape svg{width:100%;height:100%;display:block;}
 </style></head><body>
-  <div class="head">
-    <div class="brand">MARLOWE VINEYARD<small>Tongva Hills · San Andreas</small></div>
-    <div class="meta"><b>Facture n°${esc(inv.num)}</b><br>Date : ${esc(inv.date)}
-      ${inv.emetteur ? `<br>Émetteur : ${esc(inv.emetteur)}` : ''}</div>
+<div class="sheet">
+  <div class="band"></div>
+  <div class="corner c-tl">${SVG_CORNER}</div>
+  <div class="corner c-tr">${SVG_CORNER}</div>
+  <div class="corner c-bl">${SVG_CORNER}</div>
+  <div class="corner c-br">${SVG_CORNER}</div>
+  <div class="grapes">${SVG_GRAPES}</div>
+  <div class="landscape">${SVG_LANDSCAPE}</div>
+  <div class="wm">MV</div>
+
+  <div class="inner">
+    <div class="crest">${SVG_CREST}</div>
+    <h1>MARLOWE VINEYARD</h1>
+    <h2>Facture</h2>
+    <div class="rule"></div>
+
+    <div class="refs">
+      <div>N° ${esc(invoiceRef(inv.num, inv.date))}<br>Date : ${esc(inv.date)}</div>
+      <div class="r">Date limite de paiement : ${esc(dueFR)}</div>
+    </div>
+
+    <div class="parties">
+      <div>
+        <div class="lbl">ÉMETTEUR</div>
+        <b>Marlowe Vineyard</b><br>RIB : ${esc(MV_RIB)}
+      </div>
+      <div class="cl">
+        <div class="lbl">CLIENT</div>
+        <b>${esc(inv.client || '—')}</b>
+      </div>
+    </div>
+
+    <table>
+      <thead><tr><th>Produit</th><th>Quantité</th><th>Prix/u</th><th>Total</th></tr></thead>
+      <tbody>${lines}</tbody>
+    </table>
   </div>
-  <h2>Client</h2>
-  <div class="box">${esc(inv.client || '—')}</div>
-  <h2>Détail</h2>
-  <table>
-    <thead><tr><th>Désignation</th><th class="num">Qté</th><th class="num">PU HT</th>
-      <th class="num">TVA</th><th class="num">Total TTC</th></tr></thead>
-    <tbody>${lines}</tbody>
-  </table>
-  <div class="total"><span>Total TTC</span>${Number(inv.total).toLocaleString('fr-FR')} $</div>
-  <footer>Marlowe Vineyard — le vin qui fait parler tout San Andreas</footer>
-<script>window.onload = function(){ window.print(); };<\/script>
+
+  <div class="bottom">
+    <div class="sig">${esc(inv.emetteur || 'Marlowe Vineyard')}<small>SIGNATURE</small></div>
+    <div class="totals">
+      TOTAL HT : ${money(totalHT)}<br>
+      Réduction : ${remise}%<br>
+      <span class="fin">Total : ${money(net)}</span>
+      ${tva && tva > 0 ? `<span class="tva">dont TVA : ${money(tva)}</span>` : ''}
+    </div>
+  </div>
+</div>
+<script>window.onload = function(){ setTimeout(function(){ window.print(); }, 450); };<\/script>
 </body></html>`);
     w.document.close();
   }
@@ -539,8 +785,10 @@
       client: val('invClient'),
       emetteur,
       rows,
+      remise: Math.min(100, Math.max(0, parseFloat(val('invRemise')) || 0)),
       total: Math.round(rows.reduce((s, l) => s + l.ttc, 0)),
       bouteilles: rows.reduce((s, l) => s + l.qty, 0),
+      get net() { return Math.round(this.total * (1 - this.remise / 100)); },
     };
   }
 
@@ -561,12 +809,12 @@
     }
 
     if (!await confirmAction('Enregistrer la facture',
-      `N°${inv.num} — ${inv.client} — ${inv.total.toLocaleString('fr-FR')} $ ` +
+      `N°${inv.num} — ${inv.client} — ${inv.net.toLocaleString('fr-FR')} $ ` +
       `(${inv.bouteilles.toLocaleString('fr-FR')} bouteille(s)). Elle rejoindra l'historique.`)) return;
 
     historiqueData.unshift({
       num: inv.num, date: inv.date, client: inv.client,
-      total: inv.total, emetteur: inv.emetteur || '—',
+      total: inv.net, emetteur: inv.emetteur || '—',
     });
 
     /* Le client est mémorisé s'il ne figure pas encore dans la base. */
@@ -601,6 +849,7 @@
       'Toutes les lignes saisies seront effacées.', true)) return;
     resetInvoiceLines();
     if ($('invClient')) $('invClient').value = '';
+    if ($('invRemise')) $('invRemise').value = '0';
     toast('Facture réinitialisée.');
   }
 
