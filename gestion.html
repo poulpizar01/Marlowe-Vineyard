@@ -1126,9 +1126,9 @@
         <p class="primes-sub">du lundi 17 août au dimanche 23 août · prime = barils × multiplicateur, plafonné à 19 000 barils/semaine</p>
       </div>
       <div class="primes-actions">
-        <button class="pbtn">Primes exceptionnelles</button>
-        <button class="pbtn">Annuler la clôture</button>
-        <button class="pbtn primary">Clôturer la semaine (lundi)</button>
+        <button class="pbtn" id="primesExcBtn">Primes exceptionnelles</button>
+        <button class="pbtn" id="annulerClotureBtn">Annuler la clôture</button>
+        <button class="pbtn primary" id="cloturerBtn">Clôturer la semaine (lundi)</button>
       </div>
     </div>
 
@@ -1605,9 +1605,9 @@ function renderEffectif(list){
       <td>
         <div class="eq-actions">
           ${belowQuota ? `<button class="eq-icon warn" title="Sous quota — à surveiller">▼</button>` : ''}
-          <button class="eq-icon promote ${canPromote ? '' : 'inactive'}" title="${canPromote ? 'Promouvoir vers ' + e.nextGrade : 'Promotion non éligible'}">▲</button>
-          <button class="eq-icon" title="Modifier">✎</button>
-          <button class="eq-icon danger" title="Retirer">×</button>
+          <button class="eq-icon promote ${canPromote ? '' : 'inactive'}" ${canPromote ? `data-eff-promote="${e.name}"` : ''} title="${canPromote ? 'Promouvoir vers ' + e.nextGrade : 'Promotion non éligible'}">▲</button>
+          <button class="eq-icon" data-eff-edit="${e.name}" title="Modifier la production">✎</button>
+          <button class="eq-icon danger" data-eff-del="${e.name}" title="Retirer la fiche">×</button>
         </div>
       </td>
     </tr>`;

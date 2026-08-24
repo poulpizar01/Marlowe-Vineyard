@@ -63,6 +63,13 @@ window.MarloweData = (function () {
     agenda:          { ref: () => agendaData,          render: [call('renderAgendaList'), () => renderDayGrid(weekDays[0])] },
     tombola:         { ref: () => tombolaParticipants, render: [] },
     serviceHistory:  { ref: () => serviceHistory,      render: [call('renderServiceHistory')] },
+
+    /* Semaines clôturées + photo permettant d'annuler la dernière clôture.
+       Vit dans marlowe-actions.js, d'où le passage par window. */
+    clotures: {
+      ref: () => window.MarloweClotures,
+      render: [() => { const a = window.MarloweActions; if (a) { a.renderEligibilite(); a.refreshWeekHeaders(); } }],
+    },
   };
 
   const LS_KEY = 'mv.data';

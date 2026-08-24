@@ -375,11 +375,24 @@
   /* ========================================================================
      ÉLIGIBILITÉ
      ======================================================================== */
+  /* Après une clôture, c'est la semaine archivée qui porte l'information —
+     pas la production en cours, qui est repartie de zéro. */
   function setDistributed(name, state) {
-    const e = effectifData.find(x => x.name === name);
-    if (!e) return;
-    e.distributed = state;
-    D().save('effectif');
+    const w = lastClosedWeek();
+
+    if (w) {
+      const row = w.eligibles.find(x => x.name === name);
+      if (!row) return;
+      row.distributed = state;
+      D().save('clotures', false);
+      renderEligibilite();
+    } else {
+      const e = effectifData.find(x => x.name === name);
+      if (!e) return;
+      e.distributed = state;
+      D().save('effectif');
+    }
+
     toast(state ? `Récompense de ${name} marquée distribuée.`
                 : `Distribution de ${name} annulée.`);
   }
@@ -686,6 +699,285 @@
   }
 
   /* ========================================================================
+     EFFECTIF — promouvoir, modifier, retirer
+     ======================================================================== */
+  const NEXT_GRADE = {
+    'Saisonnier':       { next: 'Ouvrier Viticole', quota: 5000, promoTarget: 8000, nextNext: 'Chef de Culture', final: false },
+    'Ouvrier Viticole': { next: 'Chef de Culture',  quota: 8000, promoTarget: null, nextNext: null,              final: true },
+  };
+
+  async function promoteEmployee(name) {
+    const e = effectifData.find(x => x.name === name);
+    if (!e) return;
+    const step = NEXT_GRADE[e.grade];
+    if (!step) { toast('Ce grade est déjà le dernier du parcours.'); return; }
+
+    if (!await confirmAction('Promouvoir',
+      `${e.name} passe de ${e.grade} à ${step.next}. Son quota hebdomadaire devient ${step.quota.toLocaleString('fr-FR')} bouteilles.`)) return;
+
+    e.grade = step.next;
+    e.quota = step.quota;
+    e.promoTarget = step.promoTarget;
+    e.nextGrade = step.nextNext;
+    e.isFinal = step.final;
+
+    D().save('effectif');
+    toast(`${e.name} est promu ${step.next}.`);
+  }
+
+  async function editEffectif(name) {
+    const e = effectifData.find(x => x.name === name);
+    if (!e) return;
+    const r = await askForm('Modifier la fiche', [
+      { key: 'barils', label: 'Production de la semaine', value: e.barils },
+      { key: 'quota', label: 'Quota hebdomadaire', value: e.quota },
+      { key: 'active', label: 'Dans le circuit quotas', value: e.active ? 'Oui' : 'Non', options: ['Oui', 'Non'] },
+    ], e.name);
+    if (!r) return;
+
+    e.barils = parseInt(String(r.barils).replace(/\D/g, ''), 10) || 0;
+    e.quota = parseInt(String(r.quota).replace(/\D/g, ''), 10) || 0;
+    e.active = r.active === 'Oui';
+
+    D().save('effectif');
+    toast('Fiche mise à jour.');
+  }
+
+  async function deleteEffectif(name) {
+    const i = effectifData.findIndex(x => x.name === name);
+    if (i < 0) return;
+    if (!await confirmAction('Retirer la fiche',
+      `${name} ne sera plus suivi dans les quotas ni dans l'éligibilité.`, true)) return;
+    effectifData.splice(i, 1);
+    D().save('effectif');
+    toast('Fiche retirée.');
+  }
+
+  /* ========================================================================
+     CYCLE HEBDOMADAIRE — clôture du lundi
+     ------------------------------------------------------------------------
+     Clôturer, c'est arrêter les compteurs de la semaine écoulée et repartir
+     de zéro. Ce qui est archivé sert ensuite à l'éligibilité : on distribue
+     les récompenses de la semaine TERMINÉE, pas de celle en cours.
+
+     Une photo de l'état d'avant est conservée pour « Annuler la clôture ».
+     ======================================================================== */
+
+  const clotures = { weeks: [], undo: null };
+
+  /* La semaine clôturée est celle des 7 jours qui précèdent aujourd'hui :
+     un lundi, cela donne exactement lundi → dimanche. */
+  function closingPeriod() {
+    const end = new Date();
+    end.setDate(end.getDate() - 1);
+    const start = new Date(end);
+    start.setDate(start.getDate() - 6);
+    return { start, end };
+  }
+
+  const frDate = d => `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+
+  /* Numéro de semaine ISO — celui qu'affiche l'en-tête « Semaine 34 ». */
+  function isoWeek(d) {
+    const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
+    const jan1 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+    return Math.ceil(((t - jan1) / 86400000 + 1) / 7);
+  }
+
+  const lastClosedWeek = () => clotures.weeks[0] || null;
+
+  async function closeWeek() {
+    const { start, end } = closingPeriod();
+    const label = `Semaine ${isoWeek(start)}`;
+
+    const eligibles = effectifData
+      .filter(e => e.active && e.barils >= e.quota)
+      .map(e => ({
+        name: e.name, grade: e.grade, barils: e.barils, quota: e.quota,
+        reward: (typeof rewardsByGrade === 'object' && rewardsByGrade[e.grade]) || '—',
+        distributed: false,
+      }));
+
+    const heures = serviceHistory.filter(s => s.end)
+      .reduce((sum, s) => sum + durationMinutes(s.start, s.end), 0);
+
+    const ok = await confirmAction(
+      `Clôturer ${label}`,
+      `Du ${frDate(start)} au ${frDate(end)}.\n\n` +
+      `${eligibles.length} employé(s) ont atteint leur quota. ` +
+      `Les compteurs de production et les prises de service repartent à zéro, ` +
+      `et l'éligibilité basculera sur cette semaine. La clôture reste annulable.`);
+    if (!ok) return;
+
+    /* Photo de l'état actuel, pour pouvoir revenir en arrière. */
+    clotures.undo = {
+      effectif: JSON.parse(JSON.stringify(effectifData)),
+      serviceHistory: JSON.parse(JSON.stringify(serviceHistory)),
+      weekId: label + ' ' + frDate(start),
+    };
+
+    clotures.weeks.unshift({
+      id: label + ' ' + frDate(start),
+      label,
+      du: frDate(start),
+      au: frDate(end),
+      closedAt: frDate(new Date()),
+      heures,
+      eligibles,
+    });
+
+    /* Remise à zéro */
+    effectifData.forEach(e => { e.barils = 0; e.distributed = false; });
+    serviceHistory.length = 0;
+    serviceActive = false;
+    resetServiceButton();
+
+    D().saveMany(['effectif', 'serviceHistory']);
+    D().save('clotures', false);
+    refreshWeekHeaders();
+    renderEligibilite();
+    toast(`${label} clôturée — ${eligibles.length} éligible(s).`);
+  }
+
+  async function undoClose() {
+    const w = lastClosedWeek();
+    if (!w || !clotures.undo || clotures.undo.weekId !== w.id) {
+      toast('Aucune clôture récente à annuler.');
+      return;
+    }
+    if (!await confirmAction('Annuler la clôture',
+      `${w.label} redevient la semaine en cours. Les productions et les heures de service d'avant la clôture sont rétablies.`)) return;
+
+    effectifData.length = 0;
+    clotures.undo.effectif.forEach(e => effectifData.push(e));
+    serviceHistory.length = 0;
+    clotures.undo.serviceHistory.forEach(s => serviceHistory.push(s));
+
+    clotures.weeks.shift();
+    clotures.undo = null;
+
+    D().saveMany(['effectif', 'serviceHistory']);
+    D().save('clotures', false);
+    refreshWeekHeaders();
+    renderEligibilite();
+    toast('Clôture annulée.');
+  }
+
+  function resetServiceButton() {
+    const btn = $('serviceBtn'), st = $('serviceStatus');
+    if (btn) { btn.textContent = 'Prise de service'; btn.classList.remove('danger'); }
+    if (st) { st.textContent = 'Hors service'; st.classList.remove('on'); }
+  }
+
+  /* ------------------------------------------------------------------------
+     ÉLIGIBILITÉ — la semaine clôturée fait foi
+     Tant qu'aucune semaine n'a été clôturée, on garde le comportement
+     d'origine : la production en cours.
+     ------------------------------------------------------------------------ */
+  function renderEligibilite() {
+    const body = $('eligibiliteBody');
+    if (!body) return;
+
+    const w = lastClosedWeek();
+    const rows = w ? w.eligibles
+                   : effectifData.filter(e => e.active && e.barils >= e.quota)
+                       .map(e => ({
+                         name: e.name, grade: e.grade, barils: e.barils,
+                         reward: (typeof rewardsByGrade === 'object' && rewardsByGrade[e.grade]) || '—',
+                         distributed: e.distributed,
+                       }));
+
+    const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+    set('el-count', rows.length);
+    set('el-distrib', rows.filter(r => r.distributed).length);
+    set('el-pending', rows.filter(r => !r.distributed).length);
+
+    const sub = document.querySelector('#page-eligibilite .page-sub');
+    if (sub) {
+      sub.textContent = w
+        ? `Récompenses de la ${w.label.toLowerCase()} — du ${w.du} au ${w.au}, clôturée le ${w.closedAt}.`
+        : 'Production de la semaine en cours — aucune semaine clôturée pour l\'instant.';
+    }
+
+    const cls = (typeof gradePillClass === 'function') ? gradePillClass : () => 'gp-muted';
+
+    body.innerHTML = rows.length ? rows.map(r => `
+      <tr>
+        <td>${esc(r.name)}</td>
+        <td><span class="grade-pill ${cls(r.grade)}">${esc(r.grade)}</span></td>
+        <td class="num">${Number(r.barils).toLocaleString('fr-FR')}</td>
+        <td>${esc(r.reward)}</td>
+        <td>${r.distributed
+          ? '<span class="status-chip status-paid">Distribuée</span>'
+          : '<span class="status-chip status-pending">À distribuer</span>'}</td>
+        <td style="text-align:right;">${r.distributed
+          ? `<button class="btn" data-undistribute="${esc(r.name)}" style="padding:7px 12px;font-size:11.5px;" title="Revenir sur cette distribution">↺ Annuler</button>`
+          : `<button class="btn" data-distribute="${esc(r.name)}" style="padding:7px 12px;font-size:11.5px;">Marquer distribuée</button>`}</td>
+      </tr>`).join('')
+      : `<tr><td colspan="6" class="empty-note" style="padding:22px 0;">Personne n'a atteint son quota sur cette période.</td></tr>`;
+  }
+
+  /* Met à jour les en-têtes qui affichaient une semaine figée dans le fichier. */
+  function refreshWeekHeaders() {
+    const { start, end } = closingPeriod();
+    const w = lastClosedWeek();
+
+    const range = $('weekRange');
+    if (range) {
+      const m = mondayOf(new Date());
+      const sun = new Date(m); sun.setDate(sun.getDate() + 6);
+      range.textContent = `Semaine ${isoWeek(m)} · du ${frDate(m)} au ${frDate(sun)}`;
+    }
+
+    const sub = document.querySelector('#page-statsprimes .primes-sub');
+    if (sub) {
+      sub.textContent = `Prochaine clôture : du ${frDate(start)} au ${frDate(end)} · `
+        + `prime = barils × multiplicateur, plafonné à 19 000 barils/semaine`;
+    }
+    const h = document.querySelector('#page-statsprimes .primes-titlewrap h1');
+    if (h) h.innerHTML = `Semaine ${isoWeek(start)} — <span class="accent">Primes</span>`;
+
+    const cancel = $('annulerClotureBtn');
+    if (cancel) {
+      const can = !!(w && clotures.undo && clotures.undo.weekId === w.id);
+      cancel.disabled = !can;
+      cancel.style.opacity = can ? '' : '.45';
+      cancel.title = can ? `Annuler la clôture de ${w.label}` : 'Aucune clôture récente à annuler';
+    }
+  }
+
+  /* ========================================================================
+     AGENDA — la vue journée s'ouvre sur aujourd'hui
+     ======================================================================== */
+  const DAY_LABELS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+
+  function refreshWeekDays() {
+    if (typeof weekDays === 'undefined') return;
+
+    const monday = mondayOf(new Date());
+    const today = frDate(new Date());
+
+    weekDays.length = 0;
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(monday);
+      d.setDate(d.getDate() + i);
+      weekDays.push({ label: DAY_LABELS[i], date: frDate(d) });
+    }
+
+    let idx = weekDays.findIndex(d => d.date === today);
+    if (idx < 0) idx = 0;
+
+    const tabs = $('dayviewTabs');
+    if (tabs) {
+      tabs.innerHTML = weekDays.map((d, i) => `
+        <div class="dayview-tab ${i === idx ? 'active' : ''}" data-idx="${i}">${d.label}<br>${d.date.slice(0, 5)}</div>
+      `).join('');
+    }
+    if (typeof renderDayGrid === 'function') renderDayGrid(weekDays[idx]);
+  }
+
+  /* ========================================================================
      LOT A — AJUSTEMENTS D'AFFICHAGE
      ======================================================================== */
   function injectStyles() {
@@ -769,7 +1061,8 @@
       const t = ev.target.closest('[data-depart],[data-bl-del],[data-distribute],[data-undistribute],' +
         '[data-hist-del],[data-hist-pdf],[data-client-del],[data-client-edit],' +
         '[data-article-del],[data-article-edit],[data-fr-del],[data-fr-edit],' +
-        '[data-canva-del],[data-dash-del],[data-agenda-del]');
+        '[data-canva-del],[data-dash-del],[data-agenda-del],' +
+        '[data-eff-promote],[data-eff-edit],[data-eff-del]');
       if (!t) return;
       const d = t.dataset;
       ev.preventDefault();
@@ -788,6 +1081,9 @@
       if (d.frEdit)        return editFactureRecue(d.frEdit);
       if (d.canvaDel)      return deleteCanva(d.canvaDel);
       if (d.dashDel)       return deleteDashRow(d.dashDel);
+      if (d.effPromote)    return promoteEmployee(d.effPromote);
+      if (d.effEdit)       return editEffectif(d.effEdit);
+      if (d.effDel)        return deleteEffectif(d.effDel);
       if (d.agendaDel !== undefined) return deleteEvent(Number(d.agendaDel));
     });
 
@@ -798,6 +1094,8 @@
     on('addClientBtn', addClient);
     on('addArticleBtn', addArticle);
     on('mvAddEvent', addEvent);
+    on('cloturerBtn', closeWeek);
+    on('annulerClotureBtn', undoClose);
 
     /* Entrée dans le champ de nom = ajouter l'employé. */
     const n = $('newEmpName');
@@ -813,12 +1111,19 @@
     setupCollapsibleNav();
     wire();
 
+    /* L'éligibilité doit être lue depuis la dernière semaine clôturée :
+       on remplace la version du fichier d'origine. */
+    window.renderEligibilite = renderEligibilite;
+
     backfillBlacklistIds();
     recomputeRecruiters();
     refreshEffectifCount();
     refreshClientCounts();
     refreshArticleCount();
     refreshFrCounts();
+    refreshWeekDays();
+    refreshWeekHeaders();
+    renderEligibilite();
     D().redraw('rhRecruiters');
   }
 
@@ -838,5 +1143,12 @@
     boot(0);
   }
 
-  window.MarloweActions = { recomputeRecruiters, refreshEffectifCount, reprintInvoice };
+  /* Exposé pour que marlowe-data.js puisse enregistrer les clôtures
+     comme n'importe quelle autre collection. */
+  window.MarloweClotures = clotures;
+
+  window.MarloweActions = {
+    recomputeRecruiters, refreshEffectifCount, reprintInvoice,
+    refreshWeekDays, refreshWeekHeaders, renderEligibilite, closeWeek, undoClose,
+  };
 })();
