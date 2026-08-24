@@ -67,6 +67,22 @@
        accès à la page Paramètres). Doivent correspondre EXACTEMENT au nom
        des rôles sur le serveur Discord.                                      */
     PATRON_ROLES: ['Patron', 'Co-Patron'],
+
+    /* ---------------------------------------------------------------------
+       ACCÈS PERMANENT — identifiants Discord qui ont TOUJOURS tous les accès,
+       quels que soient leurs rôles, et que personne ne peut retirer depuis
+       la page Paramètres.
+
+       C'est le trousseau du développeur : même si le patron se trompe dans
+       les réglages, même si on te retire un rôle, tu gardes la main.
+
+       Pour trouver ton identifiant : Discord ▸ Paramètres ▸ Avancés ▸
+       activer « Mode développeur », puis clic droit sur ton pseudo ▸
+       « Copier l'identifiant ». C'est une suite de 18-19 chiffres.
+
+       Exemple : OWNER_IDS: ['123456789012345678'],
+       --------------------------------------------------------------------- */
+    OWNER_IDS: [],
   };
 
   /* ==========================================================================
@@ -222,7 +238,10 @@
 
       if (!s || !s.user) return null;
       s.roles = Array.isArray(s.roles) ? s.roles : [];
-      s.isPatron = s.roles.some(r => CONFIG.PATRON_ROLES.includes(r));
+
+      /* Accès permanent par identifiant Discord, puis par rôle. */
+      s.isOwner  = CONFIG.OWNER_IDS.includes(String(s.user.id));
+      s.isPatron = s.isOwner || s.roles.some(r => CONFIG.PATRON_ROLES.includes(r));
       return s;
     },
 
@@ -317,6 +336,7 @@
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .mv-user-role{font-size:10.5px;color:var(--muted,#9C9384);margin-top:2px;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .mv-owner-tag{color:var(--or,#C9A961);font-weight:600;}
   .mv-logout{margin-top:10px;width:100%;background:transparent;border:1px solid var(--band,#3D372C);
     border-radius:8px;padding:7px;font-size:11.5px;color:var(--muted,#9C9384);cursor:pointer;
     font-family:inherit;transition:.15s;}
@@ -392,7 +412,9 @@
           <div class="mv-field">
             <label>Rôles Discord simulés</label>
             <div class="mv-role-list" id="mvRoles">
-              ${roles.map(r => `<div class="mv-role-chip" data-role="${esc(r)}">${esc(r)}</div>`).join('')}
+              ${roles.map(r => `<div class="mv-role-chip${
+                r === CONFIG.PATRON_ROLES[0] ? ' on' : ''
+              }" data-role="${esc(r)}">${esc(r)}</div>`).join('')}
             </div>
           </div>
 
@@ -412,7 +434,9 @@
     document.body.appendChild(gate);
 
     if (demo) {
-      const picked = new Set();
+      /* Le rôle patron est pré-coché : on entre avec tous les accès en un clic,
+         et il suffit de le décocher pour tester un autre profil. */
+      const picked = new Set(CONFIG.PATRON_ROLES[0] ? [CONFIG.PATRON_ROLES[0]] : []);
       gate.querySelector('#mvRoles').addEventListener('click', e => {
         const chip = e.target.closest('[data-role]');
         if (!chip) return;
@@ -453,7 +477,9 @@
           ? `<img src="${esc(session.user.avatar)}" alt="">` : esc(initials)}</div>
         <div style="min-width:0;flex:1;">
           <div class="mv-user-name" title="${esc(session.user.name)}">${esc(session.user.name)}</div>
-          <div class="mv-user-role" title="${esc(session.roles.join(', '))}">${esc(session.roles.join(' · '))}</div>
+          <div class="mv-user-role" title="${esc(session.roles.join(', '))}">${
+            session.isOwner ? '<span class="mv-owner-tag">Accès permanent</span> · ' : ''
+          }${esc(session.roles.join(' · '))}</div>
         </div>
       </div>
       <button class="mv-logout" type="button">Se déconnecter</button>`;

@@ -1,0 +1,38 @@
+name = "marlowe-api"
+main = "src/index.js"
+compatibility_date = "2026-01-01"
+
+# ---------------------------------------------------------------------------
+# Variables NON sensibles — modifiables ici, elles peuvent rester publiques.
+# ---------------------------------------------------------------------------
+[vars]
+# Identifiant du serveur Discord du domaine (clic droit sur le serveur ▸
+# « Copier l'identifiant », mode développeur activé).
+DISCORD_GUILD_ID = "METTRE_ICI_ID_DU_SERVEUR"
+
+# Adresse publique du site, SANS slash final.
+SITE_URL = "https://poulpizar01.github.io/Marlowe-Vineyard"
+
+# Rôles Discord qui donnent les pleins pouvoirs, séparés par des virgules.
+PATRON_ROLES = "Patron,Co-Patron"
+
+# Identifiants Discord ayant toujours tous les accès (le développeur).
+# Séparés par des virgules. Laisser vide s'il n'y en a pas.
+OWNER_IDS = ""
+
+# ---------------------------------------------------------------------------
+# Stockage : sessions + matrice des accès.
+# Créer avec :  npx wrangler kv namespace create MARLOWE
+# puis recopier l'id renvoyé ci-dessous.
+# ---------------------------------------------------------------------------
+[[kv_namespaces]]
+binding = "MARLOWE"
+id = "METTRE_ICI_ID_DU_NAMESPACE_KV"
+
+# ---------------------------------------------------------------------------
+# Les SECRETS ne se mettent JAMAIS dans ce fichier.
+# Ils se posent en ligne de commande :
+#   npx wrangler secret put DISCORD_CLIENT_SECRET
+#   npx wrangler secret put DISCORD_BOT_TOKEN
+#   npx wrangler secret put DISCORD_CLIENT_ID
+# ---------------------------------------------------------------------------
