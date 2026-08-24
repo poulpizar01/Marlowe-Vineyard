@@ -8,7 +8,7 @@ compatibility_date = "2026-01-01"
 [vars]
 # Identifiant du serveur Discord du domaine (clic droit sur le serveur ▸
 # « Copier l'identifiant », mode développeur activé).
-DISCORD_GUILD_ID = "METTRE_ICI_ID_DU_SERVEUR"
+DISCORD_GUILD_ID = "932301610128912414"
 
 # Adresse publique du site, SANS slash final.
 SITE_URL = "https://poulpizar01.github.io/Marlowe-Vineyard"

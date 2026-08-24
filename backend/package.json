@@ -1,0 +1,18 @@
+{
+  "name": "marlowe-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Backend de connexion Discord du domaine Marlowe Vineyard",
+  "scripts": {
+    "login": "wrangler login",
+    "kv": "wrangler kv namespace create MARLOWE",
+    "deploy": "wrangler deploy",
+    "logs": "wrangler tail",
+    "secret:id": "wrangler secret put DISCORD_CLIENT_ID",
+    "secret:client": "wrangler secret put DISCORD_CLIENT_SECRET",
+    "secret:bot": "wrangler secret put DISCORD_BOT_TOKEN"
+  },
+  "devDependencies": {
+    "wrangler": "^4"
+  }
+}
