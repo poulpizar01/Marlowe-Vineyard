@@ -553,11 +553,14 @@
       <div class="panel">
         <h3>Ajouter une entrée</h3>
         <div class="field-row-3">
+          <div class="field"><label>ID unique du joueur</label><input type="text" id="blUid" placeholder="350507"></div>
           <div class="field"><label>Nom</label><input type="text" id="blNom" placeholder="Prénom Nom"></div>
           <div class="field"><label>Date</label><input type="date" id="blDate" value="2026-08-23"></div>
-          <div class="field"><label>Ajouté par</label><input type="text" id="blBy" placeholder="Ton nom"></div>
         </div>
-        <div class="field"><label>Raison</label><input type="text" id="blRaison" placeholder="Vol, comportement, sabotage…"></div>
+        <div class="field-row">
+          <div class="field"><label>Ajouté par</label><input type="text" id="blBy" placeholder="Ton nom"></div>
+          <div class="field"><label>Raison</label><input type="text" id="blRaison" placeholder="Vol, comportement, sabotage…"></div>
+        </div>
         <div class="btn-row"><button class="btn primary" id="blAddBtn">+ Ajouter à la blacklist</button></div>
       </div>
 
@@ -702,18 +705,18 @@
             <h3>Facture</h3>
             <div class="field-row">
               <div class="field"><label>N°</label><input type="text" id="invNum" value="410072"></div>
-              <div class="field"><label>Date</label><input type="date" value="2026-08-23"></div>
+              <div class="field"><label>Date</label><input type="date" id="invDate" value="2026-08-23"></div>
             </div>
             <div class="field">
               <label>Émetteur(s) — direction &amp; commerciaux</label>
-              <select><option>Sélectionner les émetteurs…</option><option>Nella Valmora</option><option>Julio Cortes</option><option>Morgan Bilel</option></select>
+              <select id="invEmetteur"><option>Sélectionner les émetteurs…</option><option>Nella Valmora</option><option>Julio Cortes</option><option>Morgan Bilel</option></select>
             </div>
           </div>
           <div class="panel">
             <h3>Client</h3>
             <div class="field">
               <label>Nom (base de <span id="clientsCount2">0</span> clients)</label>
-              <div class="search"><span style="color:var(--muted);font-size:13px;">⌕</span><input type="text" placeholder="Tape pour chercher…"></div>
+              <div class="search"><span style="color:var(--muted);font-size:13px;">⌕</span><input type="text" id="invClient" list="mvClientList" placeholder="Tape pour chercher…"><datalist id="mvClientList"></datalist></div>
             </div>
           </div>
         </div>
@@ -735,9 +738,9 @@
         </div>
 
         <div class="btn-row">
-          <button class="btn primary">💾 Enregistrer la facture</button>
-          <button class="btn">🖨 Imprimer / PDF</button>
-          <button class="btn">↺ Réinitialiser</button>
+          <button class="btn primary" id="invSaveBtn">💾 Enregistrer la facture</button>
+          <button class="btn" id="invPrintBtn">🖨 Imprimer / PDF</button>
+          <button class="btn" id="invResetBtn">↺ Réinitialiser</button>
         </div>
       </div>
 
@@ -904,15 +907,15 @@
       <div class="panel">
         <h3>+ Archiver une facture reçue</h3>
         <div class="field-row-3">
-          <div class="field"><label>Entreprise</label><input type="text" placeholder="Nom de l'entreprise émettrice"></div>
-          <div class="field"><label>Date de la facture</label><input type="date" value="2026-08-23"></div>
-          <div class="field"><label>Montant ($, optionnel)</label><input type="number" placeholder="0"></div>
+          <div class="field"><label>Entreprise</label><input type="text" id="frSupplier" placeholder="Nom de l'entreprise émettrice"></div>
+          <div class="field"><label>Date de la facture</label><input type="date" id="frDateIn" value="2026-08-23"></div>
+          <div class="field"><label>Montant ($, optionnel)</label><input type="number" id="frMontant" placeholder="0"></div>
         </div>
         <div class="field-row">
-          <div class="field"><label>Lien (optionnel — Discord, Imgur…)</label><input type="text" placeholder="https://…"></div>
-          <div class="field"><label>Note (optionnel)</label><input type="text" placeholder="Achat de verre, prestation…"></div>
+          <div class="field"><label>Lien (optionnel — Discord, Imgur…)</label><input type="text" id="frLien" placeholder="https://…"></div>
+          <div class="field"><label>Note (optionnel)</label><input type="text" id="frNote" placeholder="Achat de verre, prestation…"></div>
         </div>
-        <div class="btn-row"><button class="btn primary">💾 Archiver la facture</button></div>
+        <div class="btn-row"><button class="btn primary" id="frArchiveBtn">💾 Archiver la facture</button></div>
       </div>
 
       <div id="facturesRecuesList"></div>
@@ -1804,6 +1807,7 @@ document.getElementById('absGrid').innerHTML = rhAbsences.map(a => `
   <div class="abs-pill">
     <span class="abs-name">${a.name}</span>
     <span class="abs-range ${a.indef ? 'indef' : ''}">${a.range}</span>
+    <button class="icon-btn danger" data-abs-del="${a.name}" title="Retour de l'employé — retirer l'absence">×</button>
   </div>
 `).join('');
 }
@@ -1825,14 +1829,14 @@ const blacklistData = [
   {name:'Marina Costa', reason:'Comportement irrespectueux répété', date:'05/08/2026', by:'Nella Valmora'},
 ];
 function renderBlacklist(){
-document.getElementById('blacklistBody').innerHTML = blacklistData.map(b => `
+document.getElementById('blacklistBody').innerHTML = blacklistData.map((b, i) => `
   <tr>
     <td class="mono">${b.uid || '—'}</td>
     <td>${b.name}</td>
     <td>${b.reason}</td>
     <td class="mono">${b.date}</td>
     <td>${b.by}</td>
-    <td style="text-align:right;"><button class="icon-btn danger" data-bl-del="${b.uid}" title="Retirer de la blacklist">×</button></td>
+    <td style="text-align:right;"><button class="icon-btn danger" data-bl-del="${i}" title="Retirer de la blacklist">×</button></td>
   </tr>`).join('');
 }
 renderBlacklist();

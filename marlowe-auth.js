@@ -800,6 +800,16 @@
       return;
     }
 
+    /* Mis à disposition du panel : sert notamment à signer les saisies
+       (« enregistré par … ») sans redemander le nom à chaque fois. */
+    window.MarloweSession = {
+      id: session.user.id,
+      name: session.user.name,
+      roles: session.roles.slice(),
+      isPatron: session.isPatron,
+      isOwner: session.isOwner,
+    };
+
     const perms = await Store.getPermissions();
     applyNavFilter(allowedPages(session, perms));
     addUserBadge(session);

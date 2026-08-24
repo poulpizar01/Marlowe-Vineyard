@@ -326,45 +326,67 @@
     toast(`${emp.name} est désormais absent.`);
   }
 
+  /* Retirer une absence : l'employé est de retour, son statut repasse
+     sur « Actif » dans le registre. */
+  async function removeAbsence(name) {
+    const i = rhAbsences.findIndex(a => a.name === name);
+    if (i < 0) return;
+
+    if (!await confirmAction('Retour de l\'employé',
+      `${name} est de retour : l'absence est retirée et son statut repasse sur « Actif ».`)) return;
+
+    rhAbsences.splice(i, 1);
+
+    const emp = rhRosterData.find(e => e.name === name);
+    const keys = ['rhAbsences'];
+    if (emp) {
+      emp.status = 'actif';
+      delete emp.absence;
+      delete emp.motif;
+      keys.push('rhRoster');
+      refreshEffectifCount();
+    }
+
+    D().saveMany(keys);
+    toast(`${name} est de retour.`);
+  }
+
   /* ========================================================================
      BLACKLIST
+     ------------------------------------------------------------------------
+     L'identifiant affiché est celui du joueur, saisi à la main — le même
+     que le numéro civil du registre des employés. Ce n'est pas un numéro
+     interne : il sert à retrouver la personne d'un fichier à l'autre.
      ======================================================================== */
 
-  function newBlacklistId() {
-    let id;
-    do { id = 'BL-' + String(Math.floor(1000 + Math.random() * 9000)); }
-    while (blacklistData.some(b => b.uid === id));
-    return id;
-  }
-
-  /* Les entrées d'origine n'ont pas d'identifiant : on leur en attribue un
-     au premier chargement, une seule fois. */
-  function backfillBlacklistIds() {
-    let changed = false;
-    blacklistData.forEach(b => { if (!b.uid) { b.uid = newBlacklistId(); changed = true; } });
-    if (changed) D().save('blacklist');
-  }
-
   function addBlacklist() {
+    const uid = val('blUid');
     const name = val('blNom');
     const reason = val('blRaison');
+
+    if (!uid) { toast('Indiquez l\'ID unique du joueur.'); $('blUid') && $('blUid').focus(); return; }
     if (!name) { toast('Indiquez un nom.'); return; }
     if (!reason) { toast('Indiquez une raison.'); return; }
+
+    if (blacklistData.some(b => String(b.uid) === uid)) {
+      toast('Ce joueur est déjà dans la blacklist.');
+      return;
+    }
 
     const iso = val('blDate');
     const date = iso ? iso.split('-').reverse().join('/') : todayFR();
 
-    blacklistData.unshift({ uid: newBlacklistId(), name, reason, date, by: val('blBy') || '—' });
-    clear('blNom', 'blRaison', 'blBy');
+    blacklistData.unshift({ uid, name, reason, date, by: val('blBy') || '—' });
+    clear('blUid', 'blNom', 'blRaison', 'blBy');
 
     D().save('blacklist');
     toast(`${name} a été ajouté à la blacklist.`);
   }
 
-  async function removeBlacklist(uid) {
-    const i = blacklistData.findIndex(b => b.uid === uid);
-    if (i < 0) return;
+  async function removeBlacklist(index) {
+    const i = Number(index);
     const b = blacklistData[i];
+    if (!b) return;
     if (!await confirmAction('Retirer de la blacklist',
       `${b.name} pourra de nouveau être recruté au domaine.`, true)) return;
     blacklistData.splice(i, 1);
@@ -413,17 +435,31 @@
     toast('Facture supprimée.');
   }
 
-  /* Réédite une facture de l'historique sous forme de document imprimable.
-     La fenêtre d'impression du navigateur permet « Enregistrer au format PDF ». */
-  function reprintInvoice(num) {
-    const h = historiqueData.find(x => String(x.num) === String(num));
-    if (!h) return;
-
+  /* ------------------------------------------------------------------------
+     Document de facture imprimable — servi à la fois par « Imprimer / PDF »
+     sur la facture en cours et par la réédition depuis l'historique.
+     La fenêtre d'impression du navigateur permet « Enregistrer au format PDF ».
+     ------------------------------------------------------------------------ */
+  function openInvoiceDoc(inv) {
     const w = window.open('', '_blank');
     if (!w) { toast('Le navigateur a bloqué la fenêtre. Autorisez les pop-ups.'); return; }
 
+    /* Sans le détail des lignes (cas d'une facture archivée), on imprime
+       une ligne récapitulative plutôt qu'un tableau vide. */
+    const lines = (inv.rows && inv.rows.length)
+      ? inv.rows.map(l => `<tr>
+          <td>${esc(l.desc)}${l.ref ? ` <span style="color:#999;font-size:11px;">(${esc(l.ref)})</span>` : ''}</td>
+          <td class="num">${l.qty.toLocaleString('fr-FR')}</td>
+          <td class="num">${l.pu.toLocaleString('fr-FR')} $</td>
+          <td class="num">${l.tva}%</td>
+          <td class="num">${Math.round(l.ttc).toLocaleString('fr-FR')} $</td>
+        </tr>`).join('')
+      : `<tr><td>Commande — facture n°${esc(inv.num)}</td>
+          <td class="num">—</td><td class="num">—</td><td class="num">—</td>
+          <td class="num">${Number(inv.total).toLocaleString('fr-FR')} $</td></tr>`;
+
     w.document.write(`<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
-<title>Facture n°${esc(h.num)} — Marlowe Vineyard</title>
+<title>Facture n°${esc(inv.num)} — Marlowe Vineyard</title>
 <style>
   @page{margin:18mm;}
   body{font-family:Georgia,'Times New Roman',serif;color:#1a1a1a;margin:0;}
@@ -452,21 +488,153 @@
 </style></head><body>
   <div class="head">
     <div class="brand">MARLOWE VINEYARD<small>Tongva Hills · San Andreas</small></div>
-    <div class="meta"><b>Facture n°${esc(h.num)}</b><br>Date : ${esc(h.date)}<br>Émetteur : ${esc(h.emetteur)}</div>
+    <div class="meta"><b>Facture n°${esc(inv.num)}</b><br>Date : ${esc(inv.date)}
+      ${inv.emetteur ? `<br>Émetteur : ${esc(inv.emetteur)}` : ''}</div>
   </div>
   <h2>Client</h2>
-  <div class="box">${esc(h.client)}</div>
+  <div class="box">${esc(inv.client || '—')}</div>
   <h2>Détail</h2>
   <table>
-    <thead><tr><th>Désignation</th><th class="num">Montant</th></tr></thead>
-    <tbody><tr><td>Commande — facture n°${esc(h.num)}</td>
-      <td class="num">${h.total.toLocaleString('fr-FR')} $</td></tr></tbody>
+    <thead><tr><th>Désignation</th><th class="num">Qté</th><th class="num">PU HT</th>
+      <th class="num">TVA</th><th class="num">Total TTC</th></tr></thead>
+    <tbody>${lines}</tbody>
   </table>
-  <div class="total"><span>Total TTC</span>${h.total.toLocaleString('fr-FR')} $</div>
-  <footer>Facture réglée · Marlowe Vineyard — le vin qui fait parler tout San Andreas</footer>
+  <div class="total"><span>Total TTC</span>${Number(inv.total).toLocaleString('fr-FR')} $</div>
+  <footer>Marlowe Vineyard — le vin qui fait parler tout San Andreas</footer>
 <script>window.onload = function(){ window.print(); };<\/script>
 </body></html>`);
     w.document.close();
+  }
+
+  /* Réédite une facture déjà enregistrée dans l'historique. */
+  function reprintInvoice(num) {
+    const h = historiqueData.find(x => String(x.num) === String(num));
+    if (!h) return;
+    openInvoiceDoc({ num: h.num, date: h.date, client: h.client, emetteur: h.emetteur, total: h.total });
+  }
+
+  /* ------------------------------------------------------------------------
+     Facture en cours de saisie
+     ------------------------------------------------------------------------ */
+  function readInvoice() {
+    const rows = [...document.querySelectorAll('#invoiceLines .line-row')].map(r => {
+      const qty = parseFloat(r.querySelector('.l-qty').value) || 0;
+      const pu = parseFloat(r.querySelector('.l-pu').value) || 0;
+      const tva = parseFloat(r.querySelector('.l-tva').value) || 0;
+      return {
+        ref: r.querySelector('.l-ref') ? r.querySelector('.l-ref').value : '',
+        desc: r.querySelector('.l-desc') ? r.querySelector('.l-desc').value : '',
+        qty, pu, tva, ht: qty * pu, ttc: qty * pu * (1 + tva / 100),
+      };
+    }).filter(l => l.qty > 0);
+
+    const iso = val('invDate');
+    const sel = $('invEmetteur');
+    let emetteur = sel ? sel.value : '';
+    if (/Sélectionner/i.test(emetteur)) emetteur = '';
+
+    return {
+      num: val('invNum') || String(Date.now()).slice(-6),
+      date: iso ? iso.split('-').reverse().join('/') : todayFR(),
+      client: val('invClient'),
+      emetteur,
+      rows,
+      total: Math.round(rows.reduce((s, l) => s + l.ttc, 0)),
+      bouteilles: rows.reduce((s, l) => s + l.qty, 0),
+    };
+  }
+
+  function printCurrentInvoice() {
+    const inv = readInvoice();
+    if (!inv.rows.length) { toast('Ajoutez au moins une ligne avec une quantité.'); return; }
+    openInvoiceDoc(inv);
+  }
+
+  async function saveInvoice() {
+    const inv = readInvoice();
+
+    if (!inv.client) { toast('Indiquez le client.'); $('invClient') && $('invClient').focus(); return; }
+    if (!inv.rows.length) { toast('Ajoutez au moins une ligne avec une quantité.'); return; }
+    if (historiqueData.some(h => String(h.num) === String(inv.num))) {
+      toast(`Le n°${inv.num} existe déjà dans l'historique.`);
+      return;
+    }
+
+    if (!await confirmAction('Enregistrer la facture',
+      `N°${inv.num} — ${inv.client} — ${inv.total.toLocaleString('fr-FR')} $ ` +
+      `(${inv.bouteilles.toLocaleString('fr-FR')} bouteille(s)). Elle rejoindra l'historique.`)) return;
+
+    historiqueData.unshift({
+      num: inv.num, date: inv.date, client: inv.client,
+      total: inv.total, emetteur: inv.emetteur || '—',
+    });
+
+    /* Le client est mémorisé s'il ne figure pas encore dans la base. */
+    if (!clientsData.some(c => c.name.toLowerCase() === inv.client.toLowerCase())) {
+      clientsData.unshift({ name: inv.client, addr: '—', phone: '', rib: '' });
+      refreshClientCounts();
+      fillClientList();
+      D().save('clients');
+    }
+
+    const c = $('histCount'); if (c) c.textContent = historiqueData.length;
+
+    /* Numéro suivant préparé pour la facture d'après. */
+    const next = String(parseInt(inv.num, 10) + 1);
+    if ($('invNum') && /^\d+$/.test(inv.num)) $('invNum').value = next;
+
+    resetInvoiceLines();
+    D().save('historique');
+    toast(`Facture n°${inv.num} enregistrée.`);
+  }
+
+  function resetInvoiceLines() {
+    const body = $('invoiceLines');
+    if (!body) return;
+    body.innerHTML = '';
+    if (typeof addLine === 'function') addLine();
+    else if (typeof recalcTotals === 'function') recalcTotals();
+  }
+
+  async function resetInvoice() {
+    if (!await confirmAction('Réinitialiser la facture',
+      'Toutes les lignes saisies seront effacées.', true)) return;
+    resetInvoiceLines();
+    if ($('invClient')) $('invClient').value = '';
+    toast('Facture réinitialisée.');
+  }
+
+  /* Propose les clients existants en autocomplétion sur le champ de saisie. */
+  function fillClientList() {
+    const dl = $('mvClientList');
+    if (!dl) return;
+    dl.innerHTML = clientsData.map(c => `<option value="${esc(c.name)}"></option>`).join('');
+  }
+
+  /* ------------------------------------------------------------------------
+     Archiver une facture reçue
+     ------------------------------------------------------------------------ */
+  function archiveFactureRecue() {
+    const supplier = val('frSupplier');
+    if (!supplier) { toast('Indiquez l\'entreprise émettrice.'); $('frSupplier') && $('frSupplier').focus(); return; }
+
+    const iso = val('frDateIn');
+    const item = {
+      date: iso ? iso.split('-').reverse().join('/') : todayFR(),
+      montant: parseFloat(String(val('frMontant')).replace(',', '.')) || 0,
+      note: val('frNote') || '—',
+      par: (window.MarloweSession && window.MarloweSession.name) || '—',
+      lien: val('frLien') || '',
+    };
+
+    let group = facturesRecuesData.find(g => g.supplier.toLowerCase() === supplier.toLowerCase());
+    if (group) group.items.unshift(item);
+    else facturesRecuesData.unshift({ supplier, items: [item] });
+
+    clear('frSupplier', 'frMontant', 'frNote', 'frLien');
+    refreshFrCounts();
+    D().save('facturesRecues');
+    toast(`Facture de ${supplier} archivée.`);
   }
 
   async function deleteClient(name) {
@@ -1062,7 +1230,7 @@
         '[data-hist-del],[data-hist-pdf],[data-client-del],[data-client-edit],' +
         '[data-article-del],[data-article-edit],[data-fr-del],[data-fr-edit],' +
         '[data-canva-del],[data-dash-del],[data-agenda-del],' +
-        '[data-eff-promote],[data-eff-edit],[data-eff-del]');
+        '[data-eff-promote],[data-eff-edit],[data-eff-del],[data-abs-del]');
       if (!t) return;
       const d = t.dataset;
       ev.preventDefault();
@@ -1081,6 +1249,7 @@
       if (d.frEdit)        return editFactureRecue(d.frEdit);
       if (d.canvaDel)      return deleteCanva(d.canvaDel);
       if (d.dashDel)       return deleteDashRow(d.dashDel);
+      if (d.absDel)        return removeAbsence(d.absDel);
       if (d.effPromote)    return promoteEmployee(d.effPromote);
       if (d.effEdit)       return editEffectif(d.effEdit);
       if (d.effDel)        return deleteEffectif(d.effDel);
@@ -1094,6 +1263,10 @@
     on('addClientBtn', addClient);
     on('addArticleBtn', addArticle);
     on('mvAddEvent', addEvent);
+    on('frArchiveBtn', archiveFactureRecue);
+    on('invSaveBtn', saveInvoice);
+    on('invPrintBtn', printCurrentInvoice);
+    on('invResetBtn', resetInvoice);
     on('cloturerBtn', closeWeek);
     on('annulerClotureBtn', undoClose);
 
@@ -1115,10 +1288,10 @@
        on remplace la version du fichier d'origine. */
     window.renderEligibilite = renderEligibilite;
 
-    backfillBlacklistIds();
     recomputeRecruiters();
     refreshEffectifCount();
     refreshClientCounts();
+    fillClientList();
     refreshArticleCount();
     refreshFrCounts();
     refreshWeekDays();
