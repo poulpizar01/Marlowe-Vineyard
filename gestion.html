@@ -1382,6 +1382,7 @@ const effectifData = [
   {name:'Morgan Bilel', grade:'Chef de Culture', barils:27168, distributed:false, quota:8000, promoTarget:null, nextGrade:null, isFinal:true, active:true},
   {name:'Léon Carter', grade:'Assistants de Magasin', barils:0, distributed:false, quota:0, promoTarget:null, nextGrade:null, isFinal:false, active:false},
 ];
+function renderEligibilite(){
 const eligibleList = effectifData.filter(e => e.active && e.barils >= e.quota);
 document.getElementById('el-count').textContent = eligibleList.length;
 document.getElementById('el-distrib').textContent = eligibleList.filter(e => e.distributed).length;
@@ -1395,6 +1396,8 @@ document.getElementById('eligibiliteBody').innerHTML = eligibleList.map(e => `
     <td>${e.distributed ? `<span class="status-chip status-paid">Distribuée</span>` : `<span class="status-chip status-pending">À distribuer</span>`}</td>
     <td style="text-align:right;">${e.distributed ? '' : `<button class="btn" style="padding:7px 12px;font-size:11.5px;">Marquer distribuée</button>`}</td>
   </tr>`).join('');
+}
+renderEligibilite();
 
 /* ---------- Stats & Quotas (Vue d'ensemble / Tableau de bord / Grades / Effectif / Primes) ---------- */
 const dash = [
@@ -1741,6 +1744,7 @@ const rhRecruiters = [
   {name:'Erwan Valmora', n:1},
   {name:'Livia Cole', n:1},
 ];
+function renderRecruiters(){
 document.getElementById('rhRecrutements7j').textContent = rhRecruiters.reduce((s, r) => s + r.n, 0);
 const rhRecruiterMax = Math.max(...rhRecruiters.map(r => r.n));
 document.getElementById('rbList').innerHTML = rhRecruiters.map(r => `
@@ -1750,6 +1754,8 @@ document.getElementById('rbList').innerHTML = rhRecruiters.map(r => `
     <div class="rb-count">${r.n}</div>
   </div>
 `).join('');
+}
+renderRecruiters();
 
 const rhDeparts = [
   {week:'Semaine du 18/08', rows:[
@@ -1762,6 +1768,7 @@ const rhDeparts = [
     {name:'Ken Kaneki', poste:'Chef de culture', reason:'Démission 0%', cls:'', date:'16/08'},
   ]},
 ];
+function renderDeparts(){
 document.getElementById('departCard').innerHTML = rhDeparts.map(w => `
   <div class="week-label">${w.week}</div>
   ${w.rows.map(r => `
@@ -1771,6 +1778,8 @@ document.getElementById('departCard').innerHTML = rhDeparts.map(w => `
     </div>
   `).join('')}
 `).join('');
+}
+renderDeparts();
 
 const rhAbsences = [
   {name:'Alex Lozano', range:'30/07 → indéfini', indef:true},
@@ -1784,12 +1793,15 @@ const rhAbsences = [
   {name:'Souleyman Smith', range:'18/08 → 24/08'},
   {name:'Jaroslav Krov', range:'21/08 → 02/09'},
 ];
+function renderAbsences(){
 document.getElementById('absGrid').innerHTML = rhAbsences.map(a => `
   <div class="abs-pill">
     <span class="abs-name">${a.name}</span>
     <span class="abs-range ${a.indef ? 'indef' : ''}">${a.range}</span>
   </div>
 `).join('');
+}
+renderAbsences();
 
 const rhAbsIndef = document.getElementById('absIndef');
 const rhAbsReturn = document.getElementById('absReturn');
@@ -1806,6 +1818,7 @@ const blacklistData = [
   {name:'Jonas Whitlock', reason:'Vol de matériel viticole', date:'12/08/2026', by:'Julio Cortes'},
   {name:'Marina Costa', reason:'Comportement irrespectueux répété', date:'05/08/2026', by:'Nella Valmora'},
 ];
+function renderBlacklist(){
 document.getElementById('blacklistBody').innerHTML = blacklistData.map(b => `
   <tr>
     <td>${b.name}</td>
@@ -1814,6 +1827,8 @@ document.getElementById('blacklistBody').innerHTML = blacklistData.map(b => `
     <td>${b.by}</td>
     <td style="text-align:right;"><button class="icon-btn danger" title="Retirer">×</button></td>
   </tr>`).join('');
+}
+renderBlacklist();
 
 /* ---------- Vérification blacklist en recrutement ---------- */
 const newEmpNameInput = document.getElementById('newEmpName');
@@ -2052,6 +2067,7 @@ const historiqueData = [
   {num:'410065', date:'17/08/2026', client:'Taverne du Choix', total:13500, emetteur:'Julio Cortes'},
 ];
 document.getElementById('histCount').textContent = historiqueData.length;
+function renderHistorique(){
 document.getElementById('historiqueBody').innerHTML = historiqueData.map(h => `
   <tr>
     <td class="mono">n°${h.num}</td>
@@ -2062,6 +2078,8 @@ document.getElementById('historiqueBody').innerHTML = historiqueData.map(h => `
     <td><span class="status-chip status-paid">✓ Payée</span></td>
     <td class="action-icons"><button class="icon-btn" title="Dupliquer">⧉</button><button class="icon-btn danger" title="Supprimer">×</button></td>
   </tr>`).join('');
+}
+renderHistorique();
 
 /* ---------- Nouvelle facture — lignes dynamiques ---------- */
 const sellableArticles = articlesData.filter(a => a.price !== null);
@@ -2165,6 +2183,7 @@ const facturesRecuesData = [
 ];
 document.getElementById('frCount').textContent = facturesRecuesData.reduce((s, g) => s + g.items.length, 0);
 document.getElementById('frSupCount').textContent = facturesRecuesData.length;
+function renderFacturesRecues(){
 document.getElementById('facturesRecuesList').innerHTML = facturesRecuesData.map(g => {
   const total = g.items.reduce((s, i) => s + i.montant, 0);
   return `
@@ -2185,6 +2204,8 @@ document.getElementById('facturesRecuesList').innerHTML = facturesRecuesData.map
     </table>
   </div>`;
 }).join('');
+}
+renderFacturesRecues();
 
 /* ---------- Catalogue (Entreprise / Citoyens) ---------- */
 const catalogueSlides = {
@@ -2647,5 +2668,6 @@ spinBtn.addEventListener('click', () => {
   }, {once:true});
 });
 </script>
+<script src="marlowe-data.js"></script>
 </body>
 </html>

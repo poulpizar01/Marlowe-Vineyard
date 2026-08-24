@@ -100,6 +100,10 @@ async function guildRoles(env) {
 
   const list = raw
     .filter(r => r.name !== '@everyone')
+    /* `managed` = rôle créé et tenu par une intégration : bots (carl-bot,
+       Xenon, Ticket Tool…), Server Booster, abonnements. Jamais un rôle
+       métier, donc on les écarte d'office. */
+    .filter(r => !r.managed)
     .sort((a, b) => b.position - a.position)
     .map(r => ({ id: r.id, name: r.name }));
 
@@ -108,18 +112,36 @@ async function guildRoles(env) {
   return out;
 }
 
-/* Rôles d'un membre. Renvoie null s'il n'est pas sur le serveur. */
+/* Rôles d'un membre. Renvoie null s'il n'est pas sur le serveur.
+
+   Résultat gardé 60 secondes : le panel enregistre souvent, et interroger
+   Discord à chaque requête finirait par heurter ses limites de débit — ce
+   qui déconnecterait tout le monde. Un membre exclu du serveur ou dont les
+   rôles changent perd donc ses accès dans la minute, pas dans la seconde. */
+const MEMBER_TTL = 60;
+
 async function memberRoles(env, userId) {
+  const cacheKey = 'mcache:' + userId;
+  const cached = await env.MARLOWE.get(cacheKey, 'json');
+  if (cached) return cached.gone ? null : cached;
+
   const res = await botFetch(env, `/guilds/${env.DISCORD_GUILD_ID}/members/${userId}`);
-  if (res.status === 404) return null;
+
+  if (res.status === 404) {
+    await env.MARLOWE.put(cacheKey, JSON.stringify({ gone: true }), { expirationTtl: MEMBER_TTL });
+    return null;
+  }
   if (!res.ok) throw new Error('member ' + res.status);
 
   const member = await res.json();
   const { byId } = await guildRoles(env);
-  return {
+  const out = {
     roles: (member.roles || []).map(id => byId[id]).filter(Boolean),
     nick: member.nick || null,
   };
+
+  await env.MARLOWE.put(cacheKey, JSON.stringify(out), { expirationTtl: MEMBER_TTL });
+  return out;
 }
 
 /* ---------------------------------------------------------------------------
@@ -287,6 +309,86 @@ async function handlePermissions(request, env) {
   return json(env, { error: 'method_not_allowed' }, 405);
 }
 
+/* GET | PUT /api/settings
+   Réglages du panel. Aujourd'hui : la liste des rôles retenus comme rôles
+   du domaine (les autres — partenaires, décoratifs — sont écartés). */
+async function handleSettings(request, env) {
+  if (request.method === 'GET') {
+    const s = await env.MARLOWE.get('settings', 'json');
+    return json(env, s || {});
+  }
+
+  if (request.method === 'PUT') {
+    const s = await currentSession(request, env);
+    if (!s) return json(env, { error: 'unauthorized' }, 401);
+    if (!s.isPatron) return json(env, { error: 'forbidden' }, 403);
+
+    let body;
+    try { body = await request.json(); }
+    catch (e) { return json(env, { error: 'bad_json' }, 400); }
+
+    const clean = {};
+    if (Array.isArray(body.visibleRoles)) {
+      clean.visibleRoles = body.visibleRoles
+        .filter(r => typeof r === 'string')
+        .map(r => r.slice(0, 100))
+        .slice(0, 300);
+    }
+
+    await env.MARLOWE.put('settings', JSON.stringify(clean));
+    return json(env, clean);
+  }
+
+  return json(env, { error: 'method_not_allowed' }, 405);
+}
+
+/* GET | PUT /api/data
+   Les données de travail du panel (employés, factures, blacklist…).
+   Tout est rangé sous une seule clé : c'est peu volumineux, et ça évite
+   qu'une sauvegarde partielle laisse le panel dans un état incohérent.
+
+   Lecture et écriture sont ouvertes à tout membre connecté : c'est un outil
+   d'équipe. L'appartenance au serveur Discord est revérifiée à chaque appel.  */
+const DATA_MAX = 2 * 1024 * 1024;   // 2 Mo, large devant l'usage réel
+
+async function handleData(request, env) {
+  const s = await currentSession(request, env);
+  if (!s) return json(env, { error: 'unauthorized' }, 401);
+
+  if (request.method === 'GET') {
+    const d = await env.MARLOWE.get('data', 'json');
+    return json(env, d || {});
+  }
+
+  if (request.method === 'PUT') {
+    const raw = await request.text();
+    if (raw.length > DATA_MAX) return json(env, { error: 'too_large' }, 413);
+
+    let body;
+    try { body = JSON.parse(raw); }
+    catch (e) { return json(env, { error: 'bad_json' }, 400); }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return json(env, { error: 'bad_shape' }, 400);
+    }
+
+    /* Fusion : on ne remplace que les collections envoyées, les autres
+       restent intactes. Deux personnes qui travaillent sur des pages
+       différentes ne s'écrasent donc pas mutuellement. */
+    const current = await env.MARLOWE.get('data', 'json') || {};
+    for (const [k, v] of Object.entries(body)) {
+      current[String(k).slice(0, 64)] = v;
+    }
+
+    const out = JSON.stringify(current);
+    if (out.length > DATA_MAX) return json(env, { error: 'too_large' }, 413);
+    await env.MARLOWE.put('data', out);
+
+    return json(env, { ok: true, saved: Object.keys(body) });
+  }
+
+  return json(env, { error: 'method_not_allowed' }, 405);
+}
+
 /* GET /api/logout */
 async function handleLogout(request, env) {
   const sid = bearer(request);
@@ -322,6 +424,8 @@ export default {
         case '/api/me':          return handleMe(request, env);
         case '/api/roles':       return handleRoles(request, env);
         case '/api/permissions': return handlePermissions(request, env);
+        case '/api/settings':    return handleSettings(request, env);
+        case '/api/data':        return handleData(request, env);
         case '/api/logout':      return handleLogout(request, env);
         default:                 return json(env, { error: 'not_found' }, 404);
       }

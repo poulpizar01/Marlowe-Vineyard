@@ -166,6 +166,36 @@
   const LS_SESSION = 'mv.session';
   const LS_PERMS   = 'mv.permissions';
   const LS_TOKEN   = 'mv.token';
+  const LS_SETTINGS = 'mv.settings';
+
+  /* ------------------------------------------------------------------------
+     Tri des rôles Discord.
+     Un serveur RP a facilement 80 rôles : bots, partenaires, événements,
+     décorations… Une poignée seulement concerne le domaine. Les rôles de
+     bots sont déjà écartés par le backend ; ici on devine les rôles métier
+     pour proposer une présélection au patron, qui ajuste ensuite.
+     ------------------------------------------------------------------------ */
+  const ROLE_KEYWORDS = [
+    'patron', 'direction', 'drh', 'responsable', 'resp',
+    'rh', 'commercial', 'magasin', 'vendeur', 'runner', 'assistant',
+    'saisonnier', 'ouvrier', 'chef de culture', 'viticole', 'caviste',
+  ];
+
+  /* Enlève emojis, séparateurs et accents pour comparer sur le fond. */
+  function normalizeRole(name) {
+    return String(name)
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z ]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function looksLikeDomainRole(name) {
+    const n = normalizeRole(name);
+    if (!n) return false;
+    return ROLE_KEYWORDS.some(k => n === k || n.startsWith(k + ' ') || n.includes(' ' + k));
+  }
 
   const ls = {
     get(k, fallback) {
@@ -211,6 +241,22 @@
         catch (e) { return DEMO_ROLES.slice(); }
       }
       return DEMO_ROLES.slice();
+    },
+
+    async getSettings() {
+      if (CONFIG.MODE === 'discord') {
+        try { return await api('/api/settings'); }
+        catch (e) { return {}; }
+      }
+      return ls.get(LS_SETTINGS, {}) || {};
+    },
+
+    async setSettings(s) {
+      if (CONFIG.MODE === 'discord') {
+        return api('/api/settings', { method: 'PUT', body: JSON.stringify(s) });
+      }
+      ls.set(LS_SETTINGS, s);
+      return s;
     },
 
     resetPermissions() {
@@ -333,7 +379,12 @@
   .mv-gate-error{color:#E08A7A;font-size:12.5px;margin-top:14px;text-align:center;min-height:16px;}
 
   /* ---------- badge utilisateur dans la sidebar ---------- */
-  .mv-user{position:sticky;bottom:0;z-index:5;margin:auto -16px -24px;padding:14px 16px 18px;
+  /* La barre latérale ne défile pas elle-même : c'est le menu qui défile,
+     pour que le badge reste visible en bas sans jamais recouvrir la dernière
+     entrée du menu (sinon « Paramètres » devient incliquable). */
+  .mv-sidebar-flex{display:flex;flex-direction:column;overflow:hidden;}
+  .mv-sidebar-flex nav{flex:1 1 auto;overflow-y:auto;min-height:0;}
+  .mv-user{flex-shrink:0;margin:0 -16px -24px;padding:14px 16px 18px;
     border-top:1px solid var(--band,#3D372C);background:#2B2820;}
   .mv-user-top{display:flex;align-items:center;gap:10px;}
   .mv-avatar{width:34px;height:34px;border-radius:50%;flex-shrink:0;background:rgba(201,169,97,.15);
@@ -351,8 +402,21 @@
   .mv-logout:hover{border-color:var(--bordeaux-soft,#8A3540);color:#E08A7A;}
 
   /* ---------- page Paramètres ---------- */
-  .mv-matrix-wrap{overflow:auto;max-height:70vh;border:1px solid var(--band,#3D372C);
+  /* Pas de hauteur limitée : c'est la page qui défile, pas un cadre interne. */
+  .mv-matrix-wrap{overflow-x:auto;border:1px solid var(--band,#3D372C);
     border-radius:12px;background:#221F1A;}
+
+  .mv-rolepick{border:1px solid var(--band,#3D372C);border-radius:12px;background:#221F1A;
+    padding:14px 18px;margin-bottom:20px;}
+  .mv-rolepick summary{cursor:pointer;font-weight:600;font-size:13.5px;color:var(--parchment,#EDE3CF);
+    list-style:none;}
+  .mv-rolepick summary::-webkit-details-marker{display:none;}
+  .mv-rolepick summary::before{content:'▸ ';color:var(--or,#C9A961);}
+  .mv-rolepick[open] summary::before{content:'▾ ';}
+  .mv-rolepick summary b{color:var(--or,#C9A961);}
+  .mv-rolepick-help{font-size:12px;line-height:1.65;color:var(--muted,#9C9384);margin:12px 0 14px;max-width:720px;}
+  .mv-rolepick-help b{color:var(--amber,#D6A75C);}
+  .mv-pick{max-height:none;}
   table.mv-matrix{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%;font-size:12.5px;}
   table.mv-matrix th,table.mv-matrix td{padding:9px 12px;border-bottom:1px solid rgba(61,55,44,.6);}
   table.mv-matrix thead th{position:sticky;top:0;z-index:3;background:#26231E;
@@ -473,8 +537,7 @@
   function addUserBadge(session) {
     const sidebar = document.querySelector('.sidebar');
     if (!sidebar) return;
-    sidebar.style.display = 'flex';
-    sidebar.style.flexDirection = 'column';
+    sidebar.classList.add('mv-sidebar-flex');
 
     const initials = session.user.name.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
     const box = document.createElement('div');
@@ -550,7 +613,7 @@
   /* ==========================================================================
      10. PAGE PARAMÈTRES (patron uniquement)
      ========================================================================== */
-  function buildSettings(roles, perms) {
+  function buildSettings(roles, perms, settings) {
     /* --- entrée de menu --- */
     const nav = document.querySelector('.sidebar nav');
     const sec = document.createElement('div');
@@ -568,7 +631,15 @@
     page.className = 'page-content';
     page.id = 'page-parametres';
 
-    const otherRoles = roles.filter(r => !CONFIG.PATRON_ROLES.includes(r));
+    /* Rôles retenus : ceux choisis par le patron, sinon une présélection
+       automatique des rôles qui ressemblent à des rôles du domaine. */
+    const configured = Array.isArray(settings.visibleRoles) ? settings.visibleRoles : null;
+    let visible = configured && configured.length
+      ? roles.filter(r => configured.includes(r))
+      : roles.filter(looksLikeDomainRole);
+    if (!visible.length) visible = roles.slice();
+
+    const otherRoles = visible.filter(r => !CONFIG.PATRON_ROLES.includes(r));
     const groups = [...new Set(PAGES.map(p => p.group))];
 
     let rows = '';
@@ -599,6 +670,24 @@
           lus directement sur le Discord et les réglages partagés par tout le monde.
         </div>` : ''}
 
+      <details class="mv-rolepick" ${configured && configured.length ? '' : 'open'}>
+        <summary>Rôles du domaine — <b>${visible.length}</b> retenus sur ${roles.length}</summary>
+        <p class="mv-rolepick-help">
+          Votre serveur compte beaucoup de rôles : partenaires, événements, décorations.
+          Cochez uniquement ceux qui correspondent à un poste au domaine — les autres
+          n'apparaîtront pas dans le tableau des accès.
+          ${configured && configured.length ? '' : '<b>Une présélection a été devinée, vérifiez-la.</b>'}
+        </p>
+        <div class="mv-role-list mv-pick" id="mvPick">
+          ${roles.map(r => `<div class="mv-role-chip${visible.includes(r) ? ' on' : ''}"
+            data-role="${esc(r)}">${esc(r)}</div>`).join('')}
+        </div>
+        <div class="btn-row" style="margin-top:14px;">
+          <button class="btn primary" id="mvApplyRoles">Appliquer</button>
+          <button class="btn" id="mvGuessRoles">Re-deviner</button>
+        </div>
+      </details>
+
       <div class="mv-matrix-wrap">
         <table class="mv-matrix">
           <thead>
@@ -619,6 +708,32 @@
       </div>`;
 
     document.querySelector('.content').appendChild(page);
+
+    /* --- choix des rôles retenus --- */
+    const pick = page.querySelector('#mvPick');
+    pick.addEventListener('click', e => {
+      const chip = e.target.closest('[data-role]');
+      if (chip) chip.classList.toggle('on');
+    });
+
+    page.querySelector('#mvGuessRoles').addEventListener('click', () => {
+      pick.querySelectorAll('[data-role]').forEach(c =>
+        c.classList.toggle('on', looksLikeDomainRole(c.dataset.role)));
+    });
+
+    page.querySelector('#mvApplyRoles').addEventListener('click', async () => {
+      const chosen = [...pick.querySelectorAll('[data-role].on')].map(c => c.dataset.role);
+      if (!chosen.length) {
+        alert('Gardez au moins un rôle, sinon le tableau des accès sera vide.');
+        return;
+      }
+      try {
+        await Store.setSettings(Object.assign({}, settings, { visibleRoles: chosen }));
+        location.reload();
+      } catch (e) {
+        alert("Impossible d'enregistrer : " + e.message);
+      }
+    });
 
     /* --- cocher / décocher une ligne entière --- */
     page.addEventListener('click', e => {
@@ -688,8 +803,11 @@
     const perms = await Store.getPermissions();
     applyNavFilter(allowedPages(session, perms));
     addUserBadge(session);
-    if (session.isPatron) buildSettings(roles, perms);
+    if (session.isPatron) buildSettings(roles, perms, await Store.getSettings());
     document.documentElement.classList.add('mv-ready');
+
+    /* La session est établie : le panel peut aller chercher ses données. */
+    if (window.MarloweData) window.MarloweData.load();
   }
 
   if (document.readyState === 'loading') {

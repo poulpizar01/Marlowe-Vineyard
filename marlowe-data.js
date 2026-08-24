@@ -1,0 +1,317 @@
+/* ============================================================================
+   MARLOWE VINEYARD — Mémoire du panel
+   ----------------------------------------------------------------------------
+   gestion.html a été écrit avec ses données en dur dans le JavaScript :
+   elles repartent à zéro à chaque rafraîchissement. Ce fichier leur donne
+   une mémoire, sans réécrire le panel.
+
+   Le principe : les tableaux d'origine ne sont jamais remplacés, ils sont
+   REMPLIS SUR PLACE avec ce qui vient du serveur. Tout le code existant
+   continue donc de fonctionner tel quel — il travaille sur les mêmes
+   tableaux, simplement avec le bon contenu dedans.
+
+   Utilisation depuis le panel, après avoir modifié une collection :
+
+       MarloweData.save('blacklist');       // enregistre et redessine
+       MarloweData.save('rhRoster', false); // enregistre sans redessiner
+
+   En mode démo (sans backend), tout est gardé dans le navigateur.
+   ============================================================================ */
+
+window.MarloweData = (function () {
+  'use strict';
+
+  /* ------------------------------------------------------------------------
+     1. LES COLLECTIONS
+     Chaque entrée relie un nom de rangement au tableau vivant du panel,
+     et aux fonctions qui doivent redessiner l'écran quand il change.
+
+     Attention : plusieurs fonctions du panel attendent un argument
+     (renderRhRoster(liste), renderArticles(recherche, catégorie)…). Les
+     appeler à vide lèverait une erreur et l'écran ne serait pas redessiné.
+     Chaque entrée décrit donc l'appel complet, pas seulement un nom.
+     ------------------------------------------------------------------------ */
+  const call = (name, ...args) => () => {
+    const fn = window[name];
+    if (typeof fn === 'function') fn(...args);
+  };
+
+  const COLLECTIONS = {
+    effectif: {
+      ref: () => effectifData,
+      render: [() => renderEffectif(effectifData), call('renderEligibilite'),
+               call('updateGradeCounts'), call('populateOverview'), call('renderPrimes')],
+    },
+    dash: {
+      ref: () => dash,
+      render: [() => renderDash(dash), call('updateGradeCounts'), call('populateOverview')],
+    },
+    rhRoster:        { ref: () => rhRosterData,        render: [() => renderRhRoster(rhRosterData)] },
+    rhRecruiters:    { ref: () => rhRecruiters,        render: [call('renderRecruiters')] },
+    rhDeparts:       { ref: () => rhDeparts,           render: [call('renderDeparts')] },
+    rhAbsences:      { ref: () => rhAbsences,          render: [call('renderAbsences')] },
+    blacklist:       { ref: () => blacklistData,       render: [call('renderBlacklist')] },
+    clients:         { ref: () => clientsData,         render: [() => renderClients(clientsData)] },
+    articles:        { ref: () => rawArticles,         render: [() => renderArticles('', 'all')] },
+    historique:      { ref: () => historiqueData,      render: [call('renderHistorique')] },
+    facturesRecues:  { ref: () => facturesRecuesData,  render: [call('renderFacturesRecues')] },
+    catalogueSlides: { ref: () => catalogueSlides,     render: [] },
+    depenses:        { ref: () => depensesData,        render: [call('bcRenderDetail')] },
+    retraits:        { ref: () => retraitsData,        render: [call('bcRenderDetail')] },
+    agenda:          { ref: () => agendaData,          render: [() => renderDayGrid(weekDays[0])] },
+    tombola:         { ref: () => tombolaParticipants, render: [] },
+    serviceHistory:  { ref: () => serviceHistory,      render: [call('renderServiceHistory')] },
+  };
+
+  const LS_KEY = 'mv.data';
+  let loaded = false;
+
+  /* ------------------------------------------------------------------------
+     2. OUTILS
+     ------------------------------------------------------------------------ */
+
+  /* Récupère le tableau vivant, ou null s'il n'existe pas dans cette page. */
+  function ref(key) {
+    const c = COLLECTIONS[key];
+    if (!c) return null;
+    try { return c.ref(); } catch (e) { return null; }
+  }
+
+  /* Remplit une structure SUR PLACE, sans la remplacer :
+     c'est ce qui permet à tout le code existant de continuer à marcher. */
+  function fillInPlace(target, source) {
+    if (Array.isArray(target) && Array.isArray(source)) {
+      target.length = 0;
+      source.forEach(v => target.push(v));
+      return true;
+    }
+    if (target && typeof target === 'object' && source && typeof source === 'object') {
+      Object.keys(target).forEach(k => { delete target[k]; });
+      Object.assign(target, source);
+      return true;
+    }
+    return false;
+  }
+
+  /* Rejoue les fonctions d'affichage d'une collection. Une page absente ou
+     une fonction manquante ne doit jamais interrompre le reste. */
+  function redraw(key) {
+    const c = COLLECTIONS[key];
+    if (!c) return;
+    c.render.forEach((fn, i) => {
+      try { fn(); }
+      catch (e) {
+        console.warn('[Marlowe] affichage de « ' + key + ' » (étape ' + (i + 1) + ') : ' + e.message);
+      }
+    });
+  }
+
+  function redrawAll() {
+    Object.keys(COLLECTIONS).forEach(redraw);
+  }
+
+  /* ------------------------------------------------------------------------
+     3. TRANSPORT — serveur en production, navigateur en mode démo
+     ------------------------------------------------------------------------ */
+  const cfg = () => (window.MarloweAuth && window.MarloweAuth.CONFIG) || { MODE: 'demo', API_BASE: '' };
+
+  function localRead() {
+    try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch (e) { return {}; }
+  }
+  function localWrite(obj) {
+    try { localStorage.setItem(LS_KEY, JSON.stringify(obj)); } catch (e) {}
+  }
+
+  async function fetchAll() {
+    const c = cfg();
+    if (c.MODE !== 'discord') return localRead();
+
+    let tok = null;
+    try { tok = JSON.parse(localStorage.getItem('mv.token') || 'null'); } catch (e) {}
+    if (!tok) return {};
+
+    const res = await fetch(c.API_BASE + '/api/data', {
+      headers: { 'Authorization': 'Bearer ' + tok },
+    });
+    if (!res.ok) throw new Error('lecture ' + res.status);
+    return res.json();
+  }
+
+  async function pushKeys(payload) {
+    const c = cfg();
+    if (c.MODE !== 'discord') {
+      const all = localRead();
+      Object.assign(all, payload);
+      localWrite(all);
+      return;
+    }
+
+    let tok = null;
+    try { tok = JSON.parse(localStorage.getItem('mv.token') || 'null'); } catch (e) {}
+    if (!tok) throw new Error('non connecté');
+
+    const res = await fetch(c.API_BASE + '/api/data', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tok },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error('écriture ' + res.status);
+  }
+
+  /* ------------------------------------------------------------------------
+     4. ENREGISTREMENT — groupé, pour ne pas envoyer dix requêtes d'affilée
+     ------------------------------------------------------------------------ */
+  const pending = new Set();
+  let timer = null;
+  let inFlight = false;
+
+  function flush() {
+    if (inFlight || !pending.size) return;
+    const keys = [...pending];
+    pending.clear();
+
+    const payload = {};
+    keys.forEach(k => { const r = ref(k); if (r) payload[k] = r; });
+    if (!Object.keys(payload).length) return;
+
+    inFlight = true;
+    setStatus('saving');
+    pushKeys(payload)
+      .then(() => setStatus('saved'))
+      .catch(err => {
+        setStatus('error', err.message);
+        /* On remet les clés en file : la prochaine tentative les reprendra. */
+        keys.forEach(k => pending.add(k));
+      })
+      .finally(() => {
+        inFlight = false;
+        if (pending.size) schedule();
+      });
+  }
+
+  function schedule() {
+    clearTimeout(timer);
+    timer = setTimeout(flush, 400);
+  }
+
+  /* ------------------------------------------------------------------------
+     5. INDICATEUR D'ÉTAT — l'utilisateur doit voir que c'est enregistré
+     ------------------------------------------------------------------------ */
+  let statusEl = null;
+
+  function ensureStatus() {
+    if (statusEl) return statusEl;
+    const style = document.createElement('style');
+    style.textContent = `
+      .mv-save{position:fixed;right:18px;bottom:18px;z-index:9998;
+        padding:9px 16px;border-radius:999px;font-size:12.5px;font-family:'Inter',sans-serif;
+        border:1px solid var(--band,#3D372C);background:#26231E;color:var(--muted,#9C9384);
+        box-shadow:0 8px 24px rgba(0,0,0,.4);opacity:0;transform:translateY(6px);
+        transition:opacity .2s,transform .2s;pointer-events:none;}
+      .mv-save.show{opacity:1;transform:translateY(0);}
+      .mv-save.ok{color:var(--vine,#6E8B5D);border-color:rgba(110,139,93,.5);}
+      .mv-save.ko{color:#E08A7A;border-color:rgba(224,138,122,.5);pointer-events:auto;}`;
+    document.head.appendChild(style);
+
+    statusEl = document.createElement('div');
+    statusEl.className = 'mv-save';
+    document.body.appendChild(statusEl);
+    return statusEl;
+  }
+
+  let hideTimer = null;
+  function setStatus(state, detail) {
+    const el = ensureStatus();
+    clearTimeout(hideTimer);
+    el.classList.remove('ok', 'ko');
+
+    if (state === 'saving') {
+      el.textContent = 'Enregistrement…';
+      el.classList.add('show');
+    } else if (state === 'saved') {
+      el.textContent = 'Enregistré ✓';
+      el.classList.add('show', 'ok');
+      hideTimer = setTimeout(() => el.classList.remove('show'), 1600);
+    } else {
+      el.textContent = 'Échec de l\'enregistrement — ' + (detail || 'réessai en cours');
+      el.classList.add('show', 'ko');
+    }
+  }
+
+  /* ------------------------------------------------------------------------
+     6. API PUBLIQUE
+     ------------------------------------------------------------------------ */
+  const api = {
+    /* Charge tout depuis le serveur et redessine. Appelé au démarrage. */
+    async load() {
+      let stored = {};
+      try { stored = await fetchAll(); }
+      catch (e) {
+        console.warn('[Marlowe] données non chargées : ' + e.message);
+        loaded = true;
+        return false;
+      }
+
+      let n = 0;
+      Object.keys(COLLECTIONS).forEach(key => {
+        if (!(key in stored)) return;      // jamais enregistré : on garde le contenu d'origine
+        const target = ref(key);
+        if (target && fillInPlace(target, stored[key])) n++;
+      });
+
+      loaded = true;
+      if (n) redrawAll();
+      return true;
+    },
+
+    /* Enregistre une collection. Le redessin est fait par défaut. */
+    save(key, doRedraw) {
+      if (!COLLECTIONS[key]) {
+        console.warn('[Marlowe] collection inconnue : ' + key);
+        return;
+      }
+      if (doRedraw !== false) redraw(key);
+      pending.add(key);
+      schedule();
+    },
+
+    /* Enregistre plusieurs collections d'un coup. */
+    saveMany(keys, doRedraw) {
+      keys.forEach(k => api.save(k, doRedraw));
+    },
+
+    redraw,
+    redrawAll,
+    ref,
+    isLoaded: () => loaded,
+    collections: () => Object.keys(COLLECTIONS),
+
+    /* Repart des données d'origine du fichier (efface ce qui est enregistré). */
+    async reset() {
+      const c = cfg();
+      if (c.MODE !== 'discord') { localWrite({}); }
+      else { await pushKeys(Object.fromEntries(Object.keys(COLLECTIONS).map(k => [k, null]))); }
+      location.reload();
+    },
+  };
+
+  /* ------------------------------------------------------------------------
+     7. DÉMARRAGE
+     On attend que le panel ait fini de se dessiner avec ses valeurs d'origine,
+     puis on remplace le contenu par les données enregistrées.
+
+     C'est marlowe-auth.js qui déclenche le chargement, une fois la session
+     établie — inutile d'appeler le serveur pour un visiteur non connecté,
+     il refuserait. Le démarrage automatique ci-dessous n'est là que si le
+     panel est ouvert sans module de connexion.
+     ------------------------------------------------------------------------ */
+  if (!window.MarloweAuth) {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => setTimeout(api.load, 0));
+    } else {
+      setTimeout(api.load, 0);
+    }
+  }
+
+  return api;
+})();
