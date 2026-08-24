@@ -79,29 +79,159 @@
   @media(max-width:980px){.hero-desc{margin-left:auto;margin-right:auto;}}
 
   .hero-ctas{display:flex;gap:14px;margin-bottom:56px;flex-wrap:wrap;}
-  .btn{padding:15px 28px;border-radius:999px;font-size:14px;font-weight:600;text-decoration:none;transition:.18s;display:inline-flex;align-items:center;}
+  .btn{padding:15px 28px;border-radius:999px;font-size:14px;font-weight:600;text-decoration:none;transition:.18s;display:inline-flex;align-items:center;gap:9px;cursor:pointer;border:none;font-family:inherit;}
   .btn-gold{background:var(--gold);color:var(--deep);}
   .btn-gold:hover{background:#E8C989;transform:translateY(-1px);}
-  .btn-outline{border:1px solid rgba(255,255,255,.28);color:var(--cream);}
+  .btn-outline{border:1px solid rgba(255,255,255,.28);color:var(--cream);background:transparent;}
   .btn-outline:hover{border-color:var(--gold);color:var(--gold);}
 
   .hero-stats{display:flex;gap:48px;}
   .stat .n{font-family:'Fraunces',serif;font-weight:600;font-size:27px;color:var(--gold);}
   .stat .l{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-top:5px;}
 
-  /* crest */
-  .crest-wrap{display:flex;align-items:center;justify-content:center;position:relative;}
-  .crest-wrap svg{width:100%;max-width:400px;height:auto;filter:drop-shadow(0 20px 50px rgba(0,0,0,.5));}
+  /* ===== NOUVEAUTÉS (colonne droite du hero) ===== */
+  .news-col{display:flex;flex-direction:column;align-items:center;gap:16px;}
+  .news-frame{width:100%;max-width:400px;aspect-ratio:5/6;position:relative;border-radius:18px;overflow:hidden;
+    border:1.5px solid var(--gold);background:linear-gradient(160deg,#132A1D,#0E1D14);
+    filter:drop-shadow(0 20px 50px rgba(0,0,0,.5));}
+  .news-frame.is-crest{border:none;background:none;filter:none;overflow:visible;}
+  .news-frame svg{width:100%;height:auto;display:block;filter:drop-shadow(0 20px 50px rgba(0,0,0,.5));}
   @keyframes float{0%,100%{transform:translateY(0);}50%{transform:translateY(-10px);}}
-  .crest-wrap svg{animation:float 7s ease-in-out infinite;}
-  @media(prefers-reduced-motion:reduce){.crest-wrap svg{animation:none;}}
+  .news-frame.is-crest svg{animation:float 7s ease-in-out infinite;}
+  @media(prefers-reduced-motion:reduce){.news-frame.is-crest svg{animation:none;}}
+
+  .news-eyebrow{display:flex;align-items:center;gap:10px;font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--gold-soft);}
+  .news-eyebrow::before,.news-eyebrow::after{content:'';height:1px;width:26px;background:rgba(217,184,114,.35);}
+  .news-eyebrow[hidden]{display:none;}
+
+  .news-slide{position:absolute;inset:0;opacity:0;transition:opacity .35s ease;pointer-events:none;}
+  .news-slide.active{opacity:1;pointer-events:auto;}
+  .news-slide img{width:100%;height:100%;object-fit:cover;display:block;}
+  .news-cap{position:absolute;left:0;right:0;bottom:0;padding:20px 22px 22px;
+    background:linear-gradient(0deg, rgba(6,12,9,.94) 12%, rgba(6,12,9,.55) 55%, transparent);}
+  .news-cap .nt{font-family:'Fraunces',serif;font-weight:600;font-size:17px;line-height:1.25;}
+  .news-cap .nd{font-size:12.5px;color:var(--muted);margin-top:5px;line-height:1.5;}
+
+  .news-arrow{position:absolute;top:50%;transform:translateY(-50%);width:34px;height:34px;border-radius:50%;
+    background:rgba(11,20,15,.6);border:1px solid rgba(255,255,255,.16);color:var(--cream);
+    display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;
+    backdrop-filter:blur(4px);transition:.15s;z-index:3;}
+  .news-arrow:hover{background:rgba(11,20,15,.9);border-color:var(--gold);color:var(--gold);}
+  .news-arrow.prev{left:12px;} .news-arrow.next{right:12px;}
+
+  .news-dots{display:flex;gap:6px;}
+  .news-dot{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.18);cursor:pointer;transition:.18s;border:none;padding:0;}
+  .news-dot.active{background:var(--gold);width:20px;border-radius:4px;}
 
   .scroll-cue{display:flex;justify-content:center;padding-bottom:36px;color:var(--gold-soft);opacity:.7;}
+  .scroll-cue a{color:inherit;display:block;}
 
-  .coming-next{border-top:1px solid var(--line);padding:26px 0 50px;text-align:center;font-size:12px;color:var(--muted);letter-spacing:.03em;}
+  /* ===== SECTIONS ===== */
+  section{padding:86px 0;border-top:1px solid var(--line);scroll-margin-top:20px;}
+  .sec-head{max-width:660px;margin-bottom:46px;}
+  .eyebrow{display:inline-flex;align-items:center;gap:9px;font-size:10.5px;font-weight:600;letter-spacing:.2em;
+    text-transform:uppercase;color:var(--gold-soft);margin-bottom:18px;}
+  .eyebrow::before{content:'';width:22px;height:1px;background:var(--gold-soft);}
+  h2{font-family:'Fraunces',serif;font-weight:600;font-size:clamp(28px,3.4vw,40px);line-height:1.14;letter-spacing:-.01em;}
+  h2 em{font-style:italic;font-weight:500;color:var(--gold);}
+  .sec-desc{font-size:15px;line-height:1.75;color:var(--muted);margin-top:16px;}
+
+  /* ===== CATALOGUE / CANVA ===== */
+  .canva-viewport{position:relative;border-radius:14px;overflow:hidden;border:1px solid var(--line);
+    background:linear-gradient(160deg,#16241C,#0E1712);aspect-ratio:16/7.2;}
+  @media(max-width:760px){.canva-viewport{aspect-ratio:4/3;}}
+  .canva-slide{position:absolute;inset:0;opacity:0;transition:opacity .3s ease;pointer-events:none;}
+  .canva-slide.active{opacity:1;pointer-events:auto;}
+  .canva-slide iframe{position:absolute;inset:0;width:100%;height:100%;border:none;}
+  .canva-placeholder{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:0 60px;text-align:center;}
+  .canva-placeholder span{font-family:'Fraunces',serif;font-style:italic;color:rgba(217,184,114,.5);font-size:15px;}
+  .canva-cap{position:absolute;left:0;right:0;bottom:0;padding:18px 22px;
+    background:linear-gradient(0deg, rgba(0,0,0,.78), transparent);}
+  .canva-cap .ct{font-weight:600;font-size:14.5px;}
+  .canva-cap .cd{font-size:12px;color:var(--muted);margin-top:3px;}
+  .canva-arrow{position:absolute;top:50%;transform:translateY(-50%);width:36px;height:36px;border-radius:50%;
+    background:rgba(11,20,15,.6);border:1px solid rgba(255,255,255,.16);color:var(--cream);
+    display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;
+    backdrop-filter:blur(4px);transition:.15s;z-index:3;}
+  .canva-arrow:hover{background:rgba(11,20,15,.9);border-color:var(--gold);color:var(--gold);}
+  .canva-arrow.prev{left:14px;} .canva-arrow.next{right:14px;}
+  .canva-dots{display:flex;justify-content:center;gap:6px;margin-top:16px;}
+  .canva-dot{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.18);cursor:pointer;transition:.18s;border:none;padding:0;}
+  .canva-dot.active{background:var(--gold);width:20px;border-radius:4px;}
+
+  /* ===== ORGANIGRAMME ===== */
+  .org-tier{font-size:10.5px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:var(--gold-soft);
+    text-align:center;margin-bottom:20px;}
+  .org-card{border:1px solid var(--line);border-radius:14px;background:#152B1E;padding:20px 22px;text-align:center;position:relative;z-index:1;}
+  .org-card.lead{border-color:rgba(217,184,114,.45);background:#1D3123;}
+  .org-card .role{font-family:'Fraunces',serif;font-weight:600;font-size:16px;}
+  .org-card .who{font-size:12.5px;color:var(--muted);margin-top:7px;line-height:1.6;}
+
+  .org-top{max-width:340px;margin:0 auto;}
+  .org-connector{width:1px;height:34px;background:rgba(217,184,114,.35);margin:0 auto;}
+  .org-branches{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;position:relative;padding-top:34px;}
+  .org-branches::before{content:'';position:absolute;top:0;left:12.5%;right:12.5%;height:1px;background:rgba(217,184,114,.35);}
+  .org-branch{position:relative;}
+  .org-branch::before{content:'';position:absolute;top:-34px;left:50%;width:1px;height:34px;background:rgba(217,184,114,.35);}
+  .org-down{display:flex;justify-content:center;color:rgba(217,184,114,.5);font-size:13px;padding:9px 0;}
+  .org-sub{display:flex;flex-direction:column;gap:8px;align-items:center;}
+  .org-pill{border:1px solid var(--line);border-radius:999px;padding:9px 16px;font-size:12.5px;
+    background:#142619;text-align:center;width:100%;position:relative;z-index:1;}
+  .org-down{position:relative;z-index:1;}
+  @media(max-width:900px){
+    .org-branches{grid-template-columns:1fr;gap:30px;padding-top:26px;}
+    .org-branches::before{left:50%;right:auto;width:1px;top:0;bottom:0;height:auto;}
+    .org-branch::before{display:none;}
+  }
+
+  /* ===== DEVENIR CLIENT ===== */
+  .client-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:52px;align-items:start;}
+  @media(max-width:900px){.client-grid{grid-template-columns:1fr;gap:38px;}}
+  .steps{display:flex;flex-direction:column;gap:2px;}
+  .step{display:grid;grid-template-columns:auto 1fr;gap:20px;padding:22px 0;border-bottom:1px solid var(--line);}
+  .step:last-child{border-bottom:none;}
+  .step-n{font-family:'Fraunces',serif;font-size:15px;font-weight:600;color:var(--gold);
+    width:38px;height:38px;border:1px solid rgba(217,184,114,.4);border-radius:50%;
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .step h3{font-family:'Fraunces',serif;font-weight:600;font-size:17px;margin-bottom:7px;}
+  .step p{font-size:13.5px;line-height:1.7;color:var(--muted);}
+
+  .client-panel{border:1px solid rgba(217,184,114,.3);border-radius:16px;background:rgba(217,184,114,.05);padding:32px 30px;}
+  .client-panel h3{font-family:'Fraunces',serif;font-weight:600;font-size:19px;margin-bottom:20px;}
+  .perks{list-style:none;display:flex;flex-direction:column;gap:13px;margin-bottom:28px;}
+  .perks li{display:grid;grid-template-columns:auto 1fr;gap:12px;font-size:13.5px;line-height:1.6;color:var(--cream);}
+  .perks li::before{content:'✦';color:var(--gold);font-size:12px;line-height:1.5;}
+  .perks li span{color:var(--muted);}
+
+  /* ===== FOOTER ===== */
+  footer{border-top:1px solid var(--line);padding:40px 0 56px;display:flex;justify-content:space-between;
+    align-items:center;gap:24px;flex-wrap:wrap;font-size:12px;color:var(--muted);}
+  footer a{color:var(--gold-soft);text-decoration:none;}
+  footer a:hover{color:var(--gold);}
+  .coming-next{border-top:1px solid var(--line);padding:24px 0;text-align:center;font-size:11.5px;color:rgba(159,176,162,.65);letter-spacing:.03em;}
 </style>
 </head>
 <body>
+
+<!-- Blason du domaine : affiché dans le cadre "Nouveautés" tant qu'aucune image n'a été ajoutée -->
+<template id="crestTpl">
+  <svg viewBox="0 0 400 480" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="8" y="8" width="384" height="464" rx="18" fill="#132A1D" stroke="#D9B872" stroke-width="1.5"/>
+    <rect x="22" y="22" width="356" height="436" rx="10" fill="none" stroke="#8E7C4E" stroke-width="1"/>
+    <path d="M60 60 Q80 40 110 55 M340 60 Q320 40 290 55 M60 420 Q80 440 110 425 M340 420 Q320 440 290 425" stroke="#D9B872" stroke-width="1.2" fill="none" opacity=".7"/>
+    <g transform="translate(200,150)">
+      <path d="M0 -40C-14 -18 -14 8 0 30C14 8 14 -18 0 -40Z" fill="#D9B872" opacity=".9"/>
+      <circle cx="-22" cy="26" r="7" fill="#D9B872"/><circle cx="0" cy="38" r="7" fill="#D9B872"/><circle cx="22" cy="26" r="7" fill="#D9B872"/>
+      <circle cx="-14" cy="46" r="7" fill="#D9B872"/><circle cx="14" cy="46" r="7" fill="#D9B872"/>
+      <circle cx="0" cy="58" r="7" fill="#D9B872"/>
+    </g>
+    <text x="200" y="255" text-anchor="middle" font-family="Fraunces, serif" font-weight="600" font-size="30" fill="#F3EFE4" letter-spacing="2">MARLOWE</text>
+    <text x="200" y="288" text-anchor="middle" font-family="Fraunces, serif" font-style="italic" font-weight="500" font-size="22" fill="#D9B872" letter-spacing="6">VINEYARD</text>
+    <line x1="90" y1="310" x2="310" y2="310" stroke="#8E7C4E" stroke-width="1"/>
+    <text x="200" y="335" text-anchor="middle" font-family="Inter" font-size="10.5" fill="#9FB0A2" letter-spacing="3">TONGVA HILLS · SAN ANDREAS</text>
+  </svg>
+</template>
+
 <div class="wrap">
 
   <nav>
@@ -117,11 +247,11 @@
     </div>
     <ul class="nav-links">
       <li><a href="#">Le Domaine</a></li>
-      <li><a href="#">Catalogue</a></li>
+      <li><a href="#catalogue">Catalogue</a></li>
       <li><a href="#">Feuilleter</a></li>
-      <li><a href="#">Organisation</a></li>
-      <li><a href="#">Devenir client</a></li>
-      <li><a href="#">Grades</a></li>
+      <li><a href="#organigramme">Organisation</a></li>
+      <li><a href="#devenir-client">Devenir client</a></li>
+      <li><a href="#organigramme">Grades</a></li>
       <li><a href="#">Carrières</a></li>
       <li><a href="#">Contact</a></li>
     </ul>
@@ -137,8 +267,8 @@
       <h1>Le vin qui fait parler<br><em>tout San Andreas</em>.</h1>
       <p class="hero-desc">Depuis les coteaux de Tongva Hills, le domaine Marlowe cultive, vinifie et livre les plus grands crus de l'État. De la vigne au verre, tout se fait chez nous.</p>
       <div class="hero-ctas">
-        <a href="#" class="btn btn-gold">Voir le catalogue</a>
-        <a href="#" class="btn btn-outline">Rejoindre le domaine</a>
+        <a href="#catalogue" class="btn btn-gold">Voir le catalogue</a>
+        <a href="https://discord.gg/CG4gYAEat" target="_blank" rel="noopener" class="btn btn-outline">Rejoindre le domaine</a>
       </div>
       <div class="hero-stats">
         <div class="stat"><div class="n">1957</div><div class="l">Année de fondation</div></div>
@@ -147,31 +277,275 @@
       </div>
     </div>
 
-    <div class="crest-wrap">
-      <svg viewBox="0 0 400 480" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect x="8" y="8" width="384" height="464" rx="18" fill="#132A1D" stroke="#D9B872" stroke-width="1.5"/>
-        <rect x="22" y="22" width="356" height="436" rx="10" fill="none" stroke="#8E7C4E" stroke-width="1"/>
-        <path d="M60 60 Q80 40 110 55 M340 60 Q320 40 290 55 M60 420 Q80 440 110 425 M340 420 Q320 440 290 425" stroke="#D9B872" stroke-width="1.2" fill="none" opacity=".7"/>
-        <g transform="translate(200,150)">
-          <path d="M0 -40C-14 -18 -14 8 0 30C14 8 14 -18 0 -40Z" fill="#D9B872" opacity=".9"/>
-          <circle cx="-22" cy="26" r="7" fill="#D9B872"/><circle cx="0" cy="38" r="7" fill="#D9B872"/><circle cx="22" cy="26" r="7" fill="#D9B872"/>
-          <circle cx="-14" cy="46" r="7" fill="#D9B872"/><circle cx="14" cy="46" r="7" fill="#D9B872"/>
-          <circle cx="0" cy="58" r="7" fill="#D9B872"/>
-        </g>
-        <text x="200" y="255" text-anchor="middle" font-family="Fraunces, serif" font-weight="600" font-size="30" fill="#F3EFE4" letter-spacing="2">MARLOWE</text>
-        <text x="200" y="288" text-anchor="middle" font-family="Fraunces, serif" font-style="italic" font-weight="500" font-size="22" fill="#D9B872" letter-spacing="6">VINEYARD</text>
-        <line x1="90" y1="310" x2="310" y2="310" stroke="#8E7C4E" stroke-width="1"/>
-        <text x="200" y="335" text-anchor="middle" font-family="Inter" font-size="10.5" fill="#9FB0A2" letter-spacing="3">TONGVA HILLS · SAN ANDREAS</text>
-      </svg>
+    <div class="news-col">
+      <div class="news-eyebrow" id="newsEyebrow" hidden>Les nouveautés</div>
+      <div class="news-frame" id="newsFrame"></div>
+      <div class="news-dots" id="newsDots"></div>
     </div>
   </div>
 
   <div class="scroll-cue">
-    <svg width="20" height="14" viewBox="0 0 20 14"><path d="M2 2l8 9 8-9" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <a href="#catalogue" aria-label="Descendre vers le catalogue">
+      <svg width="20" height="14" viewBox="0 0 20 14"><path d="M2 2l8 9 8-9" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </a>
   </div>
 
-  <div class="coming-next">La suite de la page vitrine (catalogue, organisation, grades, carrières, contact) sera complétée avec les contenus à venir.</div>
+  <!-- ===== CATALOGUE ===== -->
+  <section id="catalogue">
+    <div class="sec-head">
+      <div class="eyebrow">Catalogue</div>
+      <h2>La gamme du domaine, <em>à feuilleter</em>.</h2>
+      <p class="sec-desc">Cuvées, millésimes, tarifs et conditions de livraison — tout est réuni dans nos catalogues. Utilisez les flèches pour passer d'un document à l'autre.</p>
+    </div>
+
+    <div class="canva-carousel">
+      <div class="canva-viewport" id="canvaViewport"></div>
+      <div class="canva-dots" id="canvaDots"></div>
+    </div>
+  </section>
+
+  <!-- ===== ORGANIGRAMME ===== -->
+  <section id="organigramme">
+    <div class="sec-head">
+      <div class="eyebrow">Organisation</div>
+      <h2>L'organigramme <em>du domaine</em>.</h2>
+      <p class="sec-desc">Chaque grade a son périmètre et son responsable direct. Une candidature se dépose toujours auprès du responsable de pôle concerné.</p>
+    </div>
+
+    <div class="org-tier">Direction</div>
+    <div class="org-top">
+      <div class="org-card lead">
+        <div class="role">Direction</div>
+        <div class="who">Patron<br>Co-Patrons</div>
+      </div>
+    </div>
+
+    <div class="org-connector"></div>
+    <div class="org-tier" style="margin:0 0 6px;">Responsables</div>
+
+    <div class="org-branches">
+      <div class="org-branch">
+        <div class="org-card"><div class="role">DRH</div><div class="who">Ressources humaines</div></div>
+        <div class="org-down">↓</div>
+        <div class="org-sub"><div class="org-pill">RH</div></div>
+      </div>
+      <div class="org-branch">
+        <div class="org-card"><div class="role">Resp. Commercial</div><div class="who">Ventes &amp; partenariats</div></div>
+        <div class="org-down">↓</div>
+        <div class="org-sub"><div class="org-pill">Commercial</div></div>
+      </div>
+      <div class="org-branch">
+        <div class="org-card"><div class="role">Resp. Magasin</div><div class="who">Boutique &amp; stock</div></div>
+        <div class="org-down">↓</div>
+        <div class="org-sub">
+          <div class="org-pill">Assistant(e) magasin</div>
+          <div class="org-pill">Vendeur</div>
+        </div>
+      </div>
+      <div class="org-branch">
+        <div class="org-card"><div class="role">Resp. Runner</div><div class="who">Livraisons</div></div>
+        <div class="org-down">↓</div>
+        <div class="org-sub"><div class="org-pill">Runner</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== DEVENIR CLIENT ===== -->
+  <section id="devenir-client">
+    <div class="sec-head">
+      <div class="eyebrow">Devenir client</div>
+      <h2>Ouvrir un compte <em>au domaine</em>.</h2>
+      <p class="sec-desc">Particulier ou entreprise, le domaine Marlowe livre partout sur San Andreas. L'ouverture d'un compte client se fait en trois étapes, sur notre Discord.</p>
+    </div>
+
+    <div class="client-grid">
+      <div class="steps">
+        <div class="step">
+          <div class="step-n">1</div>
+          <div>
+            <h3>Rejoindre le Discord</h3>
+            <p>Tout passe par notre serveur : c'est là que vous êtes vérifié et que vous accédez au catalogue réservé aux clients.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-n">2</div>
+          <div>
+            <h3>Faire une demande de devis</h3>
+            <p>Indiquez les cuvées, les quantités et le lieu de livraison. Un commercial du domaine revient vers vous avec une facture détaillée.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-n">3</div>
+          <div>
+            <h3>Réception de la commande</h3>
+            <p>Un runner du domaine assure la livraison sous 24 h, partout dans l'État. Paiement à la livraison ou sur facture pour les comptes entreprise.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="client-panel">
+        <h3>Ce que ça vous apporte</h3>
+        <ul class="perks">
+          <li><div>Tarifs dégressifs <span>— remises appliquées automatiquement selon le volume commandé.</span></div></li>
+          <li><div>Accès au catalogue entreprise <span>— grilles B2B et cuvées non disponibles à la vente publique.</span></div></li>
+          <li><div>Un interlocuteur dédié <span>— un commercial du domaine suit votre compte et vos commandes.</span></div></li>
+          <li><div>Livraison sous 24 h <span>— sur tout San Andreas, assurée par nos runners.</span></div></li>
+        </ul>
+        <a href="https://discord.gg/CG4gYAEat" target="_blank" rel="noopener" class="btn btn-gold">Ouvrir un compte client</a>
+      </div>
+    </div>
+  </section>
+
+  <div class="coming-next">Les sections « Le Domaine », « Feuilleter », « Carrières » et « Contact » seront complétées avec les contenus à venir.</div>
+
+  <footer>
+    <div>© 1957–2026 Marlowe Vineyard · Tongva Hills, San Andreas</div>
+    <div><a href="https://discord.gg/CG4gYAEat" target="_blank" rel="noopener">Discord du domaine</a> · <a href="gestion.html">Espace membre</a></div>
+  </footer>
 
 </div>
+
+<script>
+/* ==================================================================
+   ▼▼▼  CONTENU ÉDITABLE  ▼▼▼
+   Ces deux listes seront pilotées depuis l'espace membre (partie
+   connexion / grades à venir). En attendant, elles se modifient
+   directement ici.
+   ================================================================== */
+
+/* --- LES NOUVEAUTÉS : 5 images maximum -------------------------------
+   Format : {img:'URL de l\'image', titre:'Titre', texte:'Description'}
+   Exemple :
+     {img:'https://cdn.discordapp.com/.../affiche.png',
+      titre:'Cuvée d\'automne 2026',
+      texte:'Disponible au domaine dès vendredi soir.'}
+   Liste vide  ->  le blason du domaine s'affiche à la place.        */
+const NOUVEAUTES = [];
+
+/* --- LE CATALOGUE : liens Canva du carrousel -------------------------
+   embedUrl : l'URL d'intégration Canva
+              (Canva ▸ Partager ▸ Plus ▸ Intégrer ▸ « Lien intelligent »)
+   null      ->  un aperçu « à venir » s'affiche à la place.          */
+const CATALOGUE_CANVA = [
+  {titre:'Marlowe Vineyard · Carte des cuvées',
+   desc:'La gamme complète du domaine, millésime par millésime.',
+   embedUrl:null},
+  {titre:'Tarifs & conditions de livraison',
+   desc:'Grille publique, remises par volume et délais sur San Andreas.',
+   embedUrl:null},
+];
+
+/* ==================================================================
+   ▲▲▲  FIN DU CONTENU ÉDITABLE  ▲▲▲
+   ================================================================== */
+
+const MAX_NOUVEAUTES = 5;
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ---------------- Nouveautés ---------------- */
+(function(){
+  const frame   = document.getElementById('newsFrame');
+  const dotsBox = document.getElementById('newsDots');
+  const eyebrow = document.getElementById('newsEyebrow');
+  const news    = (Array.isArray(NOUVEAUTES) ? NOUVEAUTES : []).slice(0, MAX_NOUVEAUTES);
+  let idx = 0;
+
+  if(!news.length){
+    frame.classList.add('is-crest');
+    frame.innerHTML = document.getElementById('crestTpl').innerHTML;
+    return;
+  }
+
+  eyebrow.hidden = false;
+  const multi = news.length > 1;
+
+  frame.innerHTML =
+    news.map((n, i) => `
+      <div class="news-slide${i === 0 ? ' active' : ''}">
+        <img src="${esc(n.img)}" alt="${esc(n.titre || 'Nouveauté du domaine')}" loading="lazy">
+        ${(n.titre || n.texte) ? `<div class="news-cap">
+          ${n.titre ? `<div class="nt">${esc(n.titre)}</div>` : ''}
+          ${n.texte ? `<div class="nd">${esc(n.texte)}</div>` : ''}
+        </div>` : ''}
+      </div>`).join('')
+    + (multi ? `<button class="news-arrow prev" data-step="-1" aria-label="Nouveauté précédente">‹</button>
+                <button class="news-arrow next" data-step="1"  aria-label="Nouveauté suivante">›</button>` : '');
+
+  if(multi){
+    dotsBox.innerHTML = news.map((_, i) =>
+      `<button class="news-dot${i === 0 ? ' active' : ''}" data-go="${i}" aria-label="Nouveauté ${i+1}"></button>`).join('');
+  }
+
+  const slides = frame.querySelectorAll('.news-slide');
+  const dots   = dotsBox.querySelectorAll('.news-dot');
+
+  function show(i){
+    idx = (i + news.length) % news.length;
+    slides.forEach((s, k) => s.classList.toggle('active', k === idx));
+    dots.forEach((d, k) => d.classList.toggle('active', k === idx));
+  }
+
+  frame.addEventListener('click', e => {
+    const a = e.target.closest('[data-step]');
+    if(a) show(idx + Number(a.dataset.step));
+  });
+  dotsBox.addEventListener('click', e => {
+    const d = e.target.closest('[data-go]');
+    if(d) show(Number(d.dataset.go));
+  });
+})();
+
+/* ---------------- Catalogue Canva ---------------- */
+(function(){
+  const view    = document.getElementById('canvaViewport');
+  const dotsBox = document.getElementById('canvaDots');
+  const slidesData = Array.isArray(CATALOGUE_CANVA) ? CATALOGUE_CANVA : [];
+  let idx = 0;
+
+  if(!slidesData.length){
+    view.innerHTML = `<div class="canva-placeholder"><span>Catalogue en préparation — bientôt disponible.</span></div>`;
+    return;
+  }
+  const multi = slidesData.length > 1;
+
+  view.innerHTML =
+    slidesData.map((s, i) => `
+      <div class="canva-slide${i === 0 ? ' active' : ''}">
+        ${s.embedUrl
+          ? `<iframe src="${esc(s.embedUrl)}" allowfullscreen loading="lazy" title="${esc(s.titre)}"></iframe>`
+          : `<div class="canva-placeholder"><span>Lien Canva non renseigné — aperçu à venir</span></div>`}
+        <div class="canva-cap">
+          <div class="ct">${esc(s.titre)}</div>
+          <div class="cd">${esc(s.desc)}</div>
+        </div>
+      </div>`).join('')
+    + (multi ? `<button class="canva-arrow prev" data-step="-1" aria-label="Document précédent">‹</button>
+                <button class="canva-arrow next" data-step="1"  aria-label="Document suivant">›</button>` : '');
+
+  if(multi){
+    dotsBox.innerHTML = slidesData.map((_, i) =>
+      `<button class="canva-dot${i === 0 ? ' active' : ''}" data-go="${i}" aria-label="Document ${i+1}"></button>`).join('');
+  }
+
+  const slides = view.querySelectorAll('.canva-slide');
+  const dots   = dotsBox.querySelectorAll('.canva-dot');
+
+  function show(i){
+    idx = (i + slidesData.length) % slidesData.length;
+    slides.forEach((s, k) => s.classList.toggle('active', k === idx));
+    dots.forEach((d, k) => d.classList.toggle('active', k === idx));
+  }
+
+  view.addEventListener('click', e => {
+    const a = e.target.closest('[data-step]');
+    if(a) show(idx + Number(a.dataset.step));
+  });
+  dotsBox.addEventListener('click', e => {
+    const d = e.target.closest('[data-go]');
+    if(d) show(Number(d.dataset.go));
+  });
+})();
+</script>
 </body>
 </html>
