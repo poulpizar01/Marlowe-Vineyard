@@ -971,13 +971,15 @@
       { key: 'desc', label: 'Description', value: a.desc },
       { key: 'cat', label: 'Catégorie', value: a.cat, options: cats },
       { key: 'poids', label: 'Poids (kg)', value: a.poids },
-      { key: 'price', label: 'Prix HT — vide si rupture', value: a.price == null ? '' : a.price },
+      { key: 'price', label: 'Prix public — vide si rupture', value: a.price == null ? '' : a.price },
+      { key: 'priceB2B', label: 'Prix entreprise — vide = même prix', value: a.priceB2B == null ? '' : a.priceB2B },
     ]);
     if (!r) return;
     a.desc = r.desc || a.desc;
     a.cat = r.cat || a.cat;
     a.poids = parseFloat(String(r.poids).replace(',', '.')) || a.poids;
     a.price = r.price === '' ? null : (parseFloat(String(r.price).replace(',', '.')) || 0);
+    a.priceB2B = r.priceB2B === '' ? null : (parseFloat(String(r.priceB2B).replace(',', '.')) || 0);
     D().save('articles');
     toast('Article mis à jour.');
   }
@@ -988,7 +990,8 @@
       { key: 'desc', label: 'Description', value: '' },
       { key: 'cat', label: 'Catégorie', value: cats[0], options: cats },
       { key: 'poids', label: 'Poids (kg)', value: '1.5' },
-      { key: 'price', label: 'Prix HT — vide si rupture', value: '' },
+      { key: 'price', label: 'Prix public — vide si rupture', value: '' },
+      { key: 'priceB2B', label: 'Prix entreprise — vide = même prix', value: '' },
     ]);
     if (!r) return;
     if (!r.desc) { toast('La description est obligatoire.'); return; }
@@ -1000,6 +1003,7 @@
       ref: prefix + '-' + String(used + 1).padStart(2, '0'),
       poids: parseFloat(String(r.poids).replace(',', '.')) || 1.5,
       price: r.price === '' ? null : (parseFloat(String(r.price).replace(',', '.')) || 0),
+      priceB2B: r.priceB2B === '' ? null : (parseFloat(String(r.priceB2B).replace(',', '.')) || 0),
     });
     refreshArticleCount();
     D().save('articles');
@@ -1259,6 +1263,11 @@
       closedAt: frDate(new Date()),
       heures,
       eligibles,
+      /* Production de TOUT le monde, pas seulement des éligibles :
+         c'est ce qui alimente l'historique personnel de chaque employé. */
+      production: effectifData.map(e => ({
+        name: e.name, grade: e.grade, barils: e.barils, quota: e.quota,
+      })),
     });
 
     /* Remise à zéro */
@@ -1271,6 +1280,7 @@
     D().save('clotures', false);
     refreshWeekHeaders();
     renderEligibilite();
+    renderWeekHistory();
     toast(`${label} clôturée — ${eligibles.length} éligible(s).`);
   }
 
@@ -1295,6 +1305,7 @@
     D().save('clotures', false);
     refreshWeekHeaders();
     renderEligibilite();
+    renderWeekHistory();
     toast('Clôture annulée.');
   }
 
@@ -1412,6 +1423,374 @@
   }
 
   /* ========================================================================
+     TARIFS — prix public et prix entreprise
+     ------------------------------------------------------------------------
+     Chaque article porte deux prix. Le tarif retenu sur une facture est
+     choisi en haut du formulaire ; les lignes s'y conforment.
+     Un article sans prix entreprise retombe sur son prix public.
+     ======================================================================== */
+  function currentTarif() {
+    const s = $('invTarif');
+    return s && s.value === 'entreprise' ? 'entreprise' : 'public';
+  }
+
+  window.mvPrixArticle = function (article, tarif) {
+    if (!article) return 0;
+    const t = tarif || currentTarif();
+    if (t === 'entreprise' && article.priceB2B != null) return article.priceB2B;
+    return article.price;
+  };
+
+  /* Rejoue les prix de toutes les lignes après un changement de tarif. */
+  function applyTarifToLines() {
+    document.querySelectorAll('#invoiceLines .line-row').forEach(row => {
+      const ref = row.querySelector('.l-ref');
+      if (!ref) return;
+      const a = articlesData.find(x => x.ref === ref.value);
+      if (a) row.querySelector('.l-pu').value = window.mvPrixArticle(a);
+    });
+    if (typeof recalcTotals === 'function') recalcTotals();
+    toast(currentTarif() === 'entreprise' ? 'Tarif entreprise appliqué.' : 'Tarif public appliqué.');
+  }
+
+  /* ========================================================================
+     PRESSE-PAPIERS
+     ------------------------------------------------------------------------
+     navigator.clipboard n'existe qu'en contexte sécurisé (https). En secours
+     on passe par une zone de texte cachée, puis, en dernier recours, par une
+     fenêtre où le texte est présélectionné pour un Ctrl+C manuel.
+     ======================================================================== */
+  async function copyToClipboard(text, quoi) {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        toast(quoi + ' copié — collez dans le tableur.');
+        return;
+      }
+    } catch (e) { /* on tente la suite */ }
+
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      if (ok) { toast(quoi + ' copié — collez dans le tableur.'); return; }
+    } catch (e) { /* on tente la suite */ }
+
+    showCopyFallback(text, quoi);
+  }
+
+  function showCopyFallback(text, quoi) {
+    ensureDialog();
+    dlg.querySelector('.mv-dlg').innerHTML = `
+      <h3>${esc(quoi)}</h3>
+      <p>La copie automatique a été refusée par le navigateur.
+         Le texte est sélectionné : faites <b>Ctrl+C</b>, puis collez dans le tableur.</p>
+      <textarea id="mvCopyArea" style="width:100%;height:180px;background:rgba(0,0,0,.25);
+        border:1px solid var(--band,#3D372C);border-radius:9px;padding:10px;
+        color:var(--parchment,#EDE3CF);font-family:'IBM Plex Mono',monospace;font-size:11.5px;
+        resize:vertical;">${esc(text)}</textarea>
+      <div class="mv-dlg-btns"><button data-yes class="go">Fermer</button></div>`;
+    dlg.style.display = 'flex';
+    const ta = $('mvCopyArea');
+    setTimeout(() => { ta.focus(); ta.select(); }, 40);
+    dlg.querySelector('[data-yes]').onclick = () => close(true);
+  }
+
+  /* ========================================================================
+     BILAN COMPTABLE
+     ------------------------------------------------------------------------
+     Tout est recalculé depuis les données vivantes : le fichier d'origine
+     figeait ces valeurs au chargement, elles ne bougeaient plus ensuite.
+
+     Enchaînement officiel :
+       CA total          = Σ (runs + factures + ventes)
+       Bénéfice imposable = CA total − salaires − factures reçues
+                            (avant primes — c'est lui qui fixe le palier)
+       Palier            → plafonds de salaire et de prime
+       Primes            = barils × multiplicateur, plafonnées
+       Dépenses          = salaires + primes + factures reçues
+     ======================================================================== */
+
+  const DIR_RANKS = () => (typeof bcDirectionRanks !== 'undefined' ? bcDirectionRanks : ['Patron', 'Co-Patron']);
+
+  function rebuildBcRows() {
+    if (typeof bcRows === 'undefined') return;
+    const manuels = bcRows.filter(r => r.rank === 'Manuel');
+    const auto = dash.map(e => ({
+      name: e.name, rank: e.rank,
+      runs: e.runs || 0, factures: e.factures || 0, ventes: e.ventes || 0,
+      ca: (e.runs || 0) + (e.factures || 0) + (e.ventes || 0),
+      salaire: (typeof bcRankSalaire === 'object' && bcRankSalaire[e.rank] !== undefined)
+        ? bcRankSalaire[e.rank] : 1500,
+    }));
+    bcRows = auto.concat(manuels);
+  }
+
+  function bilanCompute() {
+    rebuildBcRows();
+
+    const rows = (typeof bcRows !== 'undefined' ? bcRows : []);
+    const caTotal = rows.reduce((s, e) => s + (e.ca || 0), 0);
+    const salaires = rows.reduce((s, e) => s + (e.salaire || 0), 0);
+    const facturesRecues = facturesRecuesData
+      .reduce((s, g) => s + g.items.reduce((s2, i) => s2 + (i.montant || 0), 0), 0);
+
+    /* Palier calculé sur le bénéfice AVANT primes — sinon le calcul
+       tournerait en rond, les plafonds de prime dépendant du palier. */
+    const beneficeAvantPrimes = caTotal - salaires - facturesRecues;
+
+    const bareme = (typeof baremeData !== 'undefined') ? baremeData : [];
+    let idx = bareme.findIndex(b => beneficeAvantPrimes >= b.min && beneficeAvantPrimes <= b.max);
+    if (idx < 0) idx = beneficeAvantPrimes < (bareme[0] ? bareme[0].min : 0) ? 0 : bareme.length - 1;
+    const palier = bareme[idx] || { taux: 0, salEmp: 0, salDir: 0, primeEmp: 0, primeDir: 0 };
+
+    /* Salaires et primes plafonnés selon le palier */
+    const detail = rows.map(e => {
+      const isDir = DIR_RANKS().includes(e.rank);
+      const barils = Math.round((e.runs || 0) / 5);
+      const mult = (typeof multiplierFor === 'object' && multiplierFor[e.rank]) || 1;
+      const prime = Math.min(barils * mult, isDir ? palier.primeDir : palier.primeEmp);
+      const salaire = Math.min(e.salaire || 0, isDir ? palier.salDir : palier.salEmp);
+      return Object.assign({}, e, { prime: Math.round(prime), salairePlafonne: Math.round(salaire), isDir });
+    });
+
+    const salairesPlafonnes = detail.reduce((s, e) => s + e.salairePlafonne, 0);
+    const primes = detail.reduce((s, e) => s + e.prime, 0);
+    const depenses = salairesPlafonnes + primes + facturesRecues;
+    const benefice = caTotal - depenses;
+    const impot = Math.round(Math.max(0, benefice) * palier.taux / 100);
+
+    return {
+      detail, caTotal, salaires: salairesPlafonnes, primes, facturesRecues,
+      depenses, beneficeAvantPrimes, benefice, palier, palierIndex: idx, impot,
+    };
+  }
+
+  function renderBilan() {
+    if (typeof dash === 'undefined' || !$('bcDetailBody')) return;
+    const b = bilanCompute();
+    const fmt$ = n => Math.round(n).toLocaleString('fr-FR') + ' $';
+    const set = (id, v) => { const e = $(id); if (e) e.textContent = v; };
+
+    /* Bandeau du haut */
+    set('bcTaux', b.palier.taux + '%');
+    set('bcSalCap', `${b.palier.salEmp.toLocaleString('fr-FR')}$ / ${b.palier.salDir.toLocaleString('fr-FR')}$`);
+    set('bcPrimeCap', `${b.palier.primeEmp.toLocaleString('fr-FR')}$ / ${b.palier.primeDir.toLocaleString('fr-FR')}$`);
+    set('bcPlafondEmp', `${b.palier.salEmp.toLocaleString('fr-FR')}$ / ${b.palier.primeEmp.toLocaleString('fr-FR')}$`);
+    set('bcPlafondDir', `${b.palier.salDir.toLocaleString('fr-FR')}$ / ${b.palier.primeDir.toLocaleString('fr-FR')}$`);
+    set('palierActuel', b.palierIndex + 1);
+    set('bcDetailCount', b.detail.length);
+    set('bcEffectif', rhRosterData.filter(e => e.status === 'actif').length);
+
+    /* Palier en cours mis en évidence dans le barème */
+    const bb = $('baremeBody');
+    if (bb && typeof baremeData !== 'undefined') {
+      bb.innerHTML = baremeData.map((p, i) => `
+        <tr${i === b.palierIndex ? ' style="background:rgba(201,169,97,.14);"' : ''}>
+          <td class="mono">${i + 1}</td>
+          <td class="num">${p.min.toLocaleString('fr-FR')} $</td>
+          <td class="num">${p.max.toLocaleString('fr-FR')} $</td>
+          <td class="num"${i === b.palierIndex ? ' style="color:var(--or);font-weight:700;"' : ''}>${p.taux} %</td>
+          <td class="num">${p.salEmp.toLocaleString('fr-FR')} $</td>
+          <td class="num">${p.salDir.toLocaleString('fr-FR')} $</td>
+          <td class="num">${p.primeEmp.toLocaleString('fr-FR')} $</td>
+          <td class="num">${p.primeDir.toLocaleString('fr-FR')} $</td>
+          <td>${i === b.palierIndex ? '<span class="status-chip status-paid">palier actuel</span>' : ''}</td>
+        </tr>`).join('');
+    }
+
+    /* Détail par employé */
+    $('bcDetailBody').innerHTML = b.detail.map(e => `
+      <tr>
+        <td>${esc(e.name)}</td>
+        <td class="rank-pill">${esc(e.rank)}</td>
+        <td class="num dim">${(e.runs || 0).toLocaleString('fr-FR')} $</td>
+        <td class="num dim">${(e.factures || 0).toLocaleString('fr-FR')} $</td>
+        <td class="num dim">${(e.ventes || 0).toLocaleString('fr-FR')} $</td>
+        <td class="num" style="color:var(--prime);">${(e.ca || 0).toLocaleString('fr-FR')} $</td>
+        <td class="num">${fmt$(e.salairePlafonne)}</td>
+        <td class="num">${fmt$(e.prime)}</td>
+      </tr>`).join('');
+
+    /* Dépenses déductibles : salaires, primes, puis chaque facture reçue */
+    depensesData.length = 0;
+    depensesData.push({ date: '***********', label: 'Salaires', montant: b.salaires });
+    if (b.primes) depensesData.push({ date: '***********', label: 'Primes', montant: b.primes });
+    facturesRecuesData.forEach(g => g.items.forEach(i => {
+      depensesData.push({ date: i.date, label: `${g.supplier}${i.note && i.note !== '—' ? ' — ' + i.note : ''}`, montant: i.montant || 0 });
+    }));
+
+    const db = $('depensesBody');
+    if (db) {
+      db.innerHTML = depensesData.map(d => `
+        <tr><td class="mono">${esc(d.date)}</td><td><b>${esc(d.label)}</b></td>
+            <td class="num"><b>${fmt$(d.montant)}</b></td></tr>`).join('')
+        + `<tr><td></td><td><b>Total</b></td>
+             <td class="num" style="color:var(--prime);"><b>${fmt$(b.depenses)}</b></td></tr>`;
+    }
+
+    const rb = $('retraitsBody');
+    if (rb) {
+      rb.innerHTML = retraitsData.length
+        ? retraitsData.map(r => `<tr><td class="mono">${esc(r.date)}</td><td>${esc(r.label)}</td>
+            <td class="num">${fmt$(r.montant)}</td></tr>`).join('')
+          + `<tr><td></td><td><b>Total</b></td><td class="num" style="color:var(--prime);"><b>${
+              fmt$(retraitsData.reduce((s, r) => s + (r.montant || 0), 0))}</b></td></tr>`
+        : `<tr><td colspan="3" class="empty-note" style="text-align:center;padding:18px;">Aucun retrait</td></tr>`;
+    }
+
+    renderBilanSynthese(b);
+  }
+
+  /* Récapitulatif chiffré, inséré sous le détail par employé. */
+  function renderBilanSynthese(b) {
+    const host = $('bcDetailBody');
+    if (!host) return;
+    const panel = host.closest('.panel');
+    if (!panel) return;
+
+    let box = $('bcSynthese');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'bcSynthese';
+      box.className = 'mv-synth';
+      panel.appendChild(box);
+    }
+    const fmt$ = n => Math.round(n).toLocaleString('fr-FR') + ' $';
+    box.innerHTML = `
+      <div class="mv-synth-row"><span>Chiffre d'affaires total</span><b>${fmt$(b.caTotal)}</b></div>
+      <div class="mv-synth-row"><span>Dépenses déductibles</span><b class="neg">− ${fmt$(b.depenses)}</b></div>
+      <div class="mv-synth-row big"><span>Bénéfice</span><b class="${b.benefice < 0 ? 'neg' : 'pos'}">${fmt$(b.benefice)}</b></div>
+      <div class="mv-synth-row"><span>Impôt dû — palier ${b.palierIndex + 1} à ${b.palier.taux} %</span><b>${fmt$(b.impot)}</b></div>
+      <div class="mv-synth-note">Le palier est déterminé par le bénéfice avant primes : ${fmt$(b.beneficeAvantPrimes)}.</div>`;
+  }
+
+  /* ========================================================================
+     EXPORTS TABLEUR
+     ------------------------------------------------------------------------
+     Le tableur attend une formule vivante dans la colonne « CA TOTAL
+     RÉALISÉ » : =SOMME(C8:E8) sur la première ligne collée, puis C9:E9…
+     On produit donc du texte tabulé, une colonne par tabulation.
+     ======================================================================== */
+  async function copyDetailGDoc() {
+    const b = bilanCompute();
+    if (!b.detail.length) { toast('Aucune ligne à copier.'); return; }
+
+    const r = await askForm('Copier pour le tableur', [
+      { key: 'start', label: 'Première ligne vide du tableur', value: '8' },
+      { key: 'entete', label: 'Inclure la ligne d\'en-tête', value: 'Non', options: ['Non', 'Oui'] },
+    ], `${b.detail.length} employé(s). La colonne « CA TOTAL RÉALISÉ » recevra la formule =SOMME(C…:E…), recalculée par le tableur.`);
+    if (!r) return;
+
+    let line = Math.max(1, parseInt(r.start, 10) || 8);
+    const out = [];
+    if (r.entete === 'Oui') {
+      out.push(['Nom du salarié', 'Grade', 'RUN', 'FACTURE', 'VENTE',
+                'CA TOTAL RÉALISÉ', 'Salaire', 'Prime'].join('\t'));
+    }
+    b.detail.forEach(e => {
+      out.push([
+        e.name, e.rank, e.runs || 0, e.factures || 0, e.ventes || 0,
+        `=SOMME(C${line}:E${line})`, e.salairePlafonne, e.prime,
+      ].join('\t'));
+      line++;
+    });
+
+    copyToClipboard(out.join('\n'), 'Détail par employé');
+  }
+
+  async function copyDepensesGDoc() {
+    renderBilan();                       /* on part de valeurs à jour */
+    if (!depensesData.length) { toast('Aucune dépense à copier.'); return; }
+
+    const r = await askForm('Copier pour le tableur', [
+      { key: 'entete', label: 'Inclure la ligne d\'en-tête', value: 'Non', options: ['Non', 'Oui'] },
+      { key: 'total', label: 'Ajouter la ligne de total', value: 'Oui', options: ['Oui', 'Non'] },
+    ], `${depensesData.length} ligne(s) de dépense déductible.`);
+    if (!r) return;
+
+    const out = [];
+    if (r.entete === 'Oui') out.push(['Date', 'Justificatif', 'Montant'].join('\t'));
+    depensesData.forEach(d => out.push([d.date, d.label, Math.round(d.montant)].join('\t')));
+    if (r.total !== 'Non') {
+      out.push(['', 'Total', depensesData.reduce((s, d) => s + Math.round(d.montant), 0)].join('\t'));
+    }
+
+    copyToClipboard(out.join('\n'), 'Dépenses déductibles');
+  }
+
+  /* ========================================================================
+     HISTORIQUE DES SEMAINES CLÔTURÉES
+     ======================================================================== */
+  function renderWeekHistory() {
+    const weeks = clotures.weeks || [];
+
+    /* Vue d'ensemble — « Semaines précédentes » */
+    const ovEmpty = document.querySelector('#page-statsvue .ov-empty');
+    const ovHost = ovEmpty ? ovEmpty.parentNode : null;
+    if (ovHost) {
+      let box = $('mvWeekHist');
+      if (!box) {
+        box = document.createElement('div');
+        box.id = 'mvWeekHist';
+        ovHost.appendChild(box);
+      }
+      ovEmpty.style.display = weeks.length ? 'none' : '';
+      box.innerHTML = weeks.length ? `
+        <table class="gtable">
+          <thead><tr><th>Semaine</th><th>Période</th><th class="num">Éligibles</th>
+            <th class="num">Production</th><th class="num">Heures</th><th>Clôturée le</th></tr></thead>
+          <tbody>${weeks.map(w => {
+            const prod = (w.production || []).reduce((s, p) => s + (p.barils || 0), 0);
+            return `<tr>
+              <td><b>${esc(w.label)}</b></td>
+              <td class="mono">${esc(w.du)} → ${esc(w.au)}</td>
+              <td class="num">${w.eligibles.length}</td>
+              <td class="num">${prod.toLocaleString('fr-FR')}</td>
+              <td class="num">${Math.floor((w.heures || 0) / 60)}h${pad((w.heures || 0) % 60)}</td>
+              <td class="mono">${esc(w.closedAt)}</td>
+            </tr>`; }).join('')}</tbody>
+        </table>` : '';
+    }
+
+    /* Ma semaine — historique personnel du membre connecté */
+    const perso = document.querySelector('#page-masemaine .panel .empty-note');
+    if (perso) {
+      const me = (window.MarloweSession && window.MarloweSession.name) || '';
+      const mine = weeks
+        .map(w => ({ w, p: (w.production || []).find(x => x.name === me) }))
+        .filter(x => x.p);
+
+      let box = $('mvPersoHist');
+      if (!box) {
+        box = document.createElement('div');
+        box.id = 'mvPersoHist';
+        perso.parentNode.appendChild(box);
+      }
+      perso.style.display = mine.length ? 'none' : '';
+      box.innerHTML = mine.length ? `
+        <table class="gtable">
+          <thead><tr><th>Semaine</th><th>Grade</th><th class="num">Production</th>
+            <th class="num">Quota</th><th>Résultat</th></tr></thead>
+          <tbody>${mine.map(({ w, p }) => `
+            <tr>
+              <td><b>${esc(w.label)}</b><br><span class="mono" style="font-size:11px;color:var(--muted);">${esc(w.du)} → ${esc(w.au)}</span></td>
+              <td><span class="grade-pill ${typeof gradePillClass === 'function' ? gradePillClass(p.grade) : ''}">${esc(p.grade)}</span></td>
+              <td class="num">${(p.barils || 0).toLocaleString('fr-FR')}</td>
+              <td class="num dim">${(p.quota || 0).toLocaleString('fr-FR')}</td>
+              <td>${p.barils >= p.quota
+                ? '<span class="status-chip status-paid">Quota atteint</span>'
+                : '<span class="status-chip status-pending">Quota manqué</span>'}</td>
+            </tr>`).join('')}</tbody>
+        </table>` : '';
+    }
+  }
+
+  /* ========================================================================
      LOT A — AJUSTEMENTS D'AFFICHAGE
      ======================================================================== */
   function injectStyles() {
@@ -1445,6 +1824,16 @@
       .table-wrap::-webkit-scrollbar-thumb{background:#4A4336;border-radius:99px;}
       .sidebar nav::-webkit-scrollbar-thumb:hover, .mv-matrix-wrap::-webkit-scrollbar-thumb:hover,
       .table-wrap::-webkit-scrollbar-thumb:hover{background:var(--or-soft,#8E7C4E);}
+
+      .mv-synth{margin-top:18px;padding-top:16px;border-top:1px solid var(--band,#3D372C);
+        max-width:520px;margin-left:auto;}
+      .mv-synth-row{display:flex;justify-content:space-between;gap:20px;padding:5px 0;font-size:13.5px;}
+      .mv-synth-row span{color:var(--muted,#9C9384);}
+      .mv-synth-row b{font-variant-numeric:tabular-nums;}
+      .mv-synth-row.big{font-size:16px;padding:9px 0;margin-top:4px;
+        border-top:1px solid var(--band,#3D372C);font-family:'Fraunces',serif;}
+      .mv-synth-row b.pos{color:var(--vine,#6E8B5D);} .mv-synth-row b.neg{color:#E08A7A;}
+      .mv-synth-note{font-size:11px;color:var(--muted,#9C9384);margin-top:8px;text-align:right;font-style:italic;}
 
       .action-icons{white-space:nowrap;}
       .action-icons .icon-btn{margin-left:4px;}`;
@@ -1529,6 +1918,8 @@
     on('addClientBtn', addClient);
     on('addArticleBtn', addArticle);
     on('mvAddEvent', addEvent);
+    on('bcCopyBtn', copyDetailGDoc);
+    on('depCopyBtn', copyDepensesGDoc);
     on('frArchiveBtn', archiveFactureRecue);
     on('invSaveBtn', saveInvoice);
     on('invPrintBtn', printCurrentInvoice);
@@ -1537,6 +1928,9 @@
     on('annulerClotureBtn', undoClose);
 
     /* Entrée dans le champ de nom = ajouter l'employé. */
+    const tarif = $('invTarif');
+    if (tarif) tarif.addEventListener('change', applyTarifToLines);
+
     const n = $('newEmpName');
     if (n) n.addEventListener('keydown', e => { if (e.key === 'Enter') addEmployee(); });
   }
@@ -1563,6 +1957,8 @@
     refreshWeekDays();
     refreshWeekHeaders();
     renderEligibilite();
+    renderBilan();
+    renderWeekHistory();
     D().redraw('rhRecruiters');
   }
 
@@ -1589,5 +1985,6 @@
   window.MarloweActions = {
     recomputeRecruiters, refreshEffectifCount, reprintInvoice,
     refreshWeekDays, refreshWeekHeaders, renderEligibilite, closeWeek, undoClose,
+    renderBilan, renderWeekHistory, copyDetailGDoc, copyDepensesGDoc,
   };
 })();

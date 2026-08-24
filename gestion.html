@@ -707,7 +707,15 @@
               <div class="field"><label>N°</label><input type="text" id="invNum" value="410072"></div>
               <div class="field"><label>Date</label><input type="date" id="invDate" value="2026-08-23"></div>
             </div>
-            <div class="field"><label>Réduction (%)</label><input type="number" id="invRemise" value="0" min="0" max="100" step="1"></div>
+            <div class="field-row">
+              <div class="field"><label>Tarif appliqué</label>
+                <select id="invTarif">
+                  <option value="public">Particulier — prix public</option>
+                  <option value="entreprise">Entreprise — prix B2B</option>
+                </select>
+              </div>
+              <div class="field"><label>Réduction (%)</label><input type="number" id="invRemise" value="0" min="0" max="100" step="1"></div>
+            </div>
             <div class="field">
               <label>Émetteur(s) — direction &amp; commerciaux</label>
               <select id="invEmetteur"><option>Sélectionner les émetteurs…</option><option>Nella Valmora</option><option>Julio Cortes</option><option>Morgan Bilel</option></select>
@@ -778,7 +786,7 @@
             <button class="btn primary" id="addArticleBtn">+ Article</button>
           </div>
           <table class="gtable">
-            <thead><tr><th>Catégorie</th><th>Référence</th><th>Description</th><th class="num">Poids</th><th class="num">Prix HT</th><th></th></tr></thead>
+            <thead><tr><th>Catégorie</th><th>Référence</th><th>Description</th><th class="num">Poids</th><th class="num">Prix public</th><th class="num">Prix entreprise</th><th></th></tr></thead>
             <tbody id="articlesBody"></tbody>
           </table>
         </div>
@@ -868,7 +876,7 @@
       <div class="panel">
         <div class="toolbar" style="margin-bottom:16px;">
           <h3 style="margin:0;flex:1;">Détail par employé (<span id="bcDetailCount">0</span> — fiche RH complète, 0 si pas de service)</h3>
-          <button class="btn">📋 Copier pour GDoc</button>
+          <button class="btn" id="bcCopyBtn">📋 Copier pour GDoc</button>
           <button class="btn primary" id="bcAddRowBtn">+ Ligne manuelle</button>
         </div>
         <table class="roster">
@@ -884,7 +892,10 @@
 
       <div class="grid2">
         <div class="panel">
-          <h3>Dépenses déductibles</h3>
+          <div class="toolbar" style="margin-bottom:12px;">
+            <h3 style="margin:0;flex:1;">Dépenses déductibles</h3>
+            <button class="btn" id="depCopyBtn">📋 Copier pour GDoc</button>
+          </div>
           <table class="gtable">
             <thead><tr><th>Date</th><th>Justificatif</th><th class="num">Montant</th></tr></thead>
             <tbody id="depensesBody"></tbody>
@@ -2056,6 +2067,7 @@ function renderArticles(query, catFilter){
       <td>${a.desc}</td>
       <td class="num">${a.poids} kg</td>
       <td class="num">${a.price !== null ? a.price + ' $' : `<span class="status-chip status-pending">Rupture</span>`}</td>
+      <td class="num" style="color:var(--or-soft);">${a.priceB2B != null ? a.priceB2B + ' $' : '—'}</td>
       <td class="action-icons" style="text-align:right;"><button class="icon-btn" data-article-edit="${a.ref}" title="Modifier">✎</button><button class="icon-btn danger" data-article-del="${a.ref}" title="Retirer">×</button></td>
     </tr>`).join('');
 }
@@ -2113,7 +2125,7 @@ function lineRowHTML(){
     <td><select class="l-ref">${refOptionsForCat(first.cat)}</select></td>
     <td><input type="text" class="l-desc" value="${first.desc}"></td>
     <td><input type="number" class="l-qty" value="0" min="0"></td>
-    <td><input type="number" class="l-pu" value="${first.price}"></td>
+    <td><input type="number" class="l-pu" value="${window.mvPrixArticle ? window.mvPrixArticle(first) : first.price}"></td>
     <td class="mono l-ht">0</td>
     <td><select class="l-tva"><option value="0">0%</option><option value="2">2%</option><option value="4">4%</option><option value="5">5%</option></select></td>
     <td class="mono l-ttc">0</td>
@@ -2161,7 +2173,7 @@ linesBody.addEventListener('change', (e) => {
     const firstArticle = sellableArticles.find(a => a.cat === cat);
     if(firstArticle){
       row.querySelector('.l-desc').value = firstArticle.desc;
-      row.querySelector('.l-pu').value = firstArticle.price;
+      row.querySelector('.l-pu').value = window.mvPrixArticle ? window.mvPrixArticle(firstArticle) : firstArticle.price;
       row.dataset.poids = firstArticle.poids;
       recalcTotals();
     }
@@ -2173,7 +2185,7 @@ linesBody.addEventListener('change', (e) => {
     const article = articlesData.find(a => a.ref === opt.value);
     if(article){
       row.querySelector('.l-desc').value = article.desc;
-      row.querySelector('.l-pu').value = article.price;
+      row.querySelector('.l-pu').value = window.mvPrixArticle ? window.mvPrixArticle(article) : article.price;
       row.querySelector('.l-cat').value = article.cat;
       row.dataset.poids = article.poids;
       recalcTotals();

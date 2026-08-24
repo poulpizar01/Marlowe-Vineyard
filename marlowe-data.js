@@ -44,7 +44,8 @@ window.MarloweData = (function () {
     },
     dash: {
       ref: () => dash,
-      render: [() => renderDash(dash), call('updateGradeCounts'), call('populateOverview')],
+      render: [() => renderDash(dash), call('updateGradeCounts'), call('populateOverview'),
+               () => { const a = window.MarloweActions; if (a) a.renderBilan(); }],
     },
     rhRoster:        { ref: () => rhRosterData,        render: [() => renderRhRoster(rhRosterData)] },
     rhRecruiters:    { ref: () => rhRecruiters,        render: [call('renderRecruiters')] },
@@ -56,7 +57,9 @@ window.MarloweData = (function () {
        affichée et modifiée (elle porte les références et les poids calculés). */
     articles:        { ref: () => articlesData,        render: [() => renderArticles('', 'all')] },
     historique:      { ref: () => historiqueData,      render: [call('renderHistorique')] },
-    facturesRecues:  { ref: () => facturesRecuesData,  render: [call('renderFacturesRecues')] },
+    facturesRecues:  { ref: () => facturesRecuesData,
+                       render: [call('renderFacturesRecues'),
+                                () => { const a = window.MarloweActions; if (a) a.renderBilan(); }] },
     catalogueSlides: { ref: () => catalogueSlides,     render: [] },
     depenses:        { ref: () => depensesData,        render: [call('bcRenderDetail')] },
     retraits:        { ref: () => retraitsData,        render: [call('bcRenderDetail')] },
@@ -68,7 +71,8 @@ window.MarloweData = (function () {
        Vit dans marlowe-actions.js, d'où le passage par window. */
     clotures: {
       ref: () => window.MarloweClotures,
-      render: [() => { const a = window.MarloweActions; if (a) { a.renderEligibilite(); a.refreshWeekHeaders(); } }],
+      render: [() => { const a = window.MarloweActions;
+                       if (a) { a.renderEligibilite(); a.refreshWeekHeaders(); a.renderWeekHistory(); } }],
     },
   };
 
