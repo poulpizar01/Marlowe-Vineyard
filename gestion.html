@@ -553,18 +553,18 @@
       <div class="panel">
         <h3>Ajouter une entrée</h3>
         <div class="field-row-3">
-          <div class="field"><label>Nom</label><input type="text" placeholder="Prénom Nom"></div>
-          <div class="field"><label>Date</label><input type="date" value="2026-08-23"></div>
-          <div class="field"><label>Ajouté par</label><input type="text" placeholder="Ton nom"></div>
+          <div class="field"><label>Nom</label><input type="text" id="blNom" placeholder="Prénom Nom"></div>
+          <div class="field"><label>Date</label><input type="date" id="blDate" value="2026-08-23"></div>
+          <div class="field"><label>Ajouté par</label><input type="text" id="blBy" placeholder="Ton nom"></div>
         </div>
-        <div class="field"><label>Raison</label><input type="text" placeholder="Vol, comportement, sabotage…"></div>
-        <div class="btn-row"><button class="btn primary">+ Ajouter à la blacklist</button></div>
+        <div class="field"><label>Raison</label><input type="text" id="blRaison" placeholder="Vol, comportement, sabotage…"></div>
+        <div class="btn-row"><button class="btn primary" id="blAddBtn">+ Ajouter à la blacklist</button></div>
       </div>
 
       <div class="panel">
         <h3>Personnes blacklistées</h3>
         <table class="gtable">
-          <thead><tr><th>Nom</th><th>Raison</th><th>Date</th><th>Ajouté par</th><th></th></tr></thead>
+          <thead><tr><th>ID</th><th>Nom</th><th>Raison</th><th>Date</th><th>Ajouté par</th><th></th></tr></thead>
           <tbody id="blacklistBody"></tbody>
         </table>
       </div>
@@ -613,19 +613,19 @@
           <div class="card-head"><div class="ci">+</div><div class="card-title">Nouvel employé</div></div>
           <div class="field-row">
             <div class="field"><label>Prénom Nom</label><input type="text" id="newEmpName" placeholder="Prénom Nom"></div>
-            <div class="field"><label>Poste</label><select><option>Saisonnier</option><option>Ouvrier viticole</option><option>Chef de culture</option><option>Vendeur</option><option>Commercial</option></select></div>
+            <div class="field"><label>Poste</label><select id="newEmpPoste"><option>Saisonnier</option><option>Ouvrier viticole</option><option>Chef de culture</option><option>Vendeur</option><option>Commercial</option></select></div>
           </div>
           <div class="field-row">
-            <div class="field"><label>Date d'arrivée</label><input type="text" placeholder="jj/mm/aaaa"></div>
-            <div class="field"><label>N° Civil</label><input type="text" placeholder="123456"></div>
+            <div class="field"><label>Date d'arrivée</label><input type="text" id="newEmpDate" placeholder="jj/mm/aaaa"></div>
+            <div class="field"><label>N° Civil</label><input type="text" id="newEmpCivil" placeholder="123456"></div>
           </div>
           <div class="field-row">
-            <div class="field"><label>N° Téléphone</label><input type="text" placeholder="555-000-000"></div>
-            <div class="field"><label>RIB</label><input type="text" placeholder="000000"></div>
+            <div class="field"><label>N° Téléphone</label><input type="text" id="newEmpPhone" placeholder="555-000-000"></div>
+            <div class="field"><label>RIB</label><input type="text" id="newEmpRib" placeholder="000000"></div>
           </div>
           <div class="field-row">
-            <div class="field"><label>E-mail (Discord)</label><input type="text" placeholder="pseudo#0000"></div>
-            <div class="field"><label>Recruteur</label><select><option>Erwan Valmora</option><option>Livia Cole</option><option>Julio cortes</option><option>Kira Delcourt</option><option>Julio santos</option></select></div>
+            <div class="field"><label>E-mail (Discord)</label><input type="text" id="newEmpDiscord" placeholder="pseudo#0000"></div>
+            <div class="field"><label>Recruteur</label><select id="newEmpRec"><option>Erwan Valmora</option><option>Livia Cole</option><option>Julio cortes</option><option>Kira Delcourt</option><option>Julio santos</option></select></div>
           </div>
           <div class="bl-warning" id="blWarning" style="display:none;">
             ⚠ Cette personne figure dans la <b>Blacklist</b>. Tu peux quand même l'enregistrer, mais vérifie avant de valider.
@@ -636,9 +636,9 @@
 
         <div class="card absence">
           <div class="card-head"><div class="ci">◷</div><div class="card-title">Déclarer une absence</div></div>
-          <div class="field"><label>ID unique</label><input type="text" placeholder="350507"></div>
+          <div class="field"><label>ID unique</label><input type="text" id="absId" placeholder="350507"></div>
           <div class="field"><label>Motif</label>
-            <select>
+            <select id="absMotif">
               <option>Congé</option>
               <option>Arrêt maladie</option>
               <option>Absence non justifiée</option>
@@ -646,14 +646,14 @@
             </select>
           </div>
           <div class="field-row">
-            <div class="field"><label>Date de début</label><input type="text" placeholder="jj/mm/aaaa"></div>
+            <div class="field"><label>Date de début</label><input type="text" id="absStart" placeholder="jj/mm/aaaa"></div>
             <div class="field"><label>Date de retour</label><input type="text" id="absReturn" placeholder="jj/mm/aaaa"></div>
           </div>
           <label class="check-indef">
             <input type="checkbox" id="absIndef"> Retour indéfini
           </label>
           <p class="hint">Le statut de l'employé passe automatiquement sur « Absent » dans le registre.</p>
-          <button class="btn-primary amber">Enregistrer l'absence</button>
+          <button class="btn-primary amber" id="absBtn">Enregistrer l'absence</button>
         </div>
       </div>
 
@@ -756,7 +756,7 @@
         <div class="panel">
           <div class="toolbar">
             <div class="search"><span style="color:var(--muted);font-size:13px;">⌕</span><input type="text" id="clientSearch" placeholder="Rechercher…"></div>
-            <button class="btn primary">+ Client</button>
+            <button class="btn primary" id="addClientBtn">+ Client</button>
           </div>
           <table class="gtable">
             <thead><tr><th>Nom</th><th>Adresse</th><th>Téléphone</th><th>RIB</th><th></th></tr></thead>
@@ -771,7 +771,7 @@
           <div class="toolbar">
             <div class="search"><span style="color:var(--muted);font-size:13px;">⌕</span><input type="text" id="articleSearch" placeholder="Rechercher un article…"></div>
             <select id="articleCatFilter"><option value="all">Toutes les catégories</option></select>
-            <button class="btn primary">+ Article</button>
+            <button class="btn primary" id="addArticleBtn">+ Article</button>
           </div>
           <table class="gtable">
             <thead><tr><th>Catégorie</th><th>Référence</th><th>Description</th><th class="num">Poids</th><th class="num">Prix HT</th><th></th></tr></thead>
@@ -1331,8 +1331,9 @@ document.querySelectorAll('.nav-item').forEach(item => {
     document.querySelectorAll(`.nav-item[data-page="${item.dataset.page}"]`).forEach(n => n.classList.add('active'));
     document.getElementById('page-' + item.dataset.page).classList.add('active');
     if(item.dataset.subtab){
-      document.querySelectorAll('.subtab').forEach(s => s.classList.remove('active'));
-      document.querySelectorAll('.subpage').forEach(s => s.classList.remove('active'));
+      const scope = document.getElementById('page-' + item.dataset.page) || document;
+      scope.querySelectorAll('.subtab').forEach(s => s.classList.remove('active'));
+      scope.querySelectorAll('.subpage').forEach(s => s.classList.remove('active'));
       document.querySelector(`.subtab[data-sub="${item.dataset.subtab}"]`).classList.add('active');
       document.getElementById('sub-' + item.dataset.subtab).classList.add('active');
     }
@@ -1340,8 +1341,11 @@ document.querySelectorAll('.nav-item').forEach(item => {
 });
 document.querySelectorAll('.subtab').forEach(tab => {
   tab.addEventListener('click', () => {
-    document.querySelectorAll('.subtab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.subpage').forEach(p => p.classList.remove('active'));
+    /* Limité à la page courante : sans ça, changer de sous-onglet dans
+       Facturation éteignait aussi les sous-onglets du Catalogue. */
+    const scope = tab.closest('.page-content') || document;
+    scope.querySelectorAll('.subtab').forEach(t => t.classList.remove('active'));
+    scope.querySelectorAll('.subpage').forEach(p => p.classList.remove('active'));
     tab.classList.add('active');
     document.getElementById('sub-' + tab.dataset.sub).classList.add('active');
   });
@@ -1394,7 +1398,9 @@ document.getElementById('eligibiliteBody').innerHTML = eligibleList.map(e => `
     <td class="num">${e.barils.toLocaleString('fr-FR')}</td>
     <td>${rewardsByGrade[e.grade]}</td>
     <td>${e.distributed ? `<span class="status-chip status-paid">Distribuée</span>` : `<span class="status-chip status-pending">À distribuer</span>`}</td>
-    <td style="text-align:right;">${e.distributed ? '' : `<button class="btn" style="padding:7px 12px;font-size:11.5px;">Marquer distribuée</button>`}</td>
+    <td style="text-align:right;">${e.distributed
+      ? `<button class="btn" data-undistribute="${e.name}" style="padding:7px 12px;font-size:11.5px;" title="Revenir sur cette distribution">↺ Annuler</button>`
+      : `<button class="btn" data-distribute="${e.name}" style="padding:7px 12px;font-size:11.5px;">Marquer distribuée</button>`}</td>
   </tr>`).join('');
 }
 renderEligibilite();
@@ -1428,7 +1434,7 @@ function renderDash(list){
       <td class="num quota-mono">${quota}</td>
       <td class="num" style="color:var(--or-soft);">${e.tickets}</td>
       <td class="num dim">${e.heures}</td>
-      <td class="action"><button class="btn-reset" title="Réinitialiser">×</button></td>
+      <td class="action"><button class="btn-reset" data-dash-del="${e.name}" title="Retirer cette ligne">×</button></td>
     </tr>`;
   }).join('');
 }
@@ -1715,7 +1721,7 @@ function renderRhRoster(list){
       <td>${e.status === 'actif'
           ? `<span class="statut statut-actif">Actif</span>`
           : `<span class="statut statut-absent">Absent · ${e.absence}</span>`}</td>
-      <td style="text-align:right;"><button class="btn-depart">Déclarer un départ</button></td>
+      <td style="text-align:right;"><button class="btn-depart" data-depart="${e.id}">Déclarer un départ</button></td>
     </tr>
   `).join('');
 }
@@ -1821,11 +1827,12 @@ const blacklistData = [
 function renderBlacklist(){
 document.getElementById('blacklistBody').innerHTML = blacklistData.map(b => `
   <tr>
+    <td class="mono">${b.uid || '—'}</td>
     <td>${b.name}</td>
     <td>${b.reason}</td>
     <td class="mono">${b.date}</td>
     <td>${b.by}</td>
-    <td style="text-align:right;"><button class="icon-btn danger" title="Retirer">×</button></td>
+    <td style="text-align:right;"><button class="icon-btn danger" data-bl-del="${b.uid}" title="Retirer de la blacklist">×</button></td>
   </tr>`).join('');
 }
 renderBlacklist();
@@ -1890,7 +1897,7 @@ function renderClients(list){
       <td>${c.addr}</td>
       <td class="mono">${c.phone || '—'}</td>
       <td class="mono">${c.rib || '—'}</td>
-      <td style="text-align:right;"><button class="icon-btn danger" title="Retirer">×</button></td>
+      <td class="action-icons" style="text-align:right;"><button class="icon-btn" data-client-edit="${c.name}" title="Modifier">✎</button><button class="icon-btn danger" data-client-del="${c.name}" title="Retirer">×</button></td>
     </tr>`).join('');
 }
 renderClients(clientsData);
@@ -2044,7 +2051,7 @@ function renderArticles(query, catFilter){
       <td>${a.desc}</td>
       <td class="num">${a.poids} kg</td>
       <td class="num">${a.price !== null ? a.price + ' $' : `<span class="status-chip status-pending">Rupture</span>`}</td>
-      <td style="text-align:right;"><button class="icon-btn danger" title="Retirer">×</button></td>
+      <td class="action-icons" style="text-align:right;"><button class="icon-btn" data-article-edit="${a.ref}" title="Modifier">✎</button><button class="icon-btn danger" data-article-del="${a.ref}" title="Retirer">×</button></td>
     </tr>`).join('');
 }
 renderArticles('', 'all');
@@ -2076,7 +2083,7 @@ document.getElementById('historiqueBody').innerHTML = historiqueData.map(h => `
     <td class="num">${h.total.toLocaleString('fr-FR')} $</td>
     <td>${h.emetteur}</td>
     <td><span class="status-chip status-paid">✓ Payée</span></td>
-    <td class="action-icons"><button class="icon-btn" title="Dupliquer">⧉</button><button class="icon-btn danger" title="Supprimer">×</button></td>
+    <td class="action-icons"><button class="icon-btn" data-hist-pdf="${h.num}" title="Rééditer la facture en PDF">⧉</button><button class="icon-btn danger" data-hist-del="${h.num}" title="Supprimer">×</button></td>
   </tr>`).join('');
 }
 renderHistorique();
@@ -2184,7 +2191,7 @@ const facturesRecuesData = [
 document.getElementById('frCount').textContent = facturesRecuesData.reduce((s, g) => s + g.items.length, 0);
 document.getElementById('frSupCount').textContent = facturesRecuesData.length;
 function renderFacturesRecues(){
-document.getElementById('facturesRecuesList').innerHTML = facturesRecuesData.map(g => {
+document.getElementById('facturesRecuesList').innerHTML = facturesRecuesData.map((g, gi) => {
   const total = g.items.reduce((s, i) => s + i.montant, 0);
   return `
   <div class="panel">
@@ -2192,13 +2199,13 @@ document.getElementById('facturesRecuesList').innerHTML = facturesRecuesData.map
     <table class="gtable">
       <thead><tr><th>Date</th><th class="num">Montant</th><th>Note</th><th>Par</th><th></th></tr></thead>
       <tbody>
-        ${g.items.map(i => `
+        ${g.items.map((i, ii) => `
         <tr>
           <td class="mono">${i.date}</td>
           <td class="num">${i.montant.toLocaleString('fr-FR')} $</td>
           <td>${i.note}</td>
           <td>${i.par}</td>
-          <td class="action-icons"><button class="icon-btn" title="Modifier">✎</button><button class="icon-btn danger" title="Supprimer">×</button></td>
+          <td class="action-icons"><button class="icon-btn" data-fr-edit="${gi}:${ii}" title="Modifier">✎</button><button class="icon-btn danger" data-fr-del="${gi}:${ii}" title="Supprimer">×</button></td>
         </tr>`).join('')}
       </tbody>
     </table>
@@ -2237,6 +2244,9 @@ function renderCatalogue(key){
     </div>
     <div class="canva-dots">
       ${slides.map((_, i) => `<span class="canva-dot ${i === idx ? 'active' : ''}" data-dot="${i}" data-cat="${key}"></span>`).join('')}
+    </div>
+    <div class="btn-row" style="margin-top:12px;justify-content:flex-end;">
+      <button class="btn" data-canva-del="${key}">Supprimer ce lien</button>
     </div>
   `;
 }
@@ -2414,7 +2424,8 @@ const agendaData = [
   {title:'Formation nouveaux saisonniers', date:'26/08/2026', heure:'17:00', heure_fin:'19:00', vis:'prive', desc:'Session d’accueil — visible uniquement par l’organisateur.'},
 ];
 const visLabel = {public:'Public', prive:'Privé', direction:'Direction'};
-document.getElementById('agendaList').innerHTML = agendaData.map(a => `
+function renderAgendaList(){
+document.getElementById('agendaList').innerHTML = agendaData.map((a, i) => `
   <div class="event-card">
     <div class="event-top">
       <div>
@@ -2422,9 +2433,12 @@ document.getElementById('agendaList').innerHTML = agendaData.map(a => `
         <div class="event-date">${a.date} · ${a.heure} – ${a.heure_fin}</div>
       </div>
       <span class="vis-badge vis-${a.vis}">${visLabel[a.vis]}</span>
+      <button class="icon-btn danger" data-agenda-del="${i}" title="Supprimer l'événement" style="margin-left:8px;">×</button>
     </div>
     <div class="event-desc">${a.desc}</div>
   </div>`).join('');
+}
+renderAgendaList();
 
 /* ---------- Agenda — vue de la journée ---------- */
 const weekDays = [
@@ -2669,5 +2683,6 @@ spinBtn.addEventListener('click', () => {
 });
 </script>
 <script src="marlowe-data.js"></script>
+<script src="marlowe-actions.js"></script>
 </body>
 </html>

@@ -52,13 +52,15 @@ window.MarloweData = (function () {
     rhAbsences:      { ref: () => rhAbsences,          render: [call('renderAbsences')] },
     blacklist:       { ref: () => blacklistData,       render: [call('renderBlacklist')] },
     clients:         { ref: () => clientsData,         render: [() => renderClients(clientsData)] },
-    articles:        { ref: () => rawArticles,         render: [() => renderArticles('', 'all')] },
+    /* On garde articlesData, pas rawArticles : c'est la liste réellement
+       affichée et modifiée (elle porte les références et les poids calculés). */
+    articles:        { ref: () => articlesData,        render: [() => renderArticles('', 'all')] },
     historique:      { ref: () => historiqueData,      render: [call('renderHistorique')] },
     facturesRecues:  { ref: () => facturesRecuesData,  render: [call('renderFacturesRecues')] },
     catalogueSlides: { ref: () => catalogueSlides,     render: [] },
     depenses:        { ref: () => depensesData,        render: [call('bcRenderDetail')] },
     retraits:        { ref: () => retraitsData,        render: [call('bcRenderDetail')] },
-    agenda:          { ref: () => agendaData,          render: [() => renderDayGrid(weekDays[0])] },
+    agenda:          { ref: () => agendaData,          render: [call('renderAgendaList'), () => renderDayGrid(weekDays[0])] },
     tombola:         { ref: () => tombolaParticipants, render: [] },
     serviceHistory:  { ref: () => serviceHistory,      render: [call('renderServiceHistory')] },
   };
