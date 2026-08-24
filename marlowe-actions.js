@@ -586,6 +586,11 @@
       : `<tr><td class="prod">Commande — ${esc(invoiceRef(inv.num, inv.date))}</td>
           <td>—</td><td>—</td><td>${money(inv.total)}</td></tr>`;
 
+    /* Au-delà d'une douzaine de lignes, la page A4 ne suffit plus à cette
+       taille de police : on passe à un pas plus serré. */
+    const nRows = detailed ? inv.rows.length : 1;
+    const density = nRows > 24 ? 'micro' : (nRows > 18 ? 'tight' : (nRows > 12 ? 'dense' : ''));
+
     const totalHT = detailed
       ? Math.round(inv.rows.reduce((s, l) => s + l.ht, 0))
       : Number(inv.total);
@@ -653,50 +658,62 @@
   .crest svg{width:100%;height:auto;display:block;
     filter:drop-shadow(0 4px 10px rgba(80,60,20,.35));}
 
-  h1{font-family:'Cinzel',Georgia,serif;font-size:19pt;font-weight:600;letter-spacing:.09em;
+  h1{font-family:'Cinzel',Georgia,serif;font-size:23pt;font-weight:600;letter-spacing:.09em;
     text-align:center;color:#9C7A1C;text-shadow:0 1px 0 rgba(255,250,230,.6);}
-  h2{font-family:'Cormorant Garamond',Georgia,serif;font-size:23pt;font-weight:700;
+  h2{font-family:'Cormorant Garamond',Georgia,serif;font-size:28pt;font-weight:700;
     text-align:center;color:#3E3118;margin-top:1mm;}
 
   .rule{height:1px;background:linear-gradient(90deg,transparent,rgba(122,95,46,.55),transparent);
     margin:5mm 0 4mm;}
 
   .refs{display:flex;justify-content:space-between;align-items:flex-start;
-    font-size:10.5pt;font-weight:600;line-height:1.75;}
+    font-size:13pt;font-weight:600;line-height:1.75;color:#3B2E15;}
   .refs .r{text-align:right;padding-top:5mm;}
 
   /* Filigrane */
-  .wm{position:absolute;top:78mm;left:0;right:0;text-align:center;z-index:1;
+  .wm{position:absolute;top:97mm;left:0;right:0;text-align:center;z-index:1;
     font-family:'Cinzel',Georgia,serif;font-size:52pt;font-weight:700;letter-spacing:.08em;
     color:rgba(150,118,48,.34);}
 
   .parties{display:flex;justify-content:space-between;margin-top:7mm;
-    font-size:10.5pt;line-height:1.7;position:relative;z-index:2;}
-  .parties .lbl{font-family:'Cinzel',Georgia,serif;font-size:8pt;letter-spacing:.18em;
+    font-size:13pt;line-height:1.7;position:relative;z-index:2;color:#3B2E15;}
+  .parties .lbl{font-family:'Cinzel',Georgia,serif;font-size:9.5pt;letter-spacing:.18em;
     color:#8A6E2A;margin-bottom:1mm;}
   .parties .cl{text-align:right;}
   .parties b{font-weight:700;color:#3E3118;}
 
-  table{width:100%;border-collapse:collapse;margin-top:6mm;font-size:10.5pt;position:relative;z-index:2;}
-  thead th{background:#17392C;color:#EFE1BE;font-family:'Cinzel',Georgia,serif;
-    font-size:9.5pt;font-weight:600;letter-spacing:.04em;padding:2.6mm 3mm;text-align:center;}
+  table{width:100%;border-collapse:collapse;margin-top:6mm;font-size:13pt;position:relative;z-index:2;}
+  thead th{background:#17392C;color:#F2E6C4;font-family:'Cinzel',Georgia,serif;
+    font-size:11.5pt;font-weight:600;letter-spacing:.05em;padding:3.2mm 3mm;text-align:center;}
   thead th:first-child{text-align:center;}
-  tbody td{padding:2.1mm 3mm;text-align:center;font-weight:600;color:#4A3B22;}
-  tbody td.prod{font-weight:700;color:#3E3118;}
+  tbody td{padding:2.9mm 3mm;text-align:center;font-weight:600;color:#3B2E15;}
+  tbody td.prod{font-weight:700;color:#2C2210;}
+
+  /* Beaucoup de lignes : on resserre pour rester sur une seule page,
+     plutôt que de laisser la facture déborder sur une seconde feuille. */
+  table.dense{font-size:11pt;}
+  table.dense tbody td{padding:2mm 2.6mm;}
+  table.dense thead th{font-size:10.5pt;padding:2.6mm 2.6mm;}
+  table.tight{font-size:9.5pt;}
+  table.tight tbody td{padding:1.4mm 2.2mm;}
+  table.tight thead th{font-size:9.5pt;padding:2.2mm 2.2mm;}
+  table.micro{font-size:8pt;}
+  table.micro tbody td{padding:.9mm 2mm;}
+  table.micro thead th{font-size:8.5pt;padding:1.8mm 2mm;}
   tbody tr:first-child td{padding-top:3.4mm;}
   .spacer td{height:5mm;padding:0;}
 
   .bottom{position:absolute;left:17mm;right:17mm;bottom:15mm;z-index:3;
     display:flex;justify-content:space-between;align-items:flex-end;gap:8mm;}
-  .sig{font-family:'Great Vibes','Segoe Script','Brush Script MT','Apple Chancery',cursive;font-size:30pt;color:#3E3118;line-height:1;
+  .sig{font-family:'Great Vibes','Segoe Script','Brush Script MT','Apple Chancery',cursive;font-size:35pt;color:#3E3118;line-height:1;
     transform:rotate(-2deg);white-space:nowrap;}
-  .sig small{display:block;font-family:'Cinzel',Georgia,serif;font-size:7pt;letter-spacing:.16em;
+  .sig small{display:block;font-family:'Cinzel',Georgia,serif;font-size:8.5pt;letter-spacing:.16em;
     color:#8A6E2A;transform:rotate(2deg);margin-top:2mm;}
-  .totals{text-align:left;font-size:12pt;font-weight:700;line-height:1.65;color:#3E3118;white-space:nowrap;}
-  .totals .fin{font-size:13.5pt;}
-  .totals .tva{display:block;font-size:8.5pt;font-weight:600;color:#7A5F2E;}
+  .totals{text-align:left;font-size:15pt;font-weight:700;line-height:1.6;color:#2C2210;white-space:nowrap;}
+  .totals .fin{font-size:17.5pt;}
+  .totals .tva{display:block;font-size:10pt;font-weight:600;color:#6E5526;margin-top:1mm;}
 
-  .landscape{position:absolute;left:0;right:0;bottom:0;height:100mm;z-index:1;opacity:.95;}
+  .landscape{position:absolute;left:0;right:0;bottom:0;height:100mm;z-index:1;opacity:.62;}
   .landscape svg{width:100%;height:100%;display:block;}
 </style></head><body>
 <div class="sheet">
@@ -731,7 +748,7 @@
       </div>
     </div>
 
-    <table>
+    <table class="${density}">
       <thead><tr><th>Produit</th><th>Quantité</th><th>Prix/u</th><th>Total</th></tr></thead>
       <tbody>${lines}</tbody>
     </table>
