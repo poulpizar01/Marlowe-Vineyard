@@ -6,70 +6,150 @@
 <title>Marlowe Vineyard — Le vin qui fait parler tout San Andreas</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500;1,9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<!-- Applique le thème AVANT le rendu pour éviter le flash blanc au chargement -->
+<script>
+(function(){
+  var t;
+  try{ t = localStorage.getItem('mv-theme'); }catch(e){}
+  if(!t) t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', t);
+})();
+</script>
+
 <style>
+  /* ==========================================================
+     THÈME SOMBRE (par défaut)
+     ========================================================== */
   :root{
-    --deep:#0B140F;
-    --forest:#132A1D;
-    --forest-2:#1B3A26;
+    color-scheme:dark;
+    --page:
+      radial-gradient(ellipse 1200px 700px at 78% 8%, rgba(217,184,114,.10), transparent 60%),
+      linear-gradient(165deg, #0B140F 0%, #132A1D 48%, #1B3A26 100%);
+    --text:#F3EFE4;
+    --muted:#9FB0A2;
+
     --gold:#D9B872;
     --gold-soft:#B89858;
-    --cream:#F3EFE4;
-    --muted:#9FB0A2;
+    --gold-btn:#D9B872;
+    --gold-btn-hi:#E8C989;
+    --on-gold:#0B140F;
+
     --line:rgba(255,255,255,.10);
+    --line-2:rgba(255,255,255,.22);
+    --gold-line:rgba(217,184,114,.35);
+    --gold-line-2:rgba(217,184,114,.45);
+    --gold-tint:rgba(217,184,114,.06);
+
+    --card:#152B1E;
+    --card-2:#1D3123;
+    --surface:linear-gradient(160deg,#16241C,#0E1712);
+    --glass:rgba(11,20,15,.6);
+    --glass-2:rgba(11,20,15,.9);
+    --dot:rgba(255,255,255,.18);
+    --speck:rgba(217,184,114,.30);
+    --shadow:0 20px 50px rgba(0,0,0,.5);
+    --card-shadow:none;
+
+    --g1:#8FBF8F;  /* Saisonnier */
+    --g2:#D9B872;  /* Ouvrier viticole */
+    --g3:#E0A06A;  /* Chef de culture */
   }
+
+  /* ==========================================================
+     THÈME CLAIR
+     ========================================================== */
+  :root[data-theme="light"]{
+    color-scheme:light;
+    --page:
+      radial-gradient(ellipse 1200px 700px at 78% 8%, rgba(143,110,36,.07), transparent 60%),
+      linear-gradient(165deg, #FAF7F0 0%, #F5F1E6 48%, #EFEBDD 100%);
+    --text:#16281C;
+    --muted:#5F7263;
+
+    --gold:#8F6E24;
+    --gold-soft:#8A6C28;
+    --gold-btn:#D9B872;
+    --gold-btn-hi:#E8C989;
+    --on-gold:#0B140F;
+
+    --line:rgba(20,40,28,.13);
+    --line-2:rgba(20,40,28,.26);
+    --gold-line:rgba(143,110,36,.30);
+    --gold-line-2:rgba(143,110,36,.48);
+    --gold-tint:rgba(143,110,36,.07);
+
+    --card:#FFFFFF;
+    --card-2:#FFFDF7;
+    --surface:linear-gradient(160deg,#EFEAE0,#E3DDD1);
+    --glass:rgba(255,255,255,.72);
+    --glass-2:rgba(255,255,255,.96);
+    --dot:rgba(20,40,28,.18);
+    --speck:rgba(143,110,36,.18);
+    --shadow:0 20px 50px rgba(20,40,28,.14);
+    --card-shadow:0 2px 10px rgba(20,40,28,.05);
+
+    --g1:#4E7A52;
+    --g2:#8F6E24;
+    --g3:#A35E2E;
+  }
+
   *{box-sizing:border-box;margin:0;padding:0;}
   html{scroll-behavior:smooth;}
   body{
-    background:
-      radial-gradient(ellipse 1200px 700px at 78% 8%, rgba(217,184,114,.10), transparent 60%),
-      linear-gradient(165deg, var(--deep) 0%, var(--forest) 48%, var(--forest-2) 100%);
-    color:var(--cream);
+    background:var(--page);
+    background-attachment:fixed;
+    color:var(--text);
     font-family:'Inter',sans-serif;
     min-height:100vh;
     -webkit-font-smoothing:antialiased;
     overflow-x:hidden;
   }
-  ::selection{background:var(--gold);color:var(--deep);}
+  ::selection{background:var(--gold-btn);color:var(--on-gold);}
 
-  /* subtle vine texture */
+  /* poussière dorée */
   body::before{
     content:'';
     position:fixed; inset:0; z-index:0; pointer-events:none;
     background-image:
-      radial-gradient(1px 1px at 12% 22%, rgba(217,184,114,.35), transparent),
-      radial-gradient(1px 1px at 82% 14%, rgba(217,184,114,.25), transparent),
-      radial-gradient(1px 1px at 64% 62%, rgba(217,184,114,.3), transparent),
-      radial-gradient(1px 1px at 30% 78%, rgba(217,184,114,.2), transparent),
-      radial-gradient(1px 1px at 90% 70%, rgba(217,184,114,.25), transparent);
+      radial-gradient(1px 1px at 12% 22%, var(--speck), transparent),
+      radial-gradient(1px 1px at 82% 14%, var(--speck), transparent),
+      radial-gradient(1px 1px at 64% 62%, var(--speck), transparent),
+      radial-gradient(1px 1px at 30% 78%, var(--speck), transparent),
+      radial-gradient(1px 1px at 90% 70%, var(--speck), transparent);
   }
 
   .wrap{max-width:1320px;margin:0 auto;padding:0 40px;position:relative;z-index:1;}
   @media(max-width:760px){.wrap{padding:0 22px;}}
 
   /* ===== NAV ===== */
-  nav{display:flex;align-items:center;justify-content:space-between;padding:26px 0;border-bottom:1px solid var(--line);}
+  nav{display:flex;align-items:center;justify-content:space-between;padding:26px 0;border-bottom:1px solid var(--line);gap:20px;}
   .brandmark{display:flex;align-items:center;gap:11px;}
-  .brandmark svg{flex-shrink:0;}
+  .brandmark svg{flex-shrink:0;color:var(--gold);}
   .brand-text{line-height:1.15;}
   .brand-text .t1{font-family:'Fraunces',serif;font-weight:600;font-size:15px;letter-spacing:.02em;}
   .brand-text .t2{font-size:9.5px;letter-spacing:.22em;color:var(--gold-soft);text-transform:uppercase;}
 
-  .nav-links{display:flex;align-items:center;gap:34px;list-style:none;}
-  .nav-links a{color:var(--cream);text-decoration:none;font-size:13.5px;font-weight:500;opacity:.82;transition:.15s;}
+  .nav-links{display:flex;align-items:center;gap:28px;list-style:none;}
+  .nav-links a{color:var(--text);text-decoration:none;font-size:13.5px;font-weight:500;opacity:.82;transition:.15s;}
   .nav-links a:hover{opacity:1;color:var(--gold);}
-  @media(max-width:980px){.nav-links{display:none;}}
+  @media(max-width:1100px){.nav-links{display:none;}}
 
   .nav-actions{display:flex;align-items:center;gap:12px;}
-  .btn-member{display:flex;align-items:center;gap:7px;border:1px solid rgba(217,184,114,.4);color:var(--cream);background:rgba(217,184,114,.06);padding:10px 20px;border-radius:999px;font-size:13px;font-weight:500;text-decoration:none;transition:.15s;white-space:nowrap;}
-  .btn-member:hover{background:rgba(217,184,114,.14);border-color:var(--gold);}
-  .moon-toggle{width:38px;height:38px;border-radius:50%;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--gold-soft);cursor:pointer;flex-shrink:0;}
+  .btn-member{display:flex;align-items:center;gap:7px;border:1px solid var(--gold-line-2);color:var(--text);background:var(--gold-tint);padding:10px 20px;border-radius:999px;font-size:13px;font-weight:500;text-decoration:none;transition:.15s;white-space:nowrap;}
+  .btn-member:hover{background:rgba(217,184,114,.16);border-color:var(--gold);}
+  .theme-toggle{width:38px;height:38px;border-radius:50%;border:1px solid var(--line-2);background:transparent;
+    display:flex;align-items:center;justify-content:center;color:var(--gold-soft);cursor:pointer;flex-shrink:0;
+    transition:.15s;font-size:15px;line-height:1;padding:0;}
+  .theme-toggle:hover{color:var(--gold);border-color:var(--gold-line-2);background:var(--gold-tint);}
+  .theme-toggle svg{width:17px;height:17px;}
 
   /* ===== HERO ===== */
   .hero{display:grid;grid-template-columns:1.15fr .85fr;gap:40px;align-items:center;padding:90px 0 70px;min-height:640px;}
   @media(max-width:980px){.hero{grid-template-columns:1fr;padding:60px 0 40px;text-align:center;}
     .hero-stats{justify-content:center;} .hero-ctas{justify-content:center;}}
 
-  .badge{display:inline-flex;align-items:center;gap:9px;border:1px solid rgba(217,184,114,.35);color:var(--gold);font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;padding:9px 18px;border-radius:999px;margin-bottom:30px;background:rgba(217,184,114,.05);}
+  .badge{display:inline-flex;align-items:center;gap:9px;border:1px solid var(--gold-line);color:var(--gold);font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;padding:9px 18px;border-radius:999px;margin-bottom:30px;background:var(--gold-tint);}
   .badge::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--gold);}
 
   h1{font-family:'Fraunces',serif;font-weight:600;font-size:clamp(38px,5vw,58px);line-height:1.08;letter-spacing:-.01em;margin-bottom:26px;}
@@ -80,28 +160,27 @@
 
   .hero-ctas{display:flex;gap:14px;margin-bottom:56px;flex-wrap:wrap;}
   .btn{padding:15px 28px;border-radius:999px;font-size:14px;font-weight:600;text-decoration:none;transition:.18s;display:inline-flex;align-items:center;gap:9px;cursor:pointer;border:none;font-family:inherit;}
-  .btn-gold{background:var(--gold);color:var(--deep);}
-  .btn-gold:hover{background:#E8C989;transform:translateY(-1px);}
-  .btn-outline{border:1px solid rgba(255,255,255,.28);color:var(--cream);background:transparent;}
+  .btn-gold{background:var(--gold-btn);color:var(--on-gold);}
+  .btn-gold:hover{background:var(--gold-btn-hi);transform:translateY(-1px);}
+  .btn-outline{border:1px solid var(--line-2);color:var(--text);background:transparent;}
   .btn-outline:hover{border-color:var(--gold);color:var(--gold);}
 
-  .hero-stats{display:flex;gap:48px;}
+  .hero-stats{display:flex;gap:48px;flex-wrap:wrap;}
   .stat .n{font-family:'Fraunces',serif;font-weight:600;font-size:27px;color:var(--gold);}
   .stat .l{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-top:5px;}
 
-  /* ===== NOUVEAUTÉS (colonne droite du hero) ===== */
+  /* ===== NOUVEAUTÉS ===== */
   .news-col{display:flex;flex-direction:column;align-items:center;gap:16px;}
   .news-frame{width:100%;max-width:400px;aspect-ratio:5/6;position:relative;border-radius:18px;overflow:hidden;
-    border:1.5px solid var(--gold);background:linear-gradient(160deg,#132A1D,#0E1D14);
-    filter:drop-shadow(0 20px 50px rgba(0,0,0,.5));}
+    border:1.5px solid var(--gold);background:var(--surface);filter:drop-shadow(var(--shadow));}
   .news-frame.is-crest{border:none;background:none;filter:none;overflow:visible;}
-  .news-frame svg{width:100%;height:auto;display:block;filter:drop-shadow(0 20px 50px rgba(0,0,0,.5));}
+  .news-frame svg{width:100%;height:auto;display:block;filter:drop-shadow(var(--shadow));}
   @keyframes float{0%,100%{transform:translateY(0);}50%{transform:translateY(-10px);}}
   .news-frame.is-crest svg{animation:float 7s ease-in-out infinite;}
   @media(prefers-reduced-motion:reduce){.news-frame.is-crest svg{animation:none;}}
 
   .news-eyebrow{display:flex;align-items:center;gap:10px;font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--gold-soft);}
-  .news-eyebrow::before,.news-eyebrow::after{content:'';height:1px;width:26px;background:rgba(217,184,114,.35);}
+  .news-eyebrow::before,.news-eyebrow::after{content:'';height:1px;width:26px;background:var(--gold-line);}
   .news-eyebrow[hidden]{display:none;}
 
   .news-slide{position:absolute;inset:0;opacity:0;transition:opacity .35s ease;pointer-events:none;}
@@ -109,18 +188,18 @@
   .news-slide img{width:100%;height:100%;object-fit:cover;display:block;}
   .news-cap{position:absolute;left:0;right:0;bottom:0;padding:20px 22px 22px;
     background:linear-gradient(0deg, rgba(6,12,9,.94) 12%, rgba(6,12,9,.55) 55%, transparent);}
-  .news-cap .nt{font-family:'Fraunces',serif;font-weight:600;font-size:17px;line-height:1.25;}
-  .news-cap .nd{font-size:12.5px;color:var(--muted);margin-top:5px;line-height:1.5;}
+  .news-cap .nt{font-family:'Fraunces',serif;font-weight:600;font-size:17px;line-height:1.25;color:#F3EFE4;}
+  .news-cap .nd{font-size:12.5px;color:#C4D0C6;margin-top:5px;line-height:1.5;}
 
   .news-arrow{position:absolute;top:50%;transform:translateY(-50%);width:34px;height:34px;border-radius:50%;
-    background:rgba(11,20,15,.6);border:1px solid rgba(255,255,255,.16);color:var(--cream);
+    background:var(--glass);border:1px solid var(--line-2);color:var(--text);
     display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;
     backdrop-filter:blur(4px);transition:.15s;z-index:3;}
-  .news-arrow:hover{background:rgba(11,20,15,.9);border-color:var(--gold);color:var(--gold);}
+  .news-arrow:hover{background:var(--glass-2);border-color:var(--gold);color:var(--gold);}
   .news-arrow.prev{left:12px;} .news-arrow.next{right:12px;}
 
   .news-dots{display:flex;gap:6px;}
-  .news-dot{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.18);cursor:pointer;transition:.18s;border:none;padding:0;}
+  .news-dot{width:7px;height:7px;border-radius:50%;background:var(--dot);cursor:pointer;transition:.18s;border:none;padding:0;}
   .news-dot.active{background:var(--gold);width:20px;border-radius:4px;}
 
   .scroll-cue{display:flex;justify-content:center;padding-bottom:36px;color:var(--gold-soft);opacity:.7;}
@@ -128,78 +207,147 @@
 
   /* ===== SECTIONS ===== */
   section{padding:86px 0;border-top:1px solid var(--line);scroll-margin-top:20px;}
-  .sec-head{max-width:660px;margin-bottom:46px;}
+  .sec-head{max-width:680px;margin-bottom:46px;}
   .eyebrow{display:inline-flex;align-items:center;gap:9px;font-size:10.5px;font-weight:600;letter-spacing:.2em;
     text-transform:uppercase;color:var(--gold-soft);margin-bottom:18px;}
-  .eyebrow::before{content:'';width:22px;height:1px;background:var(--gold-soft);}
+  .eyebrow::after{content:'';width:140px;height:1px;background:var(--gold-line);}
   h2{font-family:'Fraunces',serif;font-weight:600;font-size:clamp(28px,3.4vw,40px);line-height:1.14;letter-spacing:-.01em;}
   h2 em{font-style:italic;font-weight:500;color:var(--gold);}
   .sec-desc{font-size:15px;line-height:1.75;color:var(--muted);margin-top:16px;}
+  .sub-head{font-family:'Fraunces',serif;font-weight:600;font-size:21px;margin:56px 0 20px;}
 
   /* ===== CATALOGUE / CANVA ===== */
   .canva-viewport{position:relative;border-radius:14px;overflow:hidden;border:1px solid var(--line);
-    background:linear-gradient(160deg,#16241C,#0E1712);aspect-ratio:16/7.2;}
+    background:var(--surface);aspect-ratio:16/7.2;}
   @media(max-width:760px){.canva-viewport{aspect-ratio:4/3;}}
   .canva-slide{position:absolute;inset:0;opacity:0;transition:opacity .3s ease;pointer-events:none;}
   .canva-slide.active{opacity:1;pointer-events:auto;}
   .canva-slide iframe{position:absolute;inset:0;width:100%;height:100%;border:none;}
   .canva-placeholder{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:0 60px;text-align:center;}
-  .canva-placeholder span{font-family:'Fraunces',serif;font-style:italic;color:rgba(217,184,114,.5);font-size:15px;}
+  .canva-placeholder span{font-family:'Fraunces',serif;font-style:italic;color:var(--gold-soft);opacity:.75;font-size:15px;}
   .canva-cap{position:absolute;left:0;right:0;bottom:0;padding:18px 22px;
-    background:linear-gradient(0deg, rgba(0,0,0,.78), transparent);}
-  .canva-cap .ct{font-weight:600;font-size:14.5px;}
-  .canva-cap .cd{font-size:12px;color:var(--muted);margin-top:3px;}
+    background:linear-gradient(0deg, rgba(0,0,0,.80), transparent);}
+  .canva-cap .ct{font-weight:600;font-size:14.5px;color:#F3EFE4;}
+  .canva-cap .cd{font-size:12px;color:#C4D0C6;margin-top:3px;}
   .canva-arrow{position:absolute;top:50%;transform:translateY(-50%);width:36px;height:36px;border-radius:50%;
-    background:rgba(11,20,15,.6);border:1px solid rgba(255,255,255,.16);color:var(--cream);
+    background:var(--glass);border:1px solid var(--line-2);color:var(--text);
     display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;
     backdrop-filter:blur(4px);transition:.15s;z-index:3;}
-  .canva-arrow:hover{background:rgba(11,20,15,.9);border-color:var(--gold);color:var(--gold);}
+  .canva-arrow:hover{background:var(--glass-2);border-color:var(--gold);color:var(--gold);}
   .canva-arrow.prev{left:14px;} .canva-arrow.next{right:14px;}
   .canva-dots{display:flex;justify-content:center;gap:6px;margin-top:16px;}
-  .canva-dot{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.18);cursor:pointer;transition:.18s;border:none;padding:0;}
+  .canva-dot{width:7px;height:7px;border-radius:50%;background:var(--dot);cursor:pointer;transition:.18s;border:none;padding:0;}
   .canva-dot.active{background:var(--gold);width:20px;border-radius:4px;}
 
   /* ===== ORGANIGRAMME ===== */
   .org-tier{font-size:10.5px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:var(--gold-soft);
     text-align:center;margin-bottom:20px;}
-  .org-card{border:1px solid var(--line);border-radius:14px;background:#152B1E;padding:20px 22px;text-align:center;position:relative;z-index:1;}
-  .org-card.lead{border-color:rgba(217,184,114,.45);background:#1D3123;}
+  .org-card{border:1px solid var(--line);border-radius:14px;background:var(--card);padding:20px 22px;
+    text-align:center;position:relative;z-index:1;box-shadow:var(--card-shadow);}
+  .org-card.lead{border-color:var(--gold-line-2);background:var(--card-2);}
   .org-card .role{font-family:'Fraunces',serif;font-weight:600;font-size:16px;}
   .org-card .who{font-size:12.5px;color:var(--muted);margin-top:7px;line-height:1.6;}
 
   .org-top{max-width:340px;margin:0 auto;}
-  .org-connector{width:1px;height:34px;background:rgba(217,184,114,.35);margin:0 auto;}
+  .org-connector{width:1px;height:34px;background:var(--gold-line);margin:0 auto;}
   .org-branches{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;position:relative;padding-top:34px;}
-  .org-branches::before{content:'';position:absolute;top:0;left:12.5%;right:12.5%;height:1px;background:rgba(217,184,114,.35);}
+  .org-branches::before{content:'';position:absolute;top:0;left:12.5%;right:12.5%;height:1px;background:var(--gold-line);}
   .org-branch{position:relative;}
-  .org-branch::before{content:'';position:absolute;top:-34px;left:50%;width:1px;height:34px;background:rgba(217,184,114,.35);}
-  .org-down{display:flex;justify-content:center;color:rgba(217,184,114,.5);font-size:13px;padding:9px 0;}
+  .org-branch::before{content:'';position:absolute;top:-34px;left:50%;width:1px;height:34px;background:var(--gold-line);}
+  .org-down{display:flex;justify-content:center;color:var(--gold-soft);opacity:.6;font-size:13px;padding:9px 0;position:relative;z-index:1;}
   .org-sub{display:flex;flex-direction:column;gap:8px;align-items:center;}
   .org-pill{border:1px solid var(--line);border-radius:999px;padding:9px 16px;font-size:12.5px;
-    background:#142619;text-align:center;width:100%;position:relative;z-index:1;}
-  .org-down{position:relative;z-index:1;}
+    background:var(--card);text-align:center;width:100%;position:relative;z-index:1;box-shadow:var(--card-shadow);}
   @media(max-width:900px){
     .org-branches{grid-template-columns:1fr;gap:30px;padding-top:26px;}
     .org-branches::before{left:50%;right:auto;width:1px;top:0;bottom:0;height:auto;}
     .org-branch::before{display:none;}
   }
 
+  /* ===== GRADES & RÉMUNÉRATION ===== */
+  .base-pay{display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+    border:1px solid var(--gold-line-2);background:var(--gold-tint);border-radius:14px;padding:20px 24px;margin-bottom:34px;}
+  .base-pay .bp-amount{font-family:'Fraunces',serif;font-weight:600;font-size:26px;color:var(--gold);white-space:nowrap;}
+  .base-pay .bp-text{font-size:13.5px;color:var(--muted);line-height:1.6;}
+  .base-pay .bp-text b{color:var(--text);font-weight:600;}
+
+  .grade-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;}
+  @media(max-width:900px){.grade-grid{grid-template-columns:1fr;}}
+  .grade-card{border:1px solid var(--line);border-radius:16px;background:var(--card);padding:26px 24px;
+    display:flex;flex-direction:column;box-shadow:var(--card-shadow);}
+  .grade-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:22px;}
+  .g-pill{border:1px solid;border-radius:999px;padding:7px 15px;font-size:12.5px;font-weight:600;
+    background:color-mix(in srgb, currentColor 12%, transparent);white-space:nowrap;}
+  .g-1{color:var(--g1);} .g-2{color:var(--g2);} .g-3{color:var(--g3);}
+  .grade-rank{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);white-space:nowrap;}
+
+  .grade-block{padding:16px 0;border-top:1px solid var(--line);}
+  .grade-block:first-of-type{border-top:none;padding-top:0;}
+  .grade-lbl{font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--gold-soft);margin-bottom:8px;}
+  .grade-big{font-family:'Fraunces',serif;font-weight:600;font-size:24px;line-height:1.2;}
+  .grade-big span{font-size:13px;font-family:'Inter',sans-serif;font-weight:500;color:var(--muted);}
+  .grade-bonus{font-size:13px;color:var(--muted);margin-top:6px;}
+  .grade-bonus b{color:var(--gold);font-weight:600;}
+  .rewards{list-style:none;display:flex;flex-direction:column;gap:7px;}
+  .rewards li{display:grid;grid-template-columns:auto 1fr;gap:10px;font-size:13.5px;line-height:1.5;}
+  .rewards li::before{content:'✦';color:var(--gold);font-size:11px;line-height:1.6;}
+  .grade-next{margin-top:auto;padding-top:16px;border-top:1px solid var(--line);font-size:12.5px;line-height:1.6;color:var(--muted);}
+  .grade-next b{color:var(--text);font-weight:600;}
+  .grade-next.final{color:var(--gold);font-weight:600;}
+
+  .table-scroll{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--card);box-shadow:var(--card-shadow);}
+  table.pay{width:100%;border-collapse:collapse;min-width:620px;}
+  table.pay th{text-align:left;font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--gold-soft);
+    font-weight:600;padding:16px 22px;border-bottom:1px solid var(--line);background:var(--card-2);}
+  table.pay td{padding:17px 22px;font-size:14px;border-bottom:1px solid var(--line);vertical-align:middle;}
+  table.pay tr:last-child td{border-bottom:none;}
+  table.pay td.num{font-variant-numeric:tabular-nums;}
+  table.pay td.prime{font-family:'Fraunces',serif;font-weight:600;font-size:16px;color:var(--gold);white-space:nowrap;}
+
+  /* ===== CARRIÈRES ===== */
+  .perk-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;}
+  @media(max-width:1100px){.perk-grid{grid-template-columns:repeat(2,1fr);}}
+  @media(max-width:620px){.perk-grid{grid-template-columns:1fr;}}
+  .perk-card{border:1px solid var(--line);border-radius:16px;background:var(--card);padding:24px 22px;box-shadow:var(--card-shadow);}
+  .perk-card .ico{font-size:22px;line-height:1;margin-bottom:16px;}
+  .perk-card h3{font-family:'Fraunces',serif;font-weight:600;font-size:17px;margin-bottom:9px;}
+  .perk-card p{font-size:13.5px;line-height:1.65;color:var(--muted);}
+
+  .pull-quote{font-family:'Fraunces',serif;font-style:italic;font-weight:500;font-size:clamp(20px,2.4vw,27px);
+    color:var(--gold);text-align:center;padding:62px 0 52px;}
+
+  .join-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:52px;align-items:start;}
+  @media(max-width:900px){.join-grid{grid-template-columns:1fr;gap:36px;}}
+  .expect h3{font-family:'Fraunces',serif;font-weight:600;font-size:21px;margin-bottom:22px;}
+  .expect ul{list-style:none;display:flex;flex-direction:column;gap:16px;}
+  .expect li{display:grid;grid-template-columns:auto 1fr;gap:12px;font-size:14px;line-height:1.65;color:var(--muted);}
+  .expect li::before{content:'✦';color:var(--gold);font-size:12px;line-height:1.6;}
+  .expect li b{color:var(--text);font-weight:600;}
+
+  /* panneau Discord : volontairement sombre dans les deux thèmes */
+  .discord-panel{background:#12251A;border:1px solid rgba(217,184,114,.28);border-radius:18px;
+    padding:40px 34px;text-align:center;box-shadow:var(--shadow);}
+  .discord-panel .dico{color:#D9B872;margin-bottom:20px;}
+  .discord-panel .dico svg{width:46px;height:auto;}
+  .discord-panel h3{font-family:'Fraunces',serif;font-weight:600;font-size:21px;color:#F3EFE4;margin-bottom:14px;}
+  .discord-panel p{font-size:13.5px;line-height:1.7;color:#9FB0A2;margin-bottom:26px;}
+
   /* ===== DEVENIR CLIENT ===== */
   .client-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:52px;align-items:start;}
   @media(max-width:900px){.client-grid{grid-template-columns:1fr;gap:38px;}}
-  .steps{display:flex;flex-direction:column;gap:2px;}
+  .steps{display:flex;flex-direction:column;}
   .step{display:grid;grid-template-columns:auto 1fr;gap:20px;padding:22px 0;border-bottom:1px solid var(--line);}
   .step:last-child{border-bottom:none;}
   .step-n{font-family:'Fraunces',serif;font-size:15px;font-weight:600;color:var(--gold);
-    width:38px;height:38px;border:1px solid rgba(217,184,114,.4);border-radius:50%;
+    width:38px;height:38px;border:1px solid var(--gold-line-2);border-radius:50%;
     display:flex;align-items:center;justify-content:center;flex-shrink:0;}
   .step h3{font-family:'Fraunces',serif;font-weight:600;font-size:17px;margin-bottom:7px;}
   .step p{font-size:13.5px;line-height:1.7;color:var(--muted);}
 
-  .client-panel{border:1px solid rgba(217,184,114,.3);border-radius:16px;background:rgba(217,184,114,.05);padding:32px 30px;}
+  .client-panel{border:1px solid var(--gold-line);border-radius:16px;background:var(--gold-tint);padding:32px 30px;}
   .client-panel h3{font-family:'Fraunces',serif;font-weight:600;font-size:19px;margin-bottom:20px;}
   .perks{list-style:none;display:flex;flex-direction:column;gap:13px;margin-bottom:28px;}
-  .perks li{display:grid;grid-template-columns:auto 1fr;gap:12px;font-size:13.5px;line-height:1.6;color:var(--cream);}
+  .perks li{display:grid;grid-template-columns:auto 1fr;gap:12px;font-size:13.5px;line-height:1.6;}
   .perks li::before{content:'✦';color:var(--gold);font-size:12px;line-height:1.5;}
   .perks li span{color:var(--muted);}
 
@@ -208,7 +356,7 @@
     align-items:center;gap:24px;flex-wrap:wrap;font-size:12px;color:var(--muted);}
   footer a{color:var(--gold-soft);text-decoration:none;}
   footer a:hover{color:var(--gold);}
-  .coming-next{border-top:1px solid var(--line);padding:24px 0;text-align:center;font-size:11.5px;color:rgba(159,176,162,.65);letter-spacing:.03em;}
+  .coming-next{border-top:1px solid var(--line);padding:24px 0;text-align:center;font-size:11.5px;color:var(--muted);opacity:.75;letter-spacing:.03em;}
 </style>
 </head>
 <body>
@@ -237,11 +385,11 @@
   <nav>
     <div class="brandmark">
       <svg width="34" height="34" viewBox="0 0 34 34" fill="none">
-        <circle cx="17" cy="17" r="16" stroke="#D9B872" stroke-width="1"/>
-        <path d="M17 9c-2 3-2 5 0 7 2-2 2-4 0-7Z" fill="#D9B872"/>
-        <path d="M11 15c2 2 4 2 6 0M17 15c2 2 4 2 6 0" stroke="#D9B872" stroke-width="1" fill="none"/>
-        <circle cx="14" cy="20" r="1.4" fill="#D9B872"/><circle cx="17" cy="21.5" r="1.4" fill="#D9B872"/><circle cx="20" cy="20" r="1.4" fill="#D9B872"/>
-        <circle cx="15.5" cy="23" r="1.4" fill="#D9B872"/><circle cx="18.5" cy="23" r="1.4" fill="#D9B872"/>
+        <circle cx="17" cy="17" r="16" stroke="currentColor" stroke-width="1"/>
+        <path d="M17 9c-2 3-2 5 0 7 2-2 2-4 0-7Z" fill="currentColor"/>
+        <path d="M11 15c2 2 4 2 6 0M17 15c2 2 4 2 6 0" stroke="currentColor" stroke-width="1" fill="none"/>
+        <circle cx="14" cy="20" r="1.4" fill="currentColor"/><circle cx="17" cy="21.5" r="1.4" fill="currentColor"/><circle cx="20" cy="20" r="1.4" fill="currentColor"/>
+        <circle cx="15.5" cy="23" r="1.4" fill="currentColor"/><circle cx="18.5" cy="23" r="1.4" fill="currentColor"/>
       </svg>
       <div class="brand-text"><div class="t1">Marlowe Vineyard</div><div class="t2">Domaine viticole</div></div>
     </div>
@@ -250,14 +398,14 @@
       <li><a href="#catalogue">Catalogue</a></li>
       <li><a href="#">Feuilleter</a></li>
       <li><a href="#organigramme">Organisation</a></li>
+      <li><a href="#grades">Grades</a></li>
+      <li><a href="#carrieres">Carrières</a></li>
       <li><a href="#devenir-client">Devenir client</a></li>
-      <li><a href="#organigramme">Grades</a></li>
-      <li><a href="#">Carrières</a></li>
       <li><a href="#">Contact</a></li>
     </ul>
     <div class="nav-actions">
       <a href="gestion.html" class="btn-member">🍷 Espace membre</a>
-      <div class="moon-toggle">☾</div>
+      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Changer de thème" title="Changer de thème"></button>
     </div>
   </nav>
 
@@ -350,6 +498,184 @@
     </div>
   </section>
 
+  <!-- ===== GRADES & RÉMUNÉRATION ===== -->
+  <section id="grades">
+    <div class="sec-head">
+      <div class="eyebrow">Carrière</div>
+      <h2>Grades &amp; <em>rémunération</em>.</h2>
+      <p class="sec-desc">Tu montes en grade en produisant. Chaque palier a son quota hebdomadaire, ses récompenses et sa prime — et plus tu montes, plus chaque bouteille te rapporte.</p>
+    </div>
+
+    <div class="base-pay">
+      <div class="bp-amount">10 $ / bouteille</div>
+      <div class="bp-text">La <b>base commune à tous les grades</b> : 10 $ pour chaque bouteille vendue. Les primes et les bonus ci-dessous viennent s'ajouter dès que le quota hebdomadaire est atteint.</div>
+    </div>
+
+    <div class="grade-grid">
+
+      <div class="grade-card">
+        <div class="grade-top">
+          <span class="g-pill g-1">Saisonnier</span>
+          <span class="grade-rank">Grade 1</span>
+        </div>
+        <div class="grade-block">
+          <div class="grade-lbl">Quota hebdomadaire</div>
+          <div class="grade-big">3 000 <span>bouteilles</span></div>
+          <div class="grade-bonus">Prime <b>30 000 $</b> + <b>1 $</b> par bouteille vendue</div>
+        </div>
+        <div class="grade-block">
+          <div class="grade-lbl">Si le quota est fait</div>
+          <ul class="rewards">
+            <li>15 menus</li>
+            <li>15 bidons</li>
+          </ul>
+        </div>
+        <div class="grade-next">↑ Promotion <b>Ouvrier Viticole</b> dès 5 000 ventes dépassées.</div>
+      </div>
+
+      <div class="grade-card">
+        <div class="grade-top">
+          <span class="g-pill g-2">Ouvrier Viticole</span>
+          <span class="grade-rank">Grade 2</span>
+        </div>
+        <div class="grade-block">
+          <div class="grade-lbl">Quota hebdomadaire</div>
+          <div class="grade-big">5 000 <span>bouteilles</span></div>
+          <div class="grade-bonus">Prime <b>50 000 $</b> + <b>2 $</b> par bouteille vendue</div>
+        </div>
+        <div class="grade-block">
+          <div class="grade-lbl">Si le quota est fait</div>
+          <ul class="rewards">
+            <li>25 menus</li>
+            <li>20 bidons</li>
+            <li>1 ticket tombola</li>
+          </ul>
+        </div>
+        <div class="grade-next">↑ Promotion <b>Chef de Culture</b> dès 8 000 ventes dépassées.</div>
+      </div>
+
+      <div class="grade-card">
+        <div class="grade-top">
+          <span class="g-pill g-3">Chef de Culture</span>
+          <span class="grade-rank">Grade 3</span>
+        </div>
+        <div class="grade-block">
+          <div class="grade-lbl">Quota hebdomadaire</div>
+          <div class="grade-big">8 000 <span>bouteilles</span></div>
+          <div class="grade-bonus">Prime <b>80 000 $</b> + <b>3 $</b> par bouteille vendue</div>
+        </div>
+        <div class="grade-block">
+          <div class="grade-lbl">Si le quota est fait</div>
+          <ul class="rewards">
+            <li>50 menus</li>
+            <li>30 bidons</li>
+            <li>2 tickets tombola</li>
+          </ul>
+        </div>
+        <div class="grade-next final">★ Grade final du parcours production.</div>
+      </div>
+
+    </div>
+
+    <h3 class="sub-head">Rémunération &amp; primes en un coup d'œil</h3>
+    <div class="table-scroll">
+      <table class="pay">
+        <thead>
+          <tr><th>Grade</th><th>Quota hebdo</th><th>Prime si quota atteint</th><th>Bonus / bouteille</th><th>Récompenses</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="g-pill g-1">Saisonnier</span></td>
+            <td class="num">3 000 bouteilles</td>
+            <td class="prime">30 000 $</td>
+            <td class="num">+ 1 $</td>
+            <td>15 menus · 15 bidons</td>
+          </tr>
+          <tr>
+            <td><span class="g-pill g-2">Ouvrier Viticole</span></td>
+            <td class="num">5 000 bouteilles</td>
+            <td class="prime">50 000 $</td>
+            <td class="num">+ 2 $</td>
+            <td>25 menus · 20 bidons · 1 ticket tombola</td>
+          </tr>
+          <tr>
+            <td><span class="g-pill g-3">Chef de Culture</span></td>
+            <td class="num">8 000 bouteilles</td>
+            <td class="prime">80 000 $</td>
+            <td class="num">+ 3 $</td>
+            <td>50 menus · 30 bidons · 2 tickets tombola</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===== CARRIÈRES / NOUS REJOINDRE ===== -->
+  <section id="carrieres">
+    <div class="sec-head">
+      <div class="eyebrow">Carrières</div>
+      <h2>On recrute <em>au domaine</em>.</h2>
+      <p class="sec-desc">Pas besoin d'y connaître quoi que ce soit en vin. On forme, on encadre, on récompense. Il faut juste avoir envie.</p>
+    </div>
+
+    <div class="perk-grid">
+      <div class="perk-card">
+        <div class="ico">📍</div>
+        <h3>Tout est sur place</h3>
+        <p>Vigne, chai, entrepôt et bureaux sont sur le même domaine. Zéro trajet interminable entre deux points de la carte.</p>
+      </div>
+      <div class="perk-card">
+        <div class="ico">💰</div>
+        <h3>Payé chaque semaine</h3>
+        <p>10 $ garantis par bouteille vendue, plus une prime calculée sur ta production réelle. Tout est transparent dans ton espace membre.</p>
+      </div>
+      <div class="perk-card">
+        <div class="ico">📈</div>
+        <h3>Évolution rapide</h3>
+        <p>Trois grades de production, puis des passerelles vers le commerce, le magasin ou l'encadrement. Le mérite passe avant l'ancienneté.</p>
+      </div>
+      <div class="perk-card">
+        <div class="ico">🏆</div>
+        <h3>Podium hebdo</h3>
+        <p>Les trois meilleurs producteurs de la semaine touchent une prime et leur badge sur le Discord du domaine.</p>
+      </div>
+      <div class="perk-card">
+        <div class="ico">🧰</div>
+        <h3>Matériel fourni</h3>
+        <p>Sécateur, caisses, véhicule utilitaire et accès au chai dès ta première semaine. Tu n'avances rien.</p>
+      </div>
+      <div class="perk-card">
+        <div class="ico">🍷</div>
+        <h3>Ambiance domaine</h3>
+        <p>Dégustations, événements privés, soirées vendanges. On travaille sérieusement sans se prendre au sérieux.</p>
+      </div>
+    </div>
+
+    <div class="pull-quote">« Tu plantes. Tu récoltes. Tu progresses. »</div>
+
+    <div class="join-grid">
+      <div class="expect">
+        <h3>Ce qu'on attend de toi</h3>
+        <ul>
+          <li><div><b>Le respect avant tout.</b> Collègues, clients, concurrents : tout le monde est traité correctement. C'est non négociable.</div></li>
+          <li><div><b>De la régularité.</b> Mieux vaut deux sessions calmes par semaine que dix heures d'un coup puis plus rien.</div></li>
+          <li><div><b>Un micro qui fonctionne.</b> On travaille en équipe sur le Discord du domaine.</div></li>
+          <li><div><b>Un personnage cohérent.</b> Pas de RP incohérent sur le domaine, on tient à notre réputation.</div></li>
+          <li><div><b>L'envie d'apprendre.</b> Aucune expérience demandée : on t'apprend tout, de la taille à la vinification.</div></li>
+        </ul>
+      </div>
+
+      <div class="discord-panel">
+        <div class="dico">
+          <svg viewBox="0 0 127.14 96.36" fill="currentColor" aria-hidden="true"><path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21H0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,46,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,46,96.12,53,91.08,65.69,84.69,65.69Z"/></svg>
+        </div>
+        <h3>La candidature se fait sur Discord</h3>
+        <p>Rejoins le serveur du domaine, ouvre un ticket « Candidature » et remplis le formulaire. Un responsable RH te répond en général dans la journée.</p>
+        <a href="https://discord.gg/CG4gYAEat" target="_blank" rel="noopener" class="btn btn-gold">Rejoindre le Discord</a>
+      </div>
+    </div>
+  </section>
+
   <!-- ===== DEVENIR CLIENT ===== -->
   <section id="devenir-client">
     <div class="sec-head">
@@ -396,7 +722,7 @@
     </div>
   </section>
 
-  <div class="coming-next">Les sections « Le Domaine », « Feuilleter », « Carrières » et « Contact » seront complétées avec les contenus à venir.</div>
+  <div class="coming-next">Les sections « Le Domaine », « Feuilleter » et « Contact » seront complétées avec les contenus à venir.</div>
 
   <footer>
     <div>© 1957–2026 Marlowe Vineyard · Tongva Hills, San Andreas</div>
@@ -442,6 +768,31 @@ const CATALOGUE_CANVA = [
 const MAX_NOUVEAUTES = 5;
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ---------------- Thème clair / sombre ---------------- */
+(function(){
+  const btn  = document.getElementById('themeToggle');
+  const root = document.documentElement;
+
+  const MOON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>';
+  const SUN  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.4v2.2M12 19.4v2.2M4.2 12H2M22 12h-2.2M6.3 6.3 4.8 4.8M19.2 19.2l-1.5-1.5M17.7 6.3l1.5-1.5M4.8 19.2l1.5-1.5"/></svg>';
+
+  function paint(theme){
+    /* en thème sombre on propose de passer en clair (soleil), et inversement */
+    btn.innerHTML = theme === 'dark' ? SUN : MOON;
+    btn.setAttribute('aria-label', theme === 'dark' ? 'Passer en thème clair' : 'Passer en thème sombre');
+    btn.setAttribute('title',      theme === 'dark' ? 'Thème clair' : 'Thème sombre');
+  }
+
+  paint(root.getAttribute('data-theme') || 'dark');
+
+  btn.addEventListener('click', () => {
+    const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    paint(next);
+    try{ localStorage.setItem('mv-theme', next); }catch(e){}
+  });
+})();
 
 /* ---------------- Nouveautés ---------------- */
 (function(){
