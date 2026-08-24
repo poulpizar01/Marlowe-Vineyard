@@ -56,12 +56,14 @@
      ========================================================================== */
   const CONFIG = {
     /* 'demo'    : aucun backend, session simulée (sélecteur de rôles)
-       'discord' : vraie connexion Discord via le backend                     */
-    MODE: 'demo',
+       'discord' : vraie connexion Discord via le backend
 
-    /* Adresse du backend, ex: 'https://marlowe-api.xxxxx.workers.dev'
-       À remplir le jour du déploiement.                                      */
-    API_BASE: '',
+       ⚠️ Ne jamais laisser 'demo' en ligne : n'importe qui pourrait alors
+       choisir « Patron » et entrer dans le panel.                            */
+    MODE: 'discord',
+
+    /* Adresse du backend Cloudflare Worker. */
+    API_BASE: 'https://marlowe-api.marlowe-vineyard.workers.dev',
 
     /* Rôles Discord qui donnent les pleins pouvoirs (accès à tout +
        accès à la page Paramètres). Doivent correspondre EXACTEMENT au nom
@@ -258,6 +260,11 @@
     },
 
     logout() {
+      /* On prévient le backend pour qu'il efface la session de son côté,
+         sans attendre la réponse — le rechargement suffit à l'utilisateur. */
+      if (CONFIG.MODE === 'discord' && token()) {
+        try { api('/api/logout').catch(() => {}); } catch (e) {}
+      }
       ls.del(LS_SESSION);
       ls.del(LS_TOKEN);
       location.reload();
@@ -666,7 +673,10 @@
     document.head.appendChild(style);
 
     const session = await Auth.getSession();
-    const roles   = await Store.getRoles();
+
+    /* La liste des rôles ne sert qu'à l'écran de test et à la page Paramètres.
+       Inutile d'aller la chercher pour un visiteur non connecté. */
+    const roles = (session || CONFIG.MODE !== 'discord') ? await Store.getRoles() : [];
 
     if (!session) {
       document.querySelector('.app-shell').style.display = 'none';

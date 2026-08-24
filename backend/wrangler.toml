@@ -28,7 +28,7 @@ OWNER_IDS = "826526979204841482"
 # ---------------------------------------------------------------------------
 [[kv_namespaces]]
 binding = "MARLOWE"
-id = "METTRE_ICI_ID_DU_NAMESPACE_KV"
+id = "96dc213dcafc411d8417448b46fc9274"
 
 # ---------------------------------------------------------------------------
 # Les SECRETS ne se mettent JAMAIS dans ce fichier.
