@@ -80,9 +80,10 @@
        activer « Mode développeur », puis clic droit sur ton pseudo ▸
        « Copier l'identifiant ». C'est une suite de 18-19 chiffres.
 
-       Exemple : OWNER_IDS: ['123456789012345678'],
        --------------------------------------------------------------------- */
-    OWNER_IDS: [],
+    OWNER_IDS: [
+      '826526979204841482',   // Thomas — développeur du site
+    ],
   };
 
   /* ==========================================================================
