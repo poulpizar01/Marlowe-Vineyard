@@ -1310,6 +1310,12 @@
     renderHistorique();
     renderPrimesExc();
     renderBilan();
+    /* L'étape « Clôturer » se coche d'elle-même. */
+    if (!(clotureSteps.done || []).includes('close')) {
+      clotureSteps.done = [...(clotureSteps.done || []), 'close'];
+      D().save('clotureSteps', false);
+    }
+    renderCloture();
     toast(`${label} clôturée — ${eligibles.length} éligible(s).`);
   }
 
@@ -1343,6 +1349,9 @@
     renderHistorique();
     renderPrimesExc();
     renderBilan();
+    clotureSteps.done = (clotureSteps.done || []).filter(x => x !== 'close');
+    D().save('clotureSteps', false);
+    renderCloture();
     toast('Clôture annulée.');
   }
 
@@ -2266,6 +2275,188 @@
   }
 
   /* ========================================================================
+     EFFECTIF — recherche, filtre par grade, compteur
+     ======================================================================== */
+  const effFiltre = { q: '', grade: 'all' };
+
+  window.mvEffectifFiltre = function () {
+    const q = effFiltre.q.toLowerCase();
+    return effectifData.filter(e =>
+      (effFiltre.grade === 'all' || e.grade === effFiltre.grade) &&
+      (!q || (e.name + ' ' + e.grade).toLowerCase().includes(q)));
+  };
+
+  function renderEffectifHead() {
+    const liste = window.mvEffectifFiltre();
+    const actifs = effectifData.filter(e => e.active).length;
+    const sansProd = effectifData.filter(e => e.active && !e.barils).length;
+    const promos = effectifData.filter(e => e.active && !e.isFinal && e.barils > e.promoTarget).length;
+
+    const n = $('effCount');
+    if (n) n.textContent = liste.length;
+
+    const l = $('effCountLabel');
+    if (l) l.textContent = (effFiltre.q || effFiltre.grade !== 'all')
+      ? `fiche(s) affichée(s) sur ${effectifData.length}`
+      : 'Fiches actives';
+
+    /* Ligne de contexte sous le titre, comme sur la page Employés. */
+    const head = document.querySelector('#page-statseffectif .pagehead');
+    if (head) {
+      let s = $('effSummary');
+      if (!s) {
+        s = document.createElement('p');
+        s.id = 'effSummary';
+        s.className = 'page-sub';
+        s.style.margin = '6px 0 0';
+        head.querySelector('div').appendChild(s);
+      }
+      s.innerHTML = `${actifs} dans le circuit quotas · <b>${sansProd}</b> sans production cette semaine · `
+        + `<b>${promos}</b> montée(s) de grade disponible(s)`;
+    }
+  }
+
+  function refreshEffectifFilters() {
+    const sel = $('effGradeFilter');
+    if (sel) {
+      const grades = [...new Set(effectifData.map(e => e.grade))].sort();
+      const cur = sel.value || 'all';
+      sel.innerHTML = '<option value="all">Tous les grades</option>'
+        + grades.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join('');
+      sel.value = grades.includes(cur) ? cur : 'all';
+    }
+    renderEffectifHead();
+  }
+
+  function applyEffectifFilter() {
+    if (typeof renderEffectif === 'function') renderEffectif(window.mvEffectifFiltre());
+    renderEffectifHead();
+  }
+
+  /* ========================================================================
+     CLÔTURE DU LUNDI — la marche à suivre, dans l'ordre
+     ------------------------------------------------------------------------
+     Clôturer touche à tout : production, primes, éligibilité, historique.
+     L'oubli le plus coûteux est de figer la semaine avant d'avoir mis à jour
+     la production. Ces étapes existent pour rendre cet oubli difficile.
+     ======================================================================== */
+  const clotureSteps = { done: [] };
+
+  const ETAPES = [
+    { id: 'prod', titre: 'Mettre à jour la production',
+      texte: 'Colle la tablette de la semaine dans le Tableau de bord (bouton « 📋 Coller la tablette »). '
+           + 'Les quotas, l\'éligibilité et le bilan se recalculent dans la foulée.',
+      page: 'statsdash', bouton: 'Ouvrir le tableau de bord' },
+
+    { id: 'rh', titre: 'Vérifier l\'effectif et les absences',
+      texte: 'Employés : déclare les départs de la semaine et retire les absences de ceux qui sont revenus. '
+           + 'Recrutement : enregistre les arrivées — le cumul des recruteurs se recalcule tout seul.',
+      page: 'rhemployes', bouton: 'Ouvrir les employés' },
+
+    { id: 'promo', titre: 'Annoncer les promotions et les alertes',
+      texte: 'Effectif : ▲ signale une promotion méritée, ▼ un employé sous quota. '
+           + 'Annonce-les en jeu ou sur Discord AVANT de figer la semaine — après, les compteurs sont à zéro.',
+      page: 'statseffectif', bouton: 'Ouvrir l\'effectif' },
+
+    { id: 'bilan', titre: 'Contrôler le bilan et le palier',
+      texte: 'Bilan comptable : vérifie le CA, les dépenses déductibles et le palier d\'imposition retenu. '
+           + 'Tu peux le forcer si la détection automatique ne correspond pas.',
+      page: 'bilan', bouton: 'Ouvrir le bilan' },
+
+    { id: 'close', titre: 'Clôturer la semaine',
+      texte: 'Fige les primes, archive tout dans l\'Historique, bascule l\'éligibilité sur la semaine écoulée, '
+           + 'puis remet à zéro les productions, les prises de service et les primes exceptionnelles.',
+      action: 'closeWeek', bouton: 'Clôturer la semaine', primary: true },
+
+    { id: 'gdoc', titre: 'Copier les GDoc et vérifier',
+      texte: 'Bilan → « Copier pour GDoc » pour le détail par employé, puis le second bouton pour les dépenses. '
+           + 'Contrôle que les totaux du tableur correspondent à ceux du site.',
+      page: 'bilan', bouton: 'Ouvrir le bilan' },
+
+    { id: 'distrib', titre: 'Distribuer les récompenses',
+      texte: 'Éligibilité : la liste porte désormais la semaine écoulée. '
+           + 'Marque chaque récompense distribuée au fur et à mesure — tu peux revenir en arrière.',
+      page: 'eligibilite', bouton: 'Ouvrir l\'éligibilité' },
+  ];
+
+  function gotoPage(id) {
+    const item = document.querySelector(`.sidebar .nav-item[data-page="${id}"]:not(.mv-hidden)`);
+    if (!item) { toast("Cette page ne vous est pas accessible."); return; }
+    item.click();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function renderCloture() {
+    const host = $('clotureBody');
+    if (!host) return;
+
+    const { start, end } = closingPeriod();
+    const sub = $('clotureSub');
+    if (sub) {
+      sub.textContent = `Semaine du ${frDate(start)} au ${frDate(end)} · suis les étapes dans l'ordre, coche au fur et à mesure.`;
+    }
+
+    const done = new Set(clotureSteps.done || []);
+    const courante = ETAPES.findIndex(e => !done.has(e.id));
+    const w = lastClosedWeek();
+    const peutAnnuler = !!(w && clotures.undo && clotures.undo.weekId === w.id);
+
+    host.innerHTML = `
+      <div class="panel mv-steps">
+        ${ETAPES.map((e, i) => {
+          const fait = done.has(e.id);
+          const active = i === courante;
+          return `
+          <div class="mv-step${fait ? ' done' : ''}${active ? ' active' : ''}">
+            <div class="mv-step-n">${fait ? '✓' : i + 1}</div>
+            <div class="mv-step-body">
+              <div class="mv-step-t">${esc(e.titre)}</div>
+              <div class="mv-step-d">${esc(e.texte)}</div>
+              <div class="btn-row mv-step-actions">
+                <button class="btn${e.primary ? ' primary' : ''}"
+                  ${e.action ? 'data-step-action="' + e.action + '"' : 'data-step-go="' + e.page + '"'}
+                  >${esc(e.bouton)}</button>
+                <button class="btn mv-step-check" data-step-toggle="${e.id}">${
+                  fait ? '↺ Décocher' : '✓ Étape faite'}</button>
+              </div>
+            </div>
+          </div>`;
+        }).join('')}
+        ${courante < 0 ? `<div class="mv-step-all">
+          Toutes les étapes sont cochées. <button class="btn" data-step-reset>Repartir de zéro</button>
+        </div>` : ''}
+      </div>
+
+      <div class="panel mv-undo${peutAnnuler ? '' : ' off'}">
+        <h3>↩ Oubli ou erreur ?</h3>
+        <p>${w
+          ? `Dernière clôture : <b>${esc(w.label)}</b> — ${esc(w.du)} → ${esc(w.au)}, clôturée le ${esc(w.closedAt)}.`
+            + (peutAnnuler
+              ? ' Productions, heures de service et primes exceptionnelles peuvent être restaurées à l\'identique.'
+              : ' Cette clôture n\'est plus annulable — la sauvegarde de restauration a été remplacée.')
+          : 'Aucune semaine clôturée pour le moment.'}</p>
+        <button class="btn" id="clotureUndoBtn"${peutAnnuler ? '' : ' disabled'}>↩ Annuler la dernière clôture</button>
+      </div>`;
+
+    const u = $('clotureUndoBtn');
+    if (u && peutAnnuler) u.addEventListener('click', undoClose);
+  }
+
+  function toggleStep(id) {
+    const done = new Set(clotureSteps.done || []);
+    if (done.has(id)) done.delete(id); else done.add(id);
+    clotureSteps.done = [...done];
+    D().save('clotureSteps', false);
+    renderCloture();
+  }
+
+  function resetSteps() {
+    clotureSteps.done = [];
+    D().save('clotureSteps', false);
+    renderCloture();
+  }
+
+  /* ========================================================================
      LOT A — AJUSTEMENTS D'AFFICHAGE
      ======================================================================== */
   function injectStyles() {
@@ -2341,6 +2532,32 @@
       .bilan-chip.mv-forced{border-color:var(--amber,#D6A75C) !important;
         color:var(--amber,#D6A75C) !important;}
 
+      /* --- Clôture du lundi --- */
+      .mv-steps{padding:6px 0;}
+      .mv-step{display:grid;grid-template-columns:auto 1fr;gap:16px;padding:20px 22px;
+        border-bottom:1px solid var(--band,#3D372C);opacity:.6;transition:.18s;}
+      .mv-step:last-of-type{border-bottom:none;}
+      .mv-step.active,.mv-step.done{opacity:1;}
+      .mv-step.active{background:rgba(201,169,97,.05);}
+      .mv-step-n{width:30px;height:30px;border-radius:50%;flex-shrink:0;
+        display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;
+        border:1px solid var(--band,#3D372C);color:var(--muted,#9C9384);font-family:'Fraunces',serif;}
+      .mv-step.active .mv-step-n{border-color:var(--or,#C9A961);color:#1C1B18;background:var(--or,#C9A961);}
+      .mv-step.done .mv-step-n{border-color:var(--vine,#6E8B5D);color:var(--vine,#6E8B5D);
+        background:rgba(110,139,93,.12);}
+      .mv-step-t{font-family:'Fraunces',serif;font-weight:600;font-size:16px;
+        color:var(--parchment,#EDE3CF);margin-bottom:6px;}
+      .mv-step.done .mv-step-t{text-decoration:line-through;text-decoration-color:rgba(156,147,132,.5);}
+      .mv-step-d{font-size:13px;line-height:1.7;color:var(--muted,#9C9384);max-width:760px;}
+      .mv-step-actions{margin-top:14px;}
+      .mv-step:not(.active):not(.done) .mv-step-actions{display:none;}
+      .mv-step-all{padding:18px 22px;font-size:13.5px;color:var(--vine,#6E8B5D);
+        display:flex;align-items:center;gap:14px;border-top:1px solid var(--band,#3D372C);}
+      .mv-undo{margin-top:18px;border-color:rgba(214,167,92,.35);background:rgba(214,167,92,.05);}
+      .mv-undo.off{opacity:.6;}
+      .mv-undo p{font-size:13px;line-height:1.7;color:var(--muted,#9C9384);margin:8px 0 16px;max-width:760px;}
+      .mv-undo button[disabled]{opacity:.45;cursor:not-allowed;}
+
       .table-wrap{overflow-x:auto;}
 
       .action-icons{white-space:nowrap;}
@@ -2394,7 +2611,8 @@
         '[data-article-del],[data-article-edit],[data-fr-del],[data-fr-edit],' +
         '[data-canva-del],[data-dash-del],[data-agenda-del],' +
         '[data-eff-promote],[data-eff-edit],[data-eff-del],[data-abs-del],' +
-        '[data-histo-del],[data-primeexc-del]');
+        '[data-histo-del],[data-primeexc-del],[data-step-go],[data-step-action],' +
+        '[data-step-toggle],[data-step-reset]');
       if (!t) return;
       const d = t.dataset;
       ev.preventDefault();
@@ -2415,6 +2633,10 @@
       if (d.dashDel)       return deleteDashRow(d.dashDel);
       if (d.absDel)        return removeAbsence(d.absDel);
       if (d.histoDel)      return deleteHistoWeek(d.histoDel);
+      if (d.stepGo)        return gotoPage(d.stepGo);
+      if (d.stepAction)    return closeWeek();
+      if (d.stepToggle)    return toggleStep(d.stepToggle);
+      if (t.hasAttribute('data-step-reset')) return resetSteps();
       if (d.primeexcDel)   return removePrimeExc(d.primeexcDel);
       if (d.effPromote)    return promoteEmployee(d.effPromote);
       if (d.effEdit)       return editEffectif(d.effEdit);
@@ -2440,6 +2662,11 @@
     on('annulerClotureBtn', undoClose);
 
     /* Entrée dans le champ de nom = ajouter l'employé. */
+    const es = $('effSearch');
+    if (es) es.addEventListener('input', () => { effFiltre.q = es.value.trim(); applyEffectifFilter(); });
+    const eg = $('effGradeFilter');
+    if (eg) eg.addEventListener('change', () => { effFiltre.grade = eg.value; applyEffectifFilter(); });
+
     const tarif = $('invTarif');
     if (tarif) tarif.addEventListener('change', applyTarifToLines);
 
@@ -2472,6 +2699,8 @@
     renderBilan();
     renderWeekHistory();
     renderHistorique();
+    renderCloture();
+    refreshEffectifFilters();
     D().redraw('rhRecruiters');
   }
 
@@ -2500,7 +2729,10 @@
     refreshWeekDays, refreshWeekHeaders, renderEligibilite, closeWeek, undoClose,
     renderBilan, renderWeekHistory, copyDetailGDoc, copyDepensesGDoc,
     renderHistorique, renderPrimesExc, addPrimeExceptionnelle,
+    renderCloture, renderEffectifHead, refreshEffectifFilters, applyEffectifFilter,
   };
+
+  window.MarloweClotureSteps = clotureSteps;
 
   window.MarlowePrimesExc = primesExc;
   window.MarloweBilanConfig = bilanConfig;

@@ -108,6 +108,7 @@
     { id: 'statseffectif',  label: 'Effectif',        group: 'Stats & Quotas' },
     { id: 'statsprimes',    label: 'Primes',          group: 'Stats & Quotas' },
 
+    { id: 'cloture',        label: 'Clôture du lundi', group: 'Gestion' },
     { id: 'histo',          label: 'Historique',      group: 'Gestion' },
 
     { id: 'masemaine',      label: 'Ma semaine',      group: 'Personnel' },
@@ -127,7 +128,7 @@
   /* Répartition de départ — modifiable ensuite dans Paramètres.
      Le patron a tout, il n'a pas besoin d'être listé.                        */
   const PERSONNEL = ['masemaine', 'agenda', 'tombola'];
-  const GESTION   = ['histo'];
+  const GESTION   = ['histo', 'cloture'];
   const RH_PAGES  = ['rhemployes', 'rhrecrutement', 'blacklist'];
   const COMMERCE  = ['facturation', 'catalogue', 'bilan', 'facturesrecues'];
   const STATS     = ['eligibilite', 'statsvue', 'statsdash', 'statsgrades', 'statseffectif', 'statsprimes'];

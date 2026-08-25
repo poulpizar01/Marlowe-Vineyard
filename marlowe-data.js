@@ -39,8 +39,10 @@ window.MarloweData = (function () {
   const COLLECTIONS = {
     effectif: {
       ref: () => effectifData,
-      render: [() => renderEffectif(effectifData), call('renderEligibilite'),
-               call('updateGradeCounts'), call('populateOverview'), call('renderPrimes')],
+      render: [() => renderEffectif(window.mvEffectifFiltre ? window.mvEffectifFiltre() : effectifData),
+               call('renderEligibilite'), call('updateGradeCounts'), call('populateOverview'),
+               call('renderPrimes'),
+               () => { const a = window.MarloweActions; if (a) a.refreshEffectifFilters(); }],
     },
     dash: {
       ref: () => dash,
@@ -76,6 +78,10 @@ window.MarloweData = (function () {
     bilanConfig: {
       ref: () => window.MarloweBilanConfig,
       render: [() => { const a = window.MarloweActions; if (a) a.renderBilan(); }],
+    },
+    clotureSteps: {
+      ref: () => window.MarloweClotureSteps,
+      render: [() => { const a = window.MarloweActions; if (a) a.renderCloture(); }],
     },
 
     /* Semaines clôturées + photo permettant d'annuler la dernière clôture.

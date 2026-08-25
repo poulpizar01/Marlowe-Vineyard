@@ -517,6 +517,7 @@
       <div class="nav-item" data-page="statseffectif">Effectif</div>
       <div class="nav-item" data-page="statsprimes">Primes</div>
       <div class="nav-section">Gestion</div>
+      <div class="nav-item" data-page="cloture">Clôture du lundi</div>
       <div class="nav-item" data-page="histo">Historique</div>
       <div class="nav-section">Personnel</div>
       <div class="nav-item" data-page="masemaine">Ma semaine</div>
@@ -1115,12 +1116,15 @@
         <h1>Effectif</h1>
       </div>
       <div class="headmetric">
-        <div class="n">4</div>
-        <div class="l">Fiches actives</div>
+        <div class="n" id="effCount">0</div>
+        <div class="l" id="effCountLabel">Fiches actives</div>
       </div>
     </div>
 
     <div class="toolbar">
+      <div class="search"><span style="color:var(--muted);font-size:13px;">⌕</span>
+        <input type="text" id="effSearch" placeholder="Rechercher un employé…"></div>
+      <select id="effGradeFilter"><option value="all">Tous les grades</option></select>
       <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;">Trier par</span>
       <div class="sort-group">
         <button class="sort-btn active" data-sort="grade">Grade</button>
@@ -1262,6 +1266,13 @@
         <h3>Historique personnel</h3>
         <p class="empty-note">Aucune semaine clôturée pour l'instant. Ton historique de production apparaîtra ici après la première clôture.</p>
       </div>
+    </div>
+
+    <!-- ================= CLÔTURE DU LUNDI ================= -->
+    <div class="page-content" id="page-cloture">
+      <h1 class="page-title">Clôture du lundi</h1>
+      <p class="page-sub" id="clotureSub">Suis les étapes dans l'ordre — coche au fur et à mesure.</p>
+      <div id="clotureBody"></div>
     </div>
 
     <!-- ================= HISTORIQUE ================= -->
@@ -1652,13 +1663,13 @@ document.querySelectorAll('.sort-btn').forEach(btn => {
     document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     sortKey = btn.dataset.sort;
-    renderEffectif(effectifData);
+    renderEffectif(window.mvEffectifFiltre ? window.mvEffectifFiltre() : effectifData);
   });
 });
 document.getElementById('sortDir').addEventListener('click', (ev) => {
   sortDir *= -1;
   ev.target.textContent = sortDir === 1 ? '↑' : '↓';
-  renderEffectif(effectifData);
+  renderEffectif(window.mvEffectifFiltre ? window.mvEffectifFiltre() : effectifData);
 });
 
 /* ---- Primes ---- */
