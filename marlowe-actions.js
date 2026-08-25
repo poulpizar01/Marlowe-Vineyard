@@ -2938,6 +2938,130 @@
   }
 
   /* ========================================================================
+     ÉTATS VIDES
+     ------------------------------------------------------------------------
+     Un tableau vide sans un mot ressemble à une panne. On y met une phrase
+     qui dit ce qui manque et où l'ajouter.
+     ======================================================================== */
+  const VIDES = [
+    ['rosterBody',        7,  "Aucun employé au registre — enregistrez une arrivée depuis Recrutement."],
+    ['blacklistBody',     6,  "Personne dans la blacklist."],
+    ['clientsBody',       5,  "Aucun client — le premier s'ajoutera tout seul à la première facture."],
+    ['articlesBody',      7,  "Aucun article au catalogue."],
+    ['historiqueBody',    7,  "Aucune facture émise pour l'instant."],
+    ['dashBody',          11, "Aucune ligne — collez la tablette de la semaine depuis « 📋 Coller la tablette »."],
+    ['bcDetailBody',      8,  "Aucune donnée de production — le tableau se remplit depuis le Tableau de bord."],
+    ['serviceHistoryBody', 4, "Aucune prise de service enregistrée."],
+  ];
+
+  const VIDES_BLOCS = [
+    ['effectifList',       "Aucune fiche de production."],
+    ['absGrid',            "Aucune absence en cours."],
+    ['departCard',         "Aucun départ enregistré."],
+    ['facturesRecuesList', "Aucune facture reçue archivée."],
+    ['agendaList',         "Aucun événement au planning."],
+  ];
+
+  function remplirVides() {
+    VIDES.forEach(([id, cols, texte]) => {
+      const b = $(id);
+      if (!b || b.children.length) return;
+      b.innerHTML = `<tr><td colspan="${cols}" class="empty-note"
+        style="text-align:center;padding:26px 12px;">${esc(texte)}</td></tr>`;
+    });
+    VIDES_BLOCS.forEach(([id, texte]) => {
+      const b = $(id);
+      if (!b || b.children.length) return;
+      b.innerHTML = `<p class="empty-note" style="text-align:center;padding:26px 12px;">${esc(texte)}</p>`;
+    });
+  }
+
+  /* ========================================================================
+     REPARTIR DE ZÉRO
+     ------------------------------------------------------------------------
+     Vider les données d'essai pour démarrer proprement, sans passer par une
+     clôture — celle-ci archiverait justement ce qu'on veut jeter.
+
+     Le catalogue d'articles et le barème d'imposition ne sont pas des
+     données d'essai : ils sont proposés décochés.
+     ======================================================================== */
+  const GROUPES_RESET = [
+    { id: 'rh',       label: 'Employés, départs, absences, recruteurs',
+      cles: ['rhRoster', 'rhDeparts', 'rhAbsences', 'rhRecruiters'], defaut: true },
+    { id: 'bl',       label: 'Blacklist',
+      cles: ['blacklist'], defaut: true },
+    { id: 'prod',     label: 'Production, éligibilité, tableau de bord',
+      cles: ['effectif', 'dash', 'primesExc'], defaut: true },
+    { id: 'commerce', label: 'Factures émises et reçues, clients',
+      cles: ['historique', 'facturesRecues', 'clients', 'depenses', 'retraits'], defaut: true },
+    { id: 'semaines', label: 'Semaines clôturées et historique',
+      cles: ['clotures', 'clotureSteps'], defaut: true },
+    { id: 'perso',    label: 'Prises de service, agenda, tombola',
+      cles: ['serviceHistory', 'agenda', 'tombola'], defaut: true },
+    { id: 'articles', label: 'Catalogue d\'articles et liens Canva',
+      cles: ['articles', 'catalogueSlides'], defaut: false },
+  ];
+
+  async function repartirDeZero() {
+    ensureDialog();
+    dlg.querySelector('.mv-dlg').innerHTML = `
+      <h3>Repartir de zéro</h3>
+      <p>Vide les données choisies pour démarrer proprement. <b>Cette opération ne s'annule pas</b> —
+         contrairement à une clôture, rien n'est archivé.</p>
+      ${GROUPES_RESET.map(g => `
+        <label class="mv-reset-l">
+          <input type="checkbox" id="rz-${g.id}" ${g.defaut ? 'checked' : ''}>
+          <span>${esc(g.label)}</span>
+        </label>`).join('')}
+      <p class="mv-reset-n">Le barème d'imposition, les grades et les quotas ne sont pas touchés :
+         ce sont des règles, pas des données.</p>
+      <div class="mv-dlg-btns">
+        <button data-no>Annuler</button>
+        <button data-yes class="danger">Vider</button>
+      </div>`;
+    dlg.style.display = 'flex';
+
+    const choix = await new Promise(r => {
+      resolver = r;
+      dlg.querySelector('[data-no]').onclick = () => close(null);
+      dlg.querySelector('[data-yes]').onclick = () => {
+        close(GROUPES_RESET.filter(g => { const c = $('rz-' + g.id); return c && c.checked; }));
+      };
+    });
+    if (!choix || !choix.length) return;
+
+    const cles = choix.flatMap(g => g.cles);
+    const confirme = await confirmAction('Confirmer le vidage',
+      `${cles.length} collection(s) vont être vidées définitivement : ${
+        choix.map(g => g.label.toLowerCase()).join(' · ')}.`, true);
+    if (!confirme) return;
+
+    cles.forEach(cle => {
+      const r = D().ref(cle);
+      if (Array.isArray(r)) r.length = 0;
+      else if (r && typeof r === 'object') Object.keys(r).forEach(k => {
+        if (Array.isArray(r[k])) r[k].length = 0; else delete r[k];
+      });
+    });
+
+    /* Structures qui doivent rester présentes, même vides. */
+    if (cles.includes('clotures')) { clotures.weeks = []; clotures.undo = null; }
+    if (cles.includes('clotureSteps')) clotureSteps.done = [];
+    if (cles.includes('catalogueSlides')) { catalogueSlides.entreprise = []; catalogueSlides.citoyens = []; }
+
+    D().note(`a réinitialisé le panel (${choix.map(g => g.id).join(', ')})`);
+    D().saveMany(cles, false);
+
+    D().redrawAll();
+    [renderBilan, renderEligibilite, renderHistorique, renderQuotas3, renderCloture,
+     renderPrimesExc, renderWeekHistory, refreshEffectifFilters, recomputeRecruiters,
+     refreshEffectifCount, refreshClientCounts, refreshArticleCount, refreshFrCounts,
+     remplirVides].forEach(f => { try { f(); } catch (e) {} });
+
+    toast('Panel réinitialisé.');
+  }
+
+  /* ========================================================================
      LOT A — AJUSTEMENTS D'AFFICHAGE
      ======================================================================== */
   function injectStyles() {
@@ -3114,6 +3238,12 @@
       .j-txt b{color:var(--parchment,#EDE3CF);font-weight:600;}
       .j-time{font-size:11px;color:var(--or-soft,#8E7C4E);white-space:nowrap;}
 
+      .mv-reset-l{display:flex;align-items:center;gap:10px;padding:7px 0;font-size:13px;
+        color:var(--parchment,#EDE3CF);cursor:pointer;}
+      .mv-reset-l input{width:15px;height:15px;accent-color:var(--or,#C9A961);flex-shrink:0;}
+      .mv-reset-n{font-size:11.5px;color:var(--muted,#9C9384);line-height:1.6;
+        margin-top:14px;padding-top:12px;border-top:1px solid var(--band,#3D372C);}
+
       .table-wrap{overflow-x:auto;}
 
       .action-icons{white-space:nowrap;}
@@ -3266,6 +3396,7 @@
     refreshEffectifFilters();
     renderQuotas3();
     appliquerLectureSeule();
+    remplirVides();
     D().redraw('rhRecruiters');
 
     /* Confort : version, présence, affichage. */
@@ -3304,7 +3435,7 @@
     renderHistorique, renderPrimesExc, addPrimeExceptionnelle,
     renderCloture, renderEffectifHead, refreshEffectifFilters, applyEffectifFilter,
     verifierVersion, battementPresence, setZoom, toggleFullscreen,
-    renderQuotas3, renderJournal, appliquerLectureSeule,
+    renderQuotas3, renderJournal, appliquerLectureSeule, remplirVides, repartirDeZero,
   };
 
   window.MarloweClotureSteps = clotureSteps;

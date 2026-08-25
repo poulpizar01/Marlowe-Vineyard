@@ -1,4 +1,4 @@
 {
-  "v": "1.1.0",
-  "note": "journal des actions, lecture seule, quotas sur 3 semaines, synchronisation entre membres"
+  "v": "1.2.0",
+  "note": "panneau reparti de zero : donnees de demonstration supprimees, messages d'etat vide, bouton de reinitialisation dans Parametres"
 }

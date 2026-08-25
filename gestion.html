@@ -1437,12 +1437,7 @@ const rewardsByGrade = {
   'Ouvrier Viticole': '25 menus + 20 bidons + 1 ticket tombola',
   'Chef de Culture': '50 menus + 30 bidons + 2 tickets tombola'
 };
-const effectifData = [
-  {name:'Burak Çelik', grade:'Saisonnier', barils:5079, distributed:false, quota:3000, promoTarget:5000, nextGrade:'Ouvrier Viticole', isFinal:false, active:true},
-  {name:'Kevin Dubourg', grade:'Ouvrier Viticole', barils:9524, distributed:true, quota:5000, promoTarget:8000, nextGrade:'Chef de Culture', isFinal:false, active:true},
-  {name:'Morgan Bilel', grade:'Chef de Culture', barils:27168, distributed:false, quota:8000, promoTarget:null, nextGrade:null, isFinal:true, active:true},
-  {name:'Léon Carter', grade:'Assistants de Magasin', barils:0, distributed:false, quota:0, promoTarget:null, nextGrade:null, isFinal:false, active:false},
-];
+const effectifData = [];
 function renderEligibilite(){
 const eligibleList = effectifData.filter(e => e.active && e.barils >= e.quota);
 document.getElementById('el-count').textContent = eligibleList.length;
@@ -1463,15 +1458,7 @@ document.getElementById('eligibiliteBody').innerHTML = eligibleList.map(e => `
 renderEligibilite();
 
 /* ---------- Stats & Quotas (Vue d'ensemble / Tableau de bord / Grades / Effectif / Primes) ---------- */
-const dash = [
-  {name:'Julio Cortes', rank:'RH', factures:4200, runs:6100, ventes:0, part:5150, heures:'22h10min', tickets:2},
-  {name:'Nella Valmora', rank:'Responsable Commercial', factures:38500, runs:21200, ventes:0, part:41200, heures:'31h40min', tickets:2},
-  {name:'Morgan Bilel', rank:'Chef de culture', factures:0, runs:135840, ventes:27168, part:240000, heures:'40h12min', tickets:5},
-  {name:'Jayden Wood', rank:'Vendeur', factures:15600, runs:4200, ventes:0, part:9900, heures:'18h30min', tickets:1},
-  {name:'Rafael Demendes', rank:'Chef de culture', factures:0, runs:16300, ventes:3260, part:32600, heures:'20h05min', tickets:2},
-  {name:'Burak Çelik', rank:'Saisonnier', factures:0, runs:25395, ventes:5079, part:50790, heures:'14h20min', tickets:1},
-  {name:'Kevin Dubourg', rank:'Ouvrier Viticole', factures:0, runs:47620, ventes:9524, part:95240, heures:'28h44min', tickets:2},
-];
+const dash = [];
 
 function fmt(n){ return n.toLocaleString('fr-FR') + '$'; }
 
@@ -1752,20 +1739,7 @@ document.getElementById('primesSearch').addEventListener('input', (e) => renderP
 /* ---------- RH — Employés & Recrutement ---------- */
 const rhSeal = (initials, tier) => `<div class="seal seal-${tier}">${initials}</div>`;
 
-const rhRosterData = [
-  {id:'160149', name:'Julio Cortes', poste:'RH', init:'RH', tier:'silver', rec:'Livia Cole', date:'19/08/2026', status:'actif', dept:'direction'},
-  {id:'336798', name:'Nella Valmora', poste:'Responsable Commercial', init:'RC', tier:'silver', rec:'Erwan Valmora', date:'05/08/2026', status:'actif', dept:'direction'},
-  {id:'233594', name:'Morgan Bilel', poste:'Chef de culture', init:'CC', tier:'bronze', rec:'Julio santos', date:'26/07/2026', status:'actif', dept:'terrain'},
-  {id:'373578', name:'Jayden Wood', poste:'Vendeur', init:'VD', tier:'bronze', rec:'Julio santos', date:'26/07/2026', status:'actif', dept:'terrain'},
-  {id:'373504', name:'Skebob Kirk', poste:'Ouvrier viticole', init:'OV', tier:'clay', rec:'Livia Cole', date:'25/07/2026', status:'actif', dept:'terrain'},
-  {id:'217222', name:'Rafael Demendes', poste:'Chef de culture', init:'CC', tier:'bronze', rec:'Julio cortes', date:'22/07/2026', status:'absent', absence:'10/08 → 24/08', dept:'terrain'},
-  {id:'230459', name:'Celia Flynn', poste:'Chef de culture', init:'CC', tier:'bronze', rec:'Livia Cole', date:'21/07/2026', status:'absent', absence:'13/08 → 27/08', dept:'terrain'},
-  {id:'369566', name:'Theo Saint', poste:'Chef de culture', init:'CC', tier:'bronze', rec:'Julio santos', date:'01/08/2026', status:'absent', absence:'04/08 → 24/08', dept:'terrain'},
-  {id:'351239', name:'Jaroslav Krov', poste:'Saisonnier', init:'SA', tier:'clay', rec:'Julio santos', date:'20/08/2026', status:'absent', absence:'21/08 → 02/09', dept:'saisonnier'},
-  {id:'253101', name:'Souleyman Smith', poste:'Ouvrier viticole', init:'OV', tier:'clay', rec:'Livia Cole', date:'12/08/2026', status:'absent', absence:'18/08 → 24/08', dept:'terrain'},
-  {id:'254244', name:'Liam Cooper', poste:'Saisonnier', init:'SA', tier:'clay', rec:'Kira Delcourt', date:'22/08/2026', status:'actif', dept:'saisonnier'},
-  {id:'261960', name:'Vladislav Romanov', poste:'Saisonnier', init:'SA', tier:'clay', rec:'Julio cortes', date:'20/08/2026', status:'actif', dept:'saisonnier'},
-];
+const rhRosterData = [];
 document.getElementById('rhEffectif').textContent = rhRosterData.filter(e => e.status === 'actif').length;
 
 function renderRhRoster(list){
@@ -1802,12 +1776,7 @@ document.querySelectorAll('.chip').forEach(chip => {
   });
 });
 
-const rhRecruiters = [
-  {name:'Kira Delcourt', n:12},
-  {name:'Julio cortes', n:4},
-  {name:'Erwan Valmora', n:1},
-  {name:'Livia Cole', n:1},
-];
+const rhRecruiters = [];
 function renderRecruiters(){
 document.getElementById('rhRecrutements7j').textContent = rhRecruiters.reduce((s, r) => s + r.n, 0);
 const rhRecruiterMax = Math.max(...rhRecruiters.map(r => r.n));
@@ -1821,17 +1790,7 @@ document.getElementById('rbList').innerHTML = rhRecruiters.map(r => `
 }
 renderRecruiters();
 
-const rhDeparts = [
-  {week:'Semaine du 18/08', rows:[
-    {name:'Dynamo Thunder', poste:'Saisonnier', reason:'Licenciement 10%', cls:'licenciement', date:'21/08'},
-    {name:'Mark Dupont', poste:'Vendeur', reason:'Démission 0%', cls:'', date:'21/08'},
-    {name:'Jose Mendes', poste:'Saisonnier', reason:'Démission 0%', cls:'', date:'21/08'},
-  ]},
-  {week:'Semaine du 11/08', rows:[
-    {name:'Carlito Santiago', poste:'Saisonnier', reason:'Démission 0%', cls:'', date:'16/08'},
-    {name:'Ken Kaneki', poste:'Chef de culture', reason:'Démission 0%', cls:'', date:'16/08'},
-  ]},
-];
+const rhDeparts = [];
 function renderDeparts(){
 document.getElementById('departCard').innerHTML = rhDeparts.map(w => `
   <div class="week-label">${w.week}</div>
@@ -1845,18 +1804,7 @@ document.getElementById('departCard').innerHTML = rhDeparts.map(w => `
 }
 renderDeparts();
 
-const rhAbsences = [
-  {name:'Alex Lozano', range:'30/07 → indéfini', indef:true},
-  {name:'Alby Doghan', range:'27/06 → indéfini', indef:true},
-  {name:'Kader Mizab', range:'26/07 → indéfini', indef:true},
-  {name:'Theo Saint', range:'04/08 → 24/08'},
-  {name:'Celia Flynn', range:'13/08 → 27/08'},
-  {name:'Rafael Demendes', range:'10/08 → 24/08'},
-  {name:'Thibzz Roze', range:'15/08 → 22/08'},
-  {name:'Jayden Jones', range:'15/08 → 25/08'},
-  {name:'Souleyman Smith', range:'18/08 → 24/08'},
-  {name:'Jaroslav Krov', range:'21/08 → 02/09'},
-];
+const rhAbsences = [];
 function renderAbsences(){
 document.getElementById('absGrid').innerHTML = rhAbsences.map(a => `
   <div class="abs-pill">
@@ -1879,10 +1827,7 @@ if(rhAbsIndef){
 }
 
 /* ---------- Blacklist ---------- */
-const blacklistData = [
-  {name:'Jonas Whitlock', reason:'Vol de matériel viticole', date:'12/08/2026', by:'Julio Cortes'},
-  {name:'Marina Costa', reason:'Comportement irrespectueux répété', date:'05/08/2026', by:'Nella Valmora'},
-];
+const blacklistData = [];
 function renderBlacklist(){
 document.getElementById('blacklistBody').innerHTML = blacklistData.map((b, i) => `
   <tr>
@@ -1935,20 +1880,7 @@ if(addEmpBtn){
 }
 
 /* ---------- Clients ---------- */
-const clientsData = [
-  {name:'Château Frostmoor', addr:'Los Santos', phone:'555-201-448', rib:'30201'},
-  {name:'Le Cellier de Cayo', addr:'Cayo Perico', phone:'555-330-119', rib:'30215'},
-  {name:'Auberge du Nord', addr:'Paleto', phone:'555-118-902', rib:''},
-  {name:'Vignoble Voisin', addr:'Grapeseed', phone:'', rib:'30188'},
-  {name:'Taverne du Choix', addr:'Sandy Shores', phone:'555-778-204', rib:''},
-  {name:'Le Comptoir des Sables', addr:'Sandy Shores', phone:'', rib:'30244'},
-  {name:'Los Santos Fine Wines', addr:'Los Santos', phone:'555-990-112', rib:'30099'},
-  {name:'La Cave Noire', addr:'Los Santos', phone:'', rib:''},
-  {name:"Vinderella's", addr:'Vinewood', phone:'555-402-771', rib:'30310'},
-  {name:'Le Rouge Écarlate', addr:'Rockford Hills', phone:'', rib:'30122'},
-  {name:'Grapeseed Growers Co.', addr:'Grapeseed', phone:'555-663-500', rib:''},
-  {name:'Auberge Marlowe', addr:'Roxwood', phone:'555-004-771', rib:'30001'},
-];
+const clientsData = [];
 function renderClients(list){
   document.getElementById('clientsBody').innerHTML = list.map(c => `
     <tr>
@@ -2124,15 +2056,7 @@ document.getElementById('articleCatFilter').addEventListener('change', (e) => {
 });
 
 /* ---------- Historique ---------- */
-const historiqueData = [
-  {num:'410071', date:'23/08/2026', client:'Château Frostmoor', total:37800, emetteur:'Nella Valmora'},
-  {num:'410070', date:'22/08/2026', client:'Los Santos Fine Wines', total:18900, emetteur:'Julio Cortes'},
-  {num:'410069', date:'21/08/2026', client:'Le Cellier de Cayo', total:56160, emetteur:'Morgan Bilel'},
-  {num:'410068', date:'20/08/2026', client:"Vinderella's", total:11340, emetteur:'Nella Valmora'},
-  {num:'410067', date:'19/08/2026', client:'Auberge Marlowe', total:90000, emetteur:'Julio Cortes'},
-  {num:'410066', date:'18/08/2026', client:'La Cave Noire', total:28350, emetteur:'Nella Valmora'},
-  {num:'410065', date:'17/08/2026', client:'Taverne du Choix', total:13500, emetteur:'Julio Cortes'},
-];
+const historiqueData = [];
 document.getElementById('histCount').textContent = historiqueData.length;
 function renderHistorique(){
 document.getElementById('historiqueBody').innerHTML = historiqueData.map(h => `
@@ -2243,11 +2167,7 @@ linesBody.addEventListener('click', (e) => {
 });
 
 /* ---------- Factures reçues ---------- */
-const facturesRecuesData = [
-  {supplier:'Verrerie du Sud', items:[{date:'27/07/2026', montant:200000, note:'Bouteilles vides — commande annuelle', par:'Diego Herrera'}]},
-  {supplier:'Ferronnerie Roxwood', items:[{date:'14/07/2026', montant:100000, note:'Outils de taille', par:'Diego Herrera'}]},
-  {supplier:'Comptoir Agricole Paleto', items:[{date:'02/08/2026', montant:250000, note:'Engrais et traitement des vignes', par:'Diego Herrera'}]},
-];
+const facturesRecuesData = [];
 document.getElementById('frCount').textContent = facturesRecuesData.reduce((s, g) => s + g.items.length, 0);
 document.getElementById('frSupCount').textContent = facturesRecuesData.length;
 function renderFacturesRecues(){
@@ -2276,14 +2196,8 @@ renderFacturesRecues();
 
 /* ---------- Catalogue (Entreprise / Citoyens) ---------- */
 const catalogueSlides = {
-  entreprise: [
-    {title:'Tarifs grossistes 2026', desc:'Grilles de prix B2B et conditions de livraison.', embedUrl:null},
-    {title:'Nouveaux partenariats', desc:'Présentation des accords fournisseurs en cours.', embedUrl:null},
-  ],
-  citoyens: [
-    {title:'Marlowe Vineyard · Site vitrine', desc:'Domaine viticole de Tongva Hills : catalogue, organisation, grades et recrutement.', embedUrl:null},
-    {title:'Carte des cuvées', desc:'Découvrir la gamme complète disponible à la vente.', embedUrl:null},
-  ],
+  entreprise: [],
+  citoyens: [],
 };
 const catalogueIndex = {entreprise:0, citoyens:0};
 
@@ -2475,14 +2389,7 @@ document.getElementById('retraitsBody').innerHTML = retraitsData.length
   : `<tr><td colspan="3" class="empty-note" style="text-align:center;padding:18px;">Aucun retrait</td></tr>`;
 
 /* ---------- Agenda ---------- */
-const agendaData = [
-  {title:'Réception livraison verre', date:'17/08/2026', heure:'09:00', heure_fin:'10:00', vis:'public', desc:'Arrivée de la commande de bouteilles vides — Verrerie du Sud.'},
-  {title:'Point qualité vendanges', date:'19/08/2026', heure:'14:00', heure_fin:'15:30', vis:'direction', desc:'Contrôle qualité avant clôture de semaine.'},
-  {title:'Vendanges — récolte annuelle', date:'29/08/2026', heure:'08:00', heure_fin:'16:00', vis:'public', desc:'Grande récolte collective, tout le domaine est convié.'},
-  {title:'Réunion direction hebdo', date:'25/08/2026', heure:'20:00', heure_fin:'21:00', vis:'direction', desc:'Bilan de la semaine 34 et préparation des primes.'},
-  {title:'Anniversaire du domaine', date:'02/09/2026', heure:'19:00', heure_fin:'23:00', vis:'public', desc:'Célébration ouverte à tous les employés et clients fidèles.'},
-  {title:'Formation nouveaux saisonniers', date:'26/08/2026', heure:'17:00', heure_fin:'19:00', vis:'prive', desc:'Session d’accueil — visible uniquement par l’organisateur.'},
-];
+const agendaData = [];
 const visLabel = {public:'Public', prive:'Privé', direction:'Direction'};
 function renderAgendaList(){
 document.getElementById('agendaList').innerHTML = agendaData.map((a, i) => `
@@ -2618,10 +2525,7 @@ if(prodPool.length){
 }
 
 /* ---------- Prise de service ---------- */
-let serviceHistory = [
-  {date:'17/08/2026', start:'19:29', end:'21:52'},
-  {date:'18/08/2026', start:'14:31', end:'15:45'},
-];
+let serviceHistory = [];
 let serviceActive = false;
 
 function pad2(n){ return String(n).padStart(2, '0'); }
@@ -2673,16 +2577,7 @@ document.getElementById('serviceBtn').addEventListener('click', () => {
 });
 
 /* ---------- Tombola ---------- */
-const tombolaParticipants = [
-  {name:'Ian Portier', tickets:10, color:'#C9A961'},
-  {name:'Néo Cooper', tickets:10, color:'#8A3540'},
-  {name:'Celia Flynn', tickets:7, color:'#6E8B5D'},
-  {name:'Alonzo Trivoli', tickets:6, color:'#D6A75C'},
-  {name:'Robert Morgan', tickets:6, color:'#D4763D'},
-  {name:'Morgan Bilel', tickets:5, color:'#8E7C4E'},
-  {name:'Souleyman Smith', tickets:4, color:'#5C7A8A'},
-  {name:'Ken Kaneki', tickets:3, color:'#A6674D'},
-];
+const tombolaParticipants = [];
 
 const tombolaTotal = tombolaParticipants.reduce((s, p) => s + p.tickets, 0);
 let cursor = 0;

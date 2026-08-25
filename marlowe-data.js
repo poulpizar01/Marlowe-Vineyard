@@ -136,6 +136,9 @@ window.MarloweData = (function () {
         console.warn('[Marlowe] affichage de « ' + key + ' » (étape ' + (i + 1) + ') : ' + e.message);
       }
     });
+    /* Un tableau redevenu vide reçoit son message plutôt que rien du tout. */
+    const a = window.MarloweActions;
+    if (a && a.remplirVides) { try { a.remplirVides(); } catch (e) {} }
   }
 
   function redrawAll() {

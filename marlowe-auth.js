@@ -449,6 +449,9 @@
   .mv-cell.mv-oui{color:#1C1B18;background:var(--or,#C9A961);border-color:var(--or,#C9A961);font-weight:700;}
   .mv-cell.mv-ro{color:var(--amber,#D6A75C);border-color:rgba(214,167,92,.6);background:rgba(214,167,92,.12);}
   .mv-cell:hover{transform:scale(1.12);}
+  .mv-danger{margin-top:24px;border-color:rgba(138,53,64,.45);background:rgba(138,53,64,.07);}
+  .mv-danger h3{color:#E08A7A;}
+  .mv-danger p{font-size:12.5px;line-height:1.7;color:var(--muted,#9C9384);margin:8px 0 16px;max-width:760px;}
   .mv-legende{font-size:11.5px;color:var(--muted,#9C9384);line-height:2.1;margin-top:14px;max-width:820px;}
   .mv-legende .mv-cell{vertical-align:middle;margin:0 2px;cursor:default;}
   .mv-legende .mv-cell:hover{transform:none;}
@@ -731,8 +734,16 @@
 
       <div class="btn-row" style="margin-top:18px;align-items:center;">
         <button class="btn primary" id="mvSave">Enregistrer</button>
-        <button class="btn" id="mvReset">Réinitialiser</button>
+        <button class="btn" id="mvReset">Réinitialiser les accès</button>
         <span class="mv-saved" id="mvSaved">Enregistré ✓</span>
+      </div>
+
+      <div class="panel mv-danger">
+        <h3>Repartir de zéro</h3>
+        <p>Vide les données du panel pour démarrer proprement — employés, factures, production,
+           semaines clôturées. Vous choisissez ce qui part. Contrairement à une clôture,
+           <b>rien n'est archivé et l'opération ne s'annule pas</b>.</p>
+        <button class="btn" id="mvWipe">🗑 Vider les données…</button>
       </div>`;
 
     document.querySelector('.content').appendChild(page);
@@ -787,6 +798,12 @@
         c.className = 'mv-cell mv-' + c.dataset.etat;
         c.textContent = tout ? '·' : '✓';
       });
+    });
+
+    const wipe = page.querySelector('#mvWipe');
+    if (wipe) wipe.addEventListener('click', () => {
+      const a = window.MarloweActions;
+      if (a && a.repartirDeZero) a.repartirDeZero();
     });
 
     /* --- enregistrer --- */
