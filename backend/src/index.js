@@ -523,11 +523,31 @@ async function handleVitrine(request, env) {
     titre: texte(v.catTitre, 120) || 'Catalogue du domaine',
     desc:  texte(v.catDesc, 300),
     pdf:   texte(v.catPdf, 400),
+    embed: lienCanva(texte(v.catEmbed, 400)),
     pages: (Array.isArray(v.catPages) ? v.catPages : []).slice(0, 40).map(x => texte(x, 400)).filter(Boolean),
   };
 
   const m = await env.MARLOWE.get('datameta', 'json');
   return json(env, { nouveautes, catalogue, rev: (m && m.rev) || 0 });
+}
+
+/* Un lien Canva collé depuis le bouton « Partager » ne s'affiche PAS dans une
+   page : Canva l'interdit, et le navigateur montre « refuse de se connecter ».
+   Seule la forme « …/view?embed » est intégrable. Plutôt que d'exiger du
+   patron qu'il trouve le bon bouton, on remet nous-mêmes le lien en forme :
+   on garde l'identifiant du design et on rebâtit l'adresse d'intégration.
+
+   Le domaine est vérifié — sinon ce champ deviendrait un moyen d'afficher
+   n'importe quelle page dans le site du domaine. */
+function lienCanva(brut) {
+  if (!brut) return '';
+  let u;
+  try { u = new URL(brut.trim()); } catch (e) { return ''; }
+  if (u.hostname !== 'www.canva.com' && u.hostname !== 'canva.com') return '';
+
+  const m = u.pathname.match(/^\/design\/([A-Za-z0-9_-]+)\/([A-Za-z0-9_-]+)/);
+  if (!m) return '';
+  return `https://www.canva.com/design/${m[1]}/${m[2]}/view?embed`;
 }
 
 /* GET | PUT /api/settings

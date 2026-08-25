@@ -186,12 +186,18 @@
   .stat .n{font-family:'Fraunces',serif;font-weight:600;font-size:27px;color:var(--gold);}
   .stat .l{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-top:5px;}
 
-  /* ===== NOUVEAUTÉS ===== */
-  .news-col{display:flex;flex-direction:column;align-items:center;gap:16px;}
-  .news-frame{width:100%;max-width:400px;aspect-ratio:4/5;max-height:min(66vh,560px);
-    position:relative;border-radius:18px;overflow:hidden;
-    border:1.5px solid var(--gold);background:var(--surface);filter:drop-shadow(var(--shadow));}
-  .news-frame.is-crest{border:none;background:none;filter:none;overflow:visible;}
+  /* ===== NOUVEAUTÉS =====
+     Le visuel est présenté comme une pièce en vitrine : un fond de caisse
+     sombre, une lumière chaude derrière, un filet doré à écoinçons, et la
+     légende SOUS le cadre — jamais posée par-dessus l'étiquette. */
+  .news-col{display:flex;flex-direction:column;align-items:center;gap:15px;}
+
+  .news-stage{position:relative;width:100%;max-width:400px;}
+  .news-frame{width:100%;aspect-ratio:4/5;max-height:min(64vh,540px);position:relative;
+    border-radius:16px;overflow:hidden;background:#080F0B;
+    box-shadow:0 0 0 1px var(--gold-line), 0 34px 74px rgba(0,0,0,.5);}
+  .news-frame.is-crest{border:none;background:none;box-shadow:none;overflow:visible;
+    aspect-ratio:auto;max-height:none;}
   .news-frame svg{width:100%;height:auto;display:block;filter:drop-shadow(var(--shadow));}
   @keyframes float{0%,100%{transform:translateY(0);}50%{transform:translateY(-10px);}}
   .news-frame.is-crest svg{animation:float 7s ease-in-out infinite;}
@@ -201,27 +207,49 @@
   .news-eyebrow::before,.news-eyebrow::after{content:'';height:1px;width:26px;background:var(--gold-line);}
   .news-eyebrow[hidden]{display:none;}
 
-  .news-slide{position:absolute;inset:0;opacity:0;transition:opacity .35s ease;pointer-events:none;}
-  .news-slide.active{opacity:1;pointer-events:auto;}
-  /* L'image est montrée ENTIÈRE, jamais recadrée : le patron dépose ce qu'il
-     veut — une étiquette en hauteur, une affiche en largeur — et rien ne doit
-     être coupé. Le vide autour est comblé par la même image, floutée et
-     assombrie : les bandes noires d'un cadrage raté deviennent un fond. */
-  .news-bg{position:absolute;inset:-12%;background-size:cover;background-position:center;
-    filter:blur(26px) brightness(.5) saturate(.85);}
-  .news-slide img{position:relative;z-index:1;width:100%;height:100%;object-fit:contain;display:block;}
-  .news-cap{z-index:2;}
-  .news-cap{position:absolute;left:0;right:0;bottom:0;padding:20px 22px 22px;
-    background:linear-gradient(0deg, rgba(6,12,9,.94) 12%, rgba(6,12,9,.55) 55%, transparent);}
-  .news-cap .nt{font-family:'Fraunces',serif;font-weight:600;font-size:17px;line-height:1.25;color:#F3EFE4;}
-  .news-cap .nd{font-size:12.5px;color:#C4D0C6;margin-top:5px;line-height:1.5;}
+  .news-slide{position:absolute;inset:0;opacity:0;transform:scale(1.02);
+    transition:opacity .45s ease, transform .45s ease;pointer-events:none;}
+  .news-slide.active{opacity:1;transform:none;pointer-events:auto;}
 
-  .news-arrow{position:absolute;top:50%;transform:translateY(-50%);width:34px;height:34px;border-radius:50%;
+  /* Le fond de caisse : la même image, très floutée et assombrie, sert de
+     nappe colorée — puis une lumière chaude et une vignette la reprennent en
+     main pour que ce soit un éclairage, pas une bouillie. */
+  .news-bg{position:absolute;inset:-18%;background-size:cover;background-position:center;
+    filter:blur(38px) saturate(1.2) brightness(.38);}
+  .news-lume{position:absolute;inset:0;
+    background:radial-gradient(ellipse 60% 50% at 50% 44%, rgba(255,216,152,.22), transparent 72%);}
+  .news-vig{position:absolute;inset:0;
+    background:radial-gradient(ellipse 98% 86% at 50% 46%, transparent 40%, rgba(0,0,0,.66) 100%);}
+
+  .news-slide img{position:relative;z-index:2;width:100%;height:100%;object-fit:contain;
+    display:block;padding:30px 30px 34px;
+    filter:drop-shadow(0 24px 36px rgba(0,0,0,.62));}
+
+  /* Filet doré à écoinçons. Deux éléments identiques, le second retourné :
+     quatre coins pour le prix de deux. */
+  .news-rule{position:absolute;inset:13px;border:1px solid var(--gold-line-2);border-radius:9px;
+    z-index:3;pointer-events:none;}
+  /* scaleX seulement : un scale(-1) complet renverrait les deux coins sur
+     ceux qu'on a déjà, et il n'y en aurait toujours que deux. */
+  .news-rule.alt{transform:scaleX(-1);}
+  .news-rule::before,.news-rule::after{content:'';position:absolute;width:24px;height:24px;
+    border:1px solid var(--gold);opacity:.85;}
+  .news-rule::before{top:-1px;left:-1px;border-right:0;border-bottom:0;border-radius:9px 0 0 0;}
+  .news-rule::after{bottom:-1px;right:-1px;border-left:0;border-top:0;border-radius:0 0 9px 0;}
+
+  .news-cap{text-align:center;max-width:400px;}
+  .news-cap[hidden]{display:none;}
+  .news-cap .nt{font-family:'Fraunces',serif;font-weight:600;font-size:17.5px;line-height:1.3;color:var(--text);}
+  .news-cap .nd{font-size:12.5px;color:var(--muted);margin-top:5px;line-height:1.6;}
+
+  /* Les flèches vivent hors du cadre : rien ne doit passer devant le visuel. */
+  .news-arrow{position:absolute;top:50%;transform:translateY(-50%);width:36px;height:36px;border-radius:50%;
     background:var(--glass);border:1px solid var(--line-2);color:var(--text);
-    display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;
-    backdrop-filter:blur(4px);transition:.15s;z-index:3;}
+    display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;
+    backdrop-filter:blur(4px);transition:.15s;z-index:5;}
   .news-arrow:hover{background:var(--glass-2);border-color:var(--gold);color:var(--gold);}
-  .news-arrow.prev{left:12px;} .news-arrow.next{right:12px;}
+  .news-arrow.prev{left:-48px;} .news-arrow.next{right:-48px;}
+  @media(max-width:1180px){.news-arrow.prev{left:10px;} .news-arrow.next{right:10px;}}
 
   .news-dots{display:flex;gap:6px;}
   .news-dot{width:7px;height:7px;border-radius:50%;background:var(--dot);cursor:pointer;transition:.18s;border:none;padding:0;}
@@ -257,6 +285,9 @@
   .cat-bar{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-top:14px;}
   .cat-bar[hidden]{display:none;}
   .cat-nav{display:flex;align-items:center;gap:10px;}
+  /* display:flex l'emporte sur la règle par défaut de [hidden] : sans cette
+     ligne la pagination resterait visible sur un document Canva. */
+  .cat-nav[hidden]{display:none;}
   .cat-count{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;min-width:64px;text-align:center;}
   .cat-tools{display:flex;gap:9px;flex-wrap:wrap;}
   .cat-btn{border:1px solid var(--line-2);background:transparent;color:var(--text);cursor:pointer;
@@ -266,6 +297,11 @@
   .cat-btn:hover{border-color:var(--gold);color:var(--gold);}
   .cat-btn:disabled{opacity:.35;cursor:default;}
   .cat-btn[hidden]{display:none;}
+  /* Avec un document Canva, le cadre est rempli par l'iframe : pas de
+     centrage, pas de fond visible. */
+  .cat-viewport.is-embed{display:block;background:#000;}
+  .cat-viewport iframe{position:absolute;inset:0;width:100%;height:100%;border:none;}
+  @media(max-width:760px){.cat-viewport.is-embed{aspect-ratio:16/10;}}
   .cat-placeholder{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:0 60px;text-align:center;}
   .cat-placeholder span{font-family:'Fraunces',serif;font-style:italic;color:var(--gold-soft);opacity:.75;font-size:15px;}
 
@@ -586,7 +622,10 @@
 
     <div class="news-col">
       <div class="news-eyebrow" id="newsEyebrow" hidden>Les nouveautés</div>
-      <div class="news-frame" id="newsFrame"></div>
+      <div class="news-stage" id="newsStage">
+        <div class="news-frame" id="newsFrame"></div>
+      </div>
+      <div class="news-cap" id="newsCap" hidden></div>
       <div class="news-dots" id="newsDots"></div>
     </div>
   </div>
@@ -615,6 +654,7 @@
         </div>
         <div class="cat-tools">
           <button class="cat-btn wide" id="catFull">⛶ Plein écran</button>
+          <a class="cat-btn wide" id="catOpen" hidden target="_blank" rel="noopener">↗ Ouvrir en grand</a>
           <a class="cat-btn wide" id="catPdf" hidden download>⬇ Télécharger le PDF</a>
         </div>
       </div>
@@ -1092,6 +1132,8 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
    ================================================================== */
 (function(){
   const frame   = document.getElementById('newsFrame');
+  const stage   = document.getElementById('newsStage');
+  const capBox  = document.getElementById('newsCap');
   const dotsBox = document.getElementById('newsDots');
   const eyebrow = document.getElementById('newsEyebrow');
   const vue     = document.getElementById('catViewport');
@@ -1104,7 +1146,9 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
     frame.classList.add('is-crest');
     frame.innerHTML = document.getElementById('crestTpl').innerHTML;
     eyebrow.hidden = true;
+    capBox.hidden = true;
     dotsBox.innerHTML = '';
+    stage.querySelectorAll('.news-arrow').forEach(a => a.remove());
   }
   blason();
   vue.innerHTML = `<div class="cat-placeholder"><span>Catalogue en préparation — bientôt disponible.</span></div>`;
@@ -1121,14 +1165,17 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
       news.map((n, i) => `
         <div class="news-slide${i === 0 ? ' active' : ''}">
           <div class="news-bg" style="background-image:url('${String(n.img).replace(/'/g, '%27')}')"></div>
+          <div class="news-lume"></div>
+          <div class="news-vig"></div>
           <img src="${esc(n.img)}" alt="${esc(n.titre || 'Nouveauté du domaine')}" loading="lazy">
-          ${(n.titre || n.texte) ? `<div class="news-cap">
-            ${n.titre ? `<div class="nt">${esc(n.titre)}</div>` : ''}
-            ${n.texte ? `<div class="nd">${esc(n.texte)}</div>` : ''}
-          </div>` : ''}
         </div>`).join('')
-      + (multi ? `<button class="news-arrow prev" data-step="-1" aria-label="Nouveauté précédente">‹</button>
-                  <button class="news-arrow next" data-step="1"  aria-label="Nouveauté suivante">›</button>` : '');
+      + `<div class="news-rule"></div><div class="news-rule alt"></div>`;
+
+    if(multi){
+      stage.insertAdjacentHTML('beforeend',
+        `<button class="news-arrow prev" data-step="-1" aria-label="Nouveauté précédente">‹</button>
+         <button class="news-arrow next" data-step="1"  aria-label="Nouveauté suivante">›</button>`);
+    }
 
     dotsBox.innerHTML = multi ? news.map((_, i) =>
       `<button class="news-dot${i === 0 ? ' active' : ''}" data-go="${i}" aria-label="Nouveauté ${i+1}"></button>`).join('') : '';
@@ -1141,8 +1188,15 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
       idx = (i + news.length) % news.length;
       slides.forEach((s, k) => s.classList.toggle('active', k === idx));
       dots.forEach((d, k) => d.classList.toggle('active', k === idx));
+
+      const n = news[idx];
+      capBox.innerHTML = (n.titre ? `<div class="nt">${esc(n.titre)}</div>` : '')
+                       + (n.texte ? `<div class="nd">${esc(n.texte)}</div>` : '');
+      capBox.hidden = !(n.titre || n.texte);
     }
-    frame.addEventListener('click', e => {
+    show(0);
+
+    stage.addEventListener('click', e => {
       const a = e.target.closest('[data-step]');
       if(a) show(idx + Number(a.dataset.step));
     });
@@ -1165,6 +1219,23 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
       lienPdf.hidden = false;
       barre.hidden = false;
     }
+
+    /* Un lien Canva l'emporte sur les pages déposées : c'est le document
+       vivant, il se met à jour tout seul quand le patron modifie son design.
+       Le lien « ouvrir dans un nouvel onglet » n'est pas décoratif — si Canva
+       refuse l'affichage intégré, c'est la seule porte de sortie du visiteur. */
+    if(cat.embed){
+      barre.querySelector('.cat-nav').hidden = true;
+      vue.classList.add('is-embed');
+      vue.innerHTML = `<iframe src="${esc(cat.embed)}" allowfullscreen allow="fullscreen"
+          loading="lazy" title="${esc(cat.titre || 'Catalogue du domaine')}"></iframe>`;
+      document.getElementById('catFull').hidden = true;
+      document.getElementById('catOpen').href = cat.embed.replace('?embed', '');
+      document.getElementById('catOpen').hidden = false;
+      barre.hidden = false;
+      return;
+    }
+
     if(!pages.length) return;
 
     vue.innerHTML = pages.map((u, i) =>

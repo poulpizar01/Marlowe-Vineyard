@@ -469,6 +469,8 @@
   .mv-nouv-actions{display:flex;gap:6px;flex-shrink:0;}
   .mv-nouv-actions .btn{padding:6px 10px;}
   .mv-vit-champs{display:grid;grid-template-columns:1fr 1.6fr;gap:10px;margin-bottom:12px;}
+  #mvVitrine .mv-large{width:100%;background:rgba(0,0,0,.22);color:inherit;
+    border:1px solid var(--band,#3D372C);border-radius:8px;padding:9px 12px;font:inherit;font-size:12.5px;}
   @media(max-width:760px){.mv-vit-champs{grid-template-columns:1fr;}
     .mv-nouv{flex-wrap:wrap;} .mv-nouv-champs{flex-basis:100%;}}
   .mv-page{display:flex;align-items:center;gap:10px;border:1px solid var(--band,#3D372C);

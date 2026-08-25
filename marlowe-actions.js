@@ -3439,7 +3439,7 @@
    reste net sur un grand écran.
    ========================================================================== */
 
-  const vitrine = { nouveautes: [], catTitre: '', catDesc: '', catPdf: '', catPages: [] };
+  const vitrine = { nouveautes: [], catTitre: '', catDesc: '', catPdf: '', catEmbed: '', catPages: [] };
   const NOUV_MAX = 5;
   const CAT_MAX  = 40;
 
@@ -3554,6 +3554,12 @@
           <input type="text" id="mvCatTitre" placeholder="Titre du catalogue" value="${esc(vitrine.catTitre || '')}">
           <input type="text" id="mvCatDesc" placeholder="Une ligne de présentation" value="${esc(vitrine.catDesc || '')}">
         </div>
+        <input type="text" id="mvCatEmbed" class="mv-large"
+               placeholder="Lien Canva (facultatif) — collez l'adresse du design"
+               value="${esc(vitrine.catEmbed || '')}">
+        <p class="mv-hint">Avec un lien Canva, le catalogue s'affiche directement : rien à exporter.
+          Le design doit être <b>partagé publiquement</b> dans Canva, sinon vos visiteurs verront une page vide.
+          Sans lien, ce sont les pages déposées ci-dessous qui s'affichent.</p>
         ${vitrine.catPdf ? `<p class="mv-pdf-ok">PDF joint — un bouton de téléchargement s'affiche sur le site.
             <button class="btn" id="mvCatPdfDel">Retirer</button></p>` : ''}
         <ul class="mv-page-list">${pages}</ul>
@@ -3617,6 +3623,7 @@
     if (e.target.closest('#mvVitSave')) {
       vitrine.catTitre = (document.getElementById('mvCatTitre') || {}).value || '';
       vitrine.catDesc  = (document.getElementById('mvCatDesc')  || {}).value || '';
+      vitrine.catEmbed = (document.getElementById('mvCatEmbed') || {}).value || '';
       sauverVitrine('Vitrine publiée');
       const ok = document.getElementById('mvVitSaved');
       if (ok) { ok.classList.add('on'); setTimeout(() => ok.classList.remove('on'), 1800); }

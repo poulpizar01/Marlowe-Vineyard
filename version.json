@@ -1,4 +1,4 @@
 {
-  "v": "1.4.0",
-  "note": "gestion des nouveautes et du catalogue depuis Parametres, catalogue en pages au lieu de Canva"
+  "v": "1.5.0",
+  "note": "catalogue par lien Canva, nouveautes presentees en vitrine, visuels jamais recadres"
 }
