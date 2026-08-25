@@ -49,7 +49,12 @@ window.MarloweData = (function () {
       render: [() => renderDash(dash), call('updateGradeCounts'), call('populateOverview'),
                () => { const a = window.MarloweActions; if (a) a.renderBilan(); }],
     },
-    rhRoster:        { ref: () => rhRosterData,        render: [() => renderRhRoster(rhRosterData)] },
+    rhRoster:        { ref: () => rhRosterData,
+                       render: [() => renderRhRoster(rhRosterData),
+                                () => { const a = window.MarloweActions;
+                                        if (a) { a.appliquerAccesService(); a.renderAvertissements(); } }] },
+    avertissements:  { ref: () => window.MarloweAvertissements,
+                       render: [() => { const a = window.MarloweActions; if (a) a.renderAvertissements(); }] },
     rhRecruiters:    { ref: () => rhRecruiters,        render: [call('renderRecruiters')] },
     rhDeparts:       { ref: () => rhDeparts,           render: [call('renderDeparts')] },
     rhAbsences:      { ref: () => rhAbsences,          render: [call('renderAbsences')] },
@@ -77,6 +82,10 @@ window.MarloweData = (function () {
     },
     bilanConfig: {
       ref: () => window.MarloweBilanConfig,
+      render: [() => { const a = window.MarloweActions; if (a) a.renderBilan(); }],
+    },
+    bcManuels: {
+      ref: () => window.MarloweBcManuels,
       render: [() => { const a = window.MarloweActions; if (a) a.renderBilan(); }],
     },
     clotureSteps: {

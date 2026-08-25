@@ -617,6 +617,17 @@
         </thead>
         <tbody id="rosterBody"></tbody>
       </table>
+
+      <div class="panel" id="avertPanel" style="margin-top:22px;">
+        <div class="toolbar" style="margin-bottom:14px;">
+          <h3 style="margin:0;flex:1;">Avertissements <span class="mv-cpt-av" id="avertCount"></span></h3>
+          <button class="btn primary" id="avertAddBtn">+ Donner un avertissement</button>
+        </div>
+        <table class="gtable" id="avertTable">
+          <thead><tr><th>Date</th><th>Employé</th><th>Niveau</th><th>Motif</th><th>Donné par</th><th></th></tr></thead>
+          <tbody id="avertBody"></tbody>
+        </table>
+      </div>
     </div>
 
     <!-- ================= RH — RECRUTEMENT & MOUVEMENTS ================= -->
@@ -737,8 +748,8 @@
             <div class="field-row">
               <div class="field"><label>Tarif appliqué</label>
                 <select id="invTarif">
+                  <option value="entreprise" selected>Entreprise — prix B2B</option>
                   <option value="public">Particulier — prix public</option>
-                  <option value="entreprise">Entreprise — prix B2B</option>
                 </select>
               </div>
               <div class="field"><label>Réduction (%)</label><input type="number" id="invRemise" value="0" min="0" max="100" step="1"></div>
@@ -878,12 +889,12 @@
               <option value="auto">palier détecté automatiquement</option>
             </select>
           </div>
-          <button class="btn" id="toggleBaremeBtn">▾ Masquer le barème</button>
+          <button class="btn" id="toggleBaremeBtn">▸ Afficher le barème</button>
         </div>
       </div>
 
       <div id="bcCards"></div>
-      <div class="panel" id="baremePanel">
+      <div class="panel" id="baremePanel" style="display:none;">
         <h3>Barème progressif — palier actuel : <span id="palierActuel">—</span>/13</h3>
         <table class="bareme-table">
           <thead><tr><th></th><th>Bénéfice min</th><th>Bénéfice max</th><th>Taux</th><th>Sal. max emp.</th><th>Sal. max dir.</th><th>Prime max emp.</th><th>Prime max dir.</th><th></th></tr></thead>
@@ -913,8 +924,8 @@
           <button class="btn primary" id="bcAddRowBtn">+ Ligne manuelle</button>
         </div>
         <table class="roster">
-          <colgroup><col style="width:22%"><col style="width:16%"><col style="width:11%"><col style="width:11%"><col style="width:11%"><col style="width:12%"><col style="width:9%"><col style="width:8%"></colgroup>
-          <thead><tr><th>Employé</th><th>Grade</th><th class="num">Runs</th><th class="num">Factures</th><th class="num">Ventes</th><th class="num">CA Total</th><th class="num">Salaire</th><th class="num">Prime</th></tr></thead>
+          <colgroup><col style="width:20%"><col style="width:15%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:12%"><col style="width:9%"><col style="width:8%"><col style="width:6%"></colgroup>
+          <thead><tr><th>Employé</th><th>Grade</th><th class="num">Runs</th><th class="num">Factures</th><th class="num">Ventes</th><th class="num">CA Total</th><th class="num">Salaire</th><th class="num">Prime</th><th></th></tr></thead>
           <tbody id="bcDetailBody"></tbody>
         </table>
       </div>
@@ -1243,7 +1254,7 @@
         </div>
       </div>
 
-      <div class="panel">
+      <div class="panel" id="servicePanel">
         <h3>Prise de service</h3>
         <div class="service-row">
           <div class="service-status" id="serviceStatus">Hors service</div>
@@ -1768,7 +1779,10 @@ function renderRhRoster(list){
   document.getElementById('rosterBody').innerHTML = list.map(e => `
     <tr>
       <td>${rhSeal(e.init, e.tier)}</td>
-      <td><div class="emp"><div><div class="emp-name">${e.name}</div><div class="emp-id">#${e.id}</div></div></div></td>
+      <td><div class="emp"><div><div class="emp-name">${e.name}${
+        (window.MarloweActions && window.MarloweActions.compteAvertissements)
+          ? window.MarloweActions.compteAvertissements(e.name) : ''
+      }</div><div class="emp-id">#${e.id}</div></div></div></td>
       <td class="poste-pill">${e.poste}</td>
       <td class="rec">${e.rec}</td>
       <td class="date-mono">${e.date}</td>
@@ -2386,17 +2400,15 @@ function bcRenderDetail(){
       <td class="num" style="color:var(--prime);">${e.ca.toLocaleString('fr-FR')} $</td>
       <td class="num">${e.salaire.toLocaleString('fr-FR')} $</td>
       <td class="num">${prime ? Math.round(prime).toLocaleString('fr-FR') + ' $' : '0 $'}</td>
+      <td style="text-align:right;">${e.manuel
+        ? `<button class="icon-btn danger" data-bc-del="${e.name}" title="Retirer cette ligne">×</button>`
+        : ''}</td>
     </tr>`;
   }).join('');
 }
 bcRenderDetail();
-
-document.getElementById('bcAddRowBtn').addEventListener('click', () => {
-  const name = prompt('Nom de l\'employé (fiche manuelle) ?');
-  if(!name) return;
-  bcRows.push({name, rank: 'Manuel', runs:0, factures:0, ventes:0, ca:0, salaire:0});
-  bcRenderDetail();
-});
+/* L'ajout d'une ligne manuelle est repris par marlowe-actions.js : il ouvre un
+   vrai formulaire au lieu de l'invite du navigateur, et enregistre la ligne. */
 
 const depensesData = [
   {date:'***', label:'Salaires', montant: bcRows.reduce((s,e) => s + e.salaire, 0)},

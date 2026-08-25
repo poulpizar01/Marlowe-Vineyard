@@ -177,8 +177,8 @@
     const emp = rhRosterData[i];
 
     const res = await askForm('Déclarer un départ', [
-      { key: 'reason', label: 'Motif', value: 'Démission 0%',
-        options: ['Démission 0%', 'Licenciement 10%', 'Licenciement 25%', 'Fin de saison', 'Abandon de poste'] },
+      { key: 'reason', label: 'Motif', value: 'Démission',
+        options: ['Démission', 'Licenciement'] },
       { key: 'date', label: 'Date du départ', value: todayFR() },
     ], `${emp.name} sera retiré du registre des employés et inscrit au registre des départs.`);
     if (!res) return;
@@ -486,77 +486,8 @@
         font-size="10" letter-spacing="4" fill="#C9A227">VINEYARD</text>
 </svg>`;
 
-  /* Grappe et feuillage, coin supérieur gauche */
-  const SVG_GRAPES = `
-<svg viewBox="0 0 200 180" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="lf" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#D9C169"/><stop offset="100%" stop-color="#8E7C2E"/>
-    </linearGradient>
-    <radialGradient id="bg1" cx="35%" cy="30%" r="70%">
-      <stop offset="0%" stop-color="#6B4A6B"/><stop offset="100%" stop-color="#2B1B2E"/>
-    </radialGradient>
-  </defs>
-  <g fill="url(#lf)" opacity=".95">
-    <path d="M18 20c22-12 44-8 56 8-14 16-38 20-56 10-6-6-6-14 0-18Z"/>
-    <path d="M8 52c24-8 46 0 54 18-18 12-42 10-56-4-3-6-2-12 2-14Z"/>
-    <path d="M74 8c16 4 26 18 24 34-16 2-30-8-34-24-1-7 4-11 10-10Z"/>
-  </g>
-  <path d="M60 44c14 10 24 26 28 44" stroke="#8E7C2E" stroke-width="2.6" fill="none" stroke-linecap="round"/>
-  <g fill="url(#bg1)">
-    <circle cx="96" cy="80" r="13"/><circle cx="122" cy="76" r="13"/>
-    <circle cx="84" cy="102" r="13"/><circle cx="109" cy="99" r="13"/><circle cx="134" cy="95" r="13"/>
-    <circle cx="96" cy="123" r="13"/><circle cx="121" cy="120" r="13"/>
-    <circle cx="108" cy="143" r="13"/>
-  </g>
-  <g fill="#FFFFFF" opacity=".18">
-    <circle cx="92" cy="75" r="4"/><circle cx="118" cy="71" r="4"/><circle cx="105" cy="94" r="4"/>
-    <circle cx="92" cy="118" r="4"/><circle cx="104" cy="138" r="4"/>
-  </g>
-</svg>`;
-
-  /* Paysage du domaine, en filigrane au bas de la page */
-  const SVG_LANDSCAPE = `
-<svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMax meet">
-  <g fill="#8A6E3A">
-    <path d="M0 210c120-40 220-30 330-8s210 26 330 2 240-24 240-24V300H0Z" opacity=".22"/>
-    <path d="M0 244c150-34 280-18 400 4s250 22 500-10v62H0Z" opacity=".3"/>
-  </g>
-  <g stroke="#7A5F2E" stroke-width="2" opacity=".35" fill="none">
-    <path d="M40 296c60-22 140-34 220-34"/><path d="M20 300c70-28 160-42 250-42"/>
-    <path d="M620 262c90 0 170 12 240 34"/><path d="M640 258c90 0 180 14 250 42"/>
-  </g>
-  <g fill="#6E5526" opacity=".72">
-    <path d="M330 300V196h30v104Z"/>
-    <path d="M300 300v-74h180v74Z"/>
-    <path d="M292 226 390 170l98 56Z"/>
-    <path d="M322 186 360 164l38 22Z"/>
-    <rect x="404" y="250" width="18" height="50"/><rect x="352" y="250" width="18" height="50"/>
-    <rect x="330" y="206" width="14" height="16"/>
-  </g>
-  <g fill="#5E4A22" opacity=".66">
-    <ellipse cx="250" cy="252" rx="16" ry="42"/><ellipse cx="286" cy="262" rx="12" ry="32"/>
-    <ellipse cx="520" cy="256" rx="15" ry="38"/><ellipse cx="556" cy="266" rx="11" ry="28"/>
-  </g>
-  <g fill="#6E5526" opacity=".52">
-    <ellipse cx="700" cy="272" rx="34" ry="26"/><rect x="694" y="272" width="12" height="28"/>
-    <ellipse cx="180" cy="276" rx="30" ry="22"/><rect x="175" y="276" width="10" height="24"/>
-  </g>
-</svg>`;
-
-  /* Ornement d'angle, retourné par CSS aux quatre coins */
-  const SVG_CORNER = `
-<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-  <g fill="none" stroke="#8E6C15" stroke-width="2.4" stroke-linecap="round">
-    <path d="M4 66C4 32 32 4 66 4"/>
-    <path d="M14 70C14 42 42 14 70 14" opacity=".55"/>
-    <path d="M26 52c-8-12-4-26 10-30 7 10 4 24-10 30Z"/>
-    <path d="M52 30c12-6 26-2 30 10-12 5-26 2-30-10Z"/>
-  </g>
-  <path d="M26 52c-8-12-4-26 10-30 7 10 4 24-10 30Z" fill="#C9A227" fill-opacity=".38"/>
-  <path d="M52 30c12-6 26-2 30 10-12 5-26 2-30-10Z" fill="#C9A227" fill-opacity=".34"/>
-  <circle cx="40" cy="40" r="3.6" fill="#8E6C15"/>
-</svg>`;
+  /* La grappe, le paysage et les écoinçons étaient dessinés en SVG à l'époque
+     où le parchemin l'était aussi. Le visuel fourni les porte lui-même. */
 
   const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
 
@@ -570,6 +501,11 @@
   const money = n => Number(n || 0).toLocaleString('fr-FR') + '$';
 
   function openInvoiceDoc(inv) {
+    /* Le parchemin est un vrai fichier du site. La fenêtre de la facture est
+       ouverte vide, donc son adresse de base est « about:blank » : un chemin
+       relatif n'y résoudrait rien. On calcule l'adresse absolue ici. */
+    const PARCHEMIN = new URL('img/parchemin.jpg', location.href).href;
+
     const w = window.open('', '_blank');
     if (!w) { toast('Le navigateur a bloqué la fenêtre. Autorisez les pop-ups.'); return; }
 
@@ -596,7 +532,18 @@
     /* Au-delà d'une douzaine de lignes, la page A4 ne suffit plus à cette
        taille de police : on passe à un pas plus serré. */
     const nRows = detailed ? inv.rows.length : 1;
-    const density = nRows > 24 ? 'micro' : (nRows > 18 ? 'tight' : (nRows > 12 ? 'dense' : ''));
+    /* Le parchemin mange plus de marge que le fond dessiné qu'il remplace :
+       les seuils ont été remesurés page par page jusqu'à 30 lignes. */
+    const density = nRows > 22 ? 'nano'
+                  : nRows > 14 ? 'micro'
+                  : nRows > 10 ? 'tight'
+                  : nRows > 6  ? 'dense' : '';
+
+    /* Au-delà de 28 lignes, même le pas le plus serré déborde sur une seconde
+       feuille. Plutôt que de laisser la facture se couper en deux, on réduit
+       la police proportionnellement — ça reste lisible jusqu'à une quarantaine
+       de lignes, ce qu'aucune commande n'a jamais atteint. */
+    const shrink = nRows > 28 ? ` style="font-size:${(7 * 22 / nRows).toFixed(2)}pt;line-height:1.05"` : '';
 
     const totalHT = detailed
       ? Math.round(inv.rows.reduce((s, l) => s + l.ht, 0))
@@ -620,48 +567,23 @@
 
   .sheet{
     width:210mm;min-height:297mm;margin:0 auto;position:relative;overflow:hidden;
-    background:
-      radial-gradient(ellipse 68% 52% at 50% 38%, rgba(252,243,214,.70), transparent 72%),
-      radial-gradient(ellipse 130% 95% at 50% 106%, rgba(138,106,44,.34), transparent 62%),
-      radial-gradient(ellipse 40% 30% at 8% 96%, rgba(138,106,44,.22), transparent 70%),
-      linear-gradient(160deg,#E6D4A6 0%,#DDC894 38%,#D4BB82 70%,#C8AC70 100%);
+    background:#E6D4A6;   /* teinte de repli si le visuel ne charge pas */
     box-shadow:0 18px 60px rgba(0,0,0,.5);
   }
-  @media print{.sheet{box-shadow:none;margin:0;}}
-
-  /* Grain du papier */
-  .sheet::after{
-    content:'';position:absolute;inset:0;pointer-events:none;opacity:.30;
-    background-image:
-      radial-gradient(1px 1px at 12% 18%, rgba(120,95,45,.5), transparent),
-      radial-gradient(1px 1px at 72% 34%, rgba(120,95,45,.4), transparent),
-      radial-gradient(1px 1px at 38% 68%, rgba(120,95,45,.45), transparent),
-      radial-gradient(1px 1px at 88% 82%, rgba(120,95,45,.4), transparent),
-      radial-gradient(2px 2px at 55% 12%, rgba(140,110,55,.25), transparent),
-      radial-gradient(2px 2px at 22% 88%, rgba(140,110,55,.25), transparent);
+  /* Le parchemin est une image, pas un fond CSS : les navigateurs impriment
+     les images de façon fiable, les fonds décoratifs sont souvent supprimés. */
+  .parch{position:absolute;inset:0;width:100%;height:100%;object-fit:fill;z-index:0;}
+  @media print{
+    .sheet{box-shadow:none;margin:0;}
+    /* Sans cette ligne, Chrome imprime le parchemin en blanc. */
+    body,.sheet{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
   }
 
-  /* Encadrement doré */
-  /* border-image laisse le centre transparent : le parchemin et le paysage
-     restent visibles derrière le cadre. */
-  .band{position:absolute;inset:0;z-index:4;pointer-events:none;border:9mm solid;
-    border-image:linear-gradient(150deg,#8E6C15,#E8CE85 20%,#B8912F 42%,#EFDDA0 58%,#B8912F 76%,#8E6C15) 1;}
-  .band::before{content:'';position:absolute;inset:2.5mm;border:1.1px solid rgba(122,95,46,.75);}
-  .band::after{content:'';position:absolute;inset:4.5mm;border:.7px solid rgba(122,95,46,.4);}
+  /* Le cadre doré, les écoinçons, la grappe et le paysage sont DANS le
+     visuel : les redessiner par-dessus ferait doublon. */
+  .inner{position:relative;z-index:2;padding:22mm 24mm 0;}
 
-  .corner{position:absolute;width:13mm;height:13mm;z-index:5;opacity:.9;}
-  .corner svg{width:100%;height:100%;display:block;}
-  .c-tl{top:10mm;left:10mm;}
-  .c-tr{top:10mm;right:10mm;transform:scaleX(-1);}
-  .c-bl{bottom:10mm;left:10mm;transform:scaleY(-1);}
-  .c-br{bottom:10mm;right:10mm;transform:scale(-1,-1);}
-
-  .inner{position:relative;z-index:2;padding:13mm 17mm 0;}
-
-  .grapes{position:absolute;top:8mm;left:8mm;width:36mm;opacity:.95;z-index:5;}
-  .grapes svg{width:100%;height:auto;display:block;}
-
-  .crest{width:33mm;margin:0 auto 4mm;}
+  .crest{width:23mm;margin:0 auto 2mm;}
   .crest svg{width:100%;height:auto;display:block;
     filter:drop-shadow(0 4px 10px rgba(80,60,20,.35));}
 
@@ -671,18 +593,17 @@
     text-align:center;color:#3E3118;margin-top:1mm;}
 
   .rule{height:1px;background:linear-gradient(90deg,transparent,rgba(122,95,46,.55),transparent);
-    margin:5mm 0 4mm;}
+    margin:4mm 0 3mm;}
 
   .refs{display:flex;justify-content:space-between;align-items:flex-start;
     font-size:13pt;font-weight:600;line-height:1.75;color:#3B2E15;}
   .refs .r{text-align:right;padding-top:5mm;}
 
   /* Filigrane */
-  .wm{position:absolute;top:97mm;left:0;right:0;text-align:center;z-index:1;
-    font-family:'Cinzel',Georgia,serif;font-size:52pt;font-weight:700;letter-spacing:.08em;
-    color:rgba(150,118,48,.34);}
 
-  .parties{display:flex;justify-content:space-between;margin-top:7mm;
+  /* La grappe du visuel descend bas dans la marge droite : sans cette
+     largeur maximale, l'intitulé CLIENT passait dessous et devenait illisible. */
+  .parties{display:flex;justify-content:space-between;margin-top:5mm;max-width:118mm;
     font-size:13pt;line-height:1.7;position:relative;z-index:2;color:#3B2E15;}
   .parties .lbl{font-family:'Cinzel',Georgia,serif;font-size:9.5pt;letter-spacing:.18em;
     color:#8A6E2A;margin-bottom:1mm;}
@@ -707,12 +628,16 @@
   table.micro{font-size:8pt;}
   table.micro tbody td{padding:.9mm 2mm;}
   table.micro thead th{font-size:8.5pt;padding:1.8mm 2mm;}
+  table.nano{font-size:7pt;}
+  table.nano tbody td{padding:.45mm 1.6mm;}
+  table.nano thead th{font-size:7.5pt;padding:1.3mm 1.6mm;}
   tbody tr:first-child td{padding-top:3.4mm;}
   .spacer td{height:5mm;padding:0;}
 
-  .bottom{position:absolute;left:17mm;right:17mm;bottom:15mm;z-index:3;
-    display:flex;justify-content:space-between;align-items:flex-end;gap:8mm;}
-  .sig{font-family:'Great Vibes','Segoe Script','Brush Script MT','Apple Chancery',cursive;font-size:35pt;color:#3E3118;line-height:1;
+  .bottom{position:absolute;left:24mm;right:24mm;bottom:28mm;z-index:3;
+    display:flex;justify-content:flex-end;align-items:flex-end;gap:14mm;}
+  .sig{font-family:'Great Vibes','Segoe Script','Brush Script MT','Apple Chancery',cursive;
+    font-size:28pt;color:#3E3118;line-height:1;text-align:center;
     transform:rotate(-2deg);white-space:nowrap;}
   .sig small{display:block;font-family:'Cinzel',Georgia,serif;font-size:8.5pt;letter-spacing:.16em;
     color:#8A6E2A;transform:rotate(2deg);margin-top:2mm;}
@@ -720,18 +645,9 @@
   .totals .fin{font-size:17.5pt;}
   .totals .tva{display:block;font-size:10pt;font-weight:600;color:#6E5526;margin-top:1mm;}
 
-  .landscape{position:absolute;left:0;right:0;bottom:0;height:100mm;z-index:1;opacity:.62;}
-  .landscape svg{width:100%;height:100%;display:block;}
 </style></head><body>
 <div class="sheet">
-  <div class="band"></div>
-  <div class="corner c-tl">${SVG_CORNER}</div>
-  <div class="corner c-tr">${SVG_CORNER}</div>
-  <div class="corner c-bl">${SVG_CORNER}</div>
-  <div class="corner c-br">${SVG_CORNER}</div>
-  <div class="grapes">${SVG_GRAPES}</div>
-  <div class="landscape">${SVG_LANDSCAPE}</div>
-  <div class="wm">MV</div>
+  <img class="parch" src="${PARCHEMIN}" alt="">
 
   <div class="inner">
     <div class="crest">${SVG_CREST}</div>
@@ -755,7 +671,7 @@
       </div>
     </div>
 
-    <table class="${density}">
+    <table class="${density}"${shrink}>
       <thead><tr><th>Produit</th><th>Quantité</th><th>Prix/u</th><th>Total</th></tr></thead>
       <tbody>${lines}</tbody>
     </table>
@@ -1617,9 +1533,14 @@
     return Math.round(prime);
   };
 
+  /* Lignes saisies à la main dans le bilan : elles ne viennent pas de la
+     tablette, donc rien ne les régénère — sans stockage propre elles
+     disparaissaient au rechargement. */
+  const bcManuels = [];
+
   function rebuildBcRows() {
     if (typeof bcRows === 'undefined') return;
-    const manuels = bcRows.filter(r => r.rank === 'Manuel');
+    const manuels = bcManuels.map(m => Object.assign({ manuel: true }, m));
     const auto = dash.map(e => ({
       name: e.name, rank: e.rank,
       runs: e.runs || 0, factures: e.factures || 0, ventes: e.ventes || 0,
@@ -1629,6 +1550,53 @@
     }));
     bcRows = auto.concat(manuels);
   }
+
+  /* Ajout d'une ligne manuelle : un vrai formulaire, tous les champs d'un
+     coup. L'ancienne version demandait le nom par une invite du navigateur
+     puis créait une ligne à zéro qu'il fallait ensuite corriger nulle part. */
+  async function ajouterLigneManuelle() {
+    const grades = (typeof multiplierFor === 'object')
+      ? Object.keys(multiplierFor) : ['Saisonnier'];
+
+    const r = await askForm('Ajouter une ligne au bilan', [
+      { key: 'name',     label: 'Employé', value: '' },
+      { key: 'rank',     label: 'Grade', value: grades[0], options: grades },
+      { key: 'runs',     label: 'Runs ($)', value: '0', type: 'number' },
+      { key: 'factures', label: 'Factures ($)', value: '0', type: 'number' },
+      { key: 'ventes',   label: 'Ventes (nombre)', value: '0', type: 'number' },
+      { key: 'salaire',  label: 'Salaire ($)', value: '0', type: 'number' },
+    ], "Pour une personne absente de la tablette de la semaine. La prime est calculée automatiquement à partir des runs et du grade.");
+    if (!r) return;
+
+    const nom = (r.name || '').trim();
+    if (!nom) { toast('Il faut au moins un nom.'); return; }
+
+    const n = v => Math.max(0, Math.round(Number(v) || 0));
+    const runs = n(r.runs), factures = n(r.factures), ventes = n(r.ventes);
+
+    bcManuels.push({
+      name: nom, rank: r.rank, runs, factures, ventes,
+      ca: runs + factures + ventes, salaire: n(r.salaire),
+    });
+    D().note(`a ajouté ${nom} au bilan (ligne manuelle)`);
+    D().save('bcManuels');
+    toast(`${nom} ajouté au bilan.`);
+  }
+
+  function retirerLigneManuelle(nom) {
+    const i = bcManuels.findIndex(m => m.name === nom);
+    if (i < 0) return;
+    bcManuels.splice(i, 1);
+    D().note(`a retiré ${nom} du bilan`);
+    D().save('bcManuels');
+    toast(`${nom} retiré du bilan.`);
+  }
+
+  document.addEventListener('click', e => {
+    if (e.target.closest('#bcAddRowBtn')) { ajouterLigneManuelle(); return; }
+    const d = e.target.closest('[data-bc-del]');
+    if (d) retirerLigneManuelle(d.dataset.bcDel);
+  });
 
   /* Réglage du bilan : palier forcé ou détection automatique. */
   const bilanConfig = { palier: 'auto' };
@@ -1746,6 +1714,9 @@
         <td class="num" style="color:var(--prime);">${(e.ca || 0).toLocaleString('fr-FR')} $</td>
         <td class="num">${fmt$(e.salairePlafonne)}</td>
         <td class="num">${fmt$(e.prime)}</td>
+        <td style="text-align:right;">${e.manuel
+          ? `<button class="icon-btn danger" data-bc-del="${esc(e.name)}" title="Retirer cette ligne">×</button>`
+          : ''}</td>
       </tr>`).join('');
 
     /* Dépenses déductibles : salaires, primes, puis chaque facture reçue */
@@ -2593,35 +2564,64 @@
     return LABEL_PAGE[id] || '';
   }
 
+  /* Le volet de présence vit à droite de l'écran plutôt que dans la barre
+     latérale : on veut savoir qui travaille en même temps que soi sans avoir
+     à descendre le menu, et la place manquait à gauche. Il se replie en
+     languette, et le choix est retenu d'une session à l'autre. */
+  function boitePresence() {
+    let box = $('mvOnline');
+    if (box) return box;
+
+    box = document.createElement('aside');
+    box.id = 'mvOnline';
+    box.className = 'mv-online';
+    let plie = false;
+    try { plie = localStorage.getItem('mv.online.plie') === '1'; } catch (e) {}
+    if (plie) box.classList.add('plie');
+
+    document.body.appendChild(box);
+    box.addEventListener('click', e => {
+      if (!e.target.closest('[data-online-toggle]')) return;
+      box.classList.toggle('plie');
+      try { localStorage.setItem('mv.online.plie', box.classList.contains('plie') ? '1' : '0'); } catch (err) {}
+    });
+    return box;
+  }
+
+  function ligneEnLigne(m, moi) {
+    const p = labelPage(m.page);
+    const ini = String(m.name || '?').split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
+    return `<div class="mv-on-row${moi ? ' moi' : ''}" title="${esc(m.name)}${p ? ' — ' + esc(p) : ''}">
+        <span class="mv-on-av">${m.avatar ? `<img src="${esc(m.avatar)}" alt="">` : esc(ini)}</span>
+        <span class="mv-on-txt">
+          <span class="mv-on-n">${esc(m.name)}${moi ? ' <i>vous</i>' : ''}</span>
+          <span class="mv-on-p">${p ? esc(p) : 'en ligne'}</span>
+        </span>
+      </div>`;
+  }
+
   function renderPresence(data) {
-    const sidebar = document.querySelector('.sidebar .mv-user');
-    if (!sidebar) return;
+    /* L'ancien encart de la barre latérale faisait doublon. */
+    const vieux = $('mvPresence');
+    if (vieux) vieux.remove();
 
-    let box = $('mvPresence');
-    if (!box) {
-      box = document.createElement('div');
-      box.id = 'mvPresence';
-      box.className = 'mv-presence';
-      sidebar.parentNode.insertBefore(box, sidebar);
-    }
-
-    const autres = (data.membres || []).filter(m => m.id !== data.moi);
-    if (!autres.length) {
-      box.innerHTML = `<div class="mv-pres-head"><span class="mv-pres-dot solo"></span>Vous êtes seul sur le panel</div>`;
-      return;
-    }
+    const box = boitePresence();
+    const tous = data.membres || [];
+    const moi = tous.filter(m => m.id === data.moi);
+    const autres = tous.filter(m => m.id !== data.moi);
 
     box.innerHTML = `
-      <div class="mv-pres-head"><span class="mv-pres-dot"></span>${autres.length} autre(s) en ligne</div>
-      <div class="mv-pres-list">${autres.map(m => {
-        const p = labelPage(m.page);
-        const ini = m.name.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
-        return `<div class="mv-pres-row" title="${esc(m.name)}${p ? ' — ' + esc(p) : ''}">
-          <span class="mv-pres-av">${m.avatar ? `<img src="${esc(m.avatar)}" alt="">` : esc(ini)}</span>
-          <span class="mv-pres-n">${esc(m.name)}</span>
-          ${p ? `<span class="mv-pres-p">${esc(p)}</span>` : ''}
-        </div>`;
-      }).join('')}</div>`;
+      <button class="mv-on-head" data-online-toggle type="button">
+        <span class="mv-on-dot${autres.length ? '' : ' solo'}"></span>
+        <span class="mv-on-title">En ligne</span>
+        <span class="mv-on-cpt">${tous.length}</span>
+        <span class="mv-on-chev">›</span>
+      </button>
+      <div class="mv-on-list">
+        ${moi.map(m => ligneEnLigne(m, true)).join('')}
+        ${autres.map(m => ligneEnLigne(m, false)).join('')}
+        ${autres.length ? '' : `<p class="mv-on-vide">Personne d'autre sur le panel pour l'instant.</p>`}
+      </div>`;
   }
 
   function startPresence() {
@@ -2950,7 +2950,7 @@
     ['articlesBody',      7,  "Aucun article au catalogue."],
     ['historiqueBody',    7,  "Aucune facture émise pour l'instant."],
     ['dashBody',          11, "Aucune ligne — collez la tablette de la semaine depuis « 📋 Coller la tablette »."],
-    ['bcDetailBody',      8,  "Aucune donnée de production — le tableau se remplit depuis le Tableau de bord."],
+    ['bcDetailBody',      9,  "Aucune donnée de production — le tableau se remplit depuis le Tableau de bord."],
     ['serviceHistoryBody', 4, "Aucune prise de service enregistrée."],
   ];
 
@@ -3175,24 +3175,49 @@
         cursor:pointer;line-height:1;padding:0 4px;}
       .mv-update-x:hover{color:var(--parchment,#EDE3CF);}
 
-      /* --- Présence --- */
-      .mv-presence{margin:0 -16px;padding:12px 16px;border-top:1px solid var(--band,#3D372C);
-        font-size:11.5px;}
-      .mv-pres-head{display:flex;align-items:center;gap:7px;color:var(--muted,#9C9384);
-        font-size:10.5px;letter-spacing:.05em;margin-bottom:8px;}
-      .mv-pres-dot{width:7px;height:7px;border-radius:50%;background:var(--vine,#6E8B5D);
+      /* --- Volet « en ligne » (à droite) --- */
+      .mv-online{position:fixed;right:0;top:96px;z-index:80;width:226px;
+        background:rgba(28,27,24,.94);border:1px solid var(--band,#3D372C);border-right:none;
+        border-radius:14px 0 0 14px;box-shadow:-10px 14px 34px rgba(0,0,0,.4);
+        backdrop-filter:blur(6px);overflow:hidden;transition:width .22s ease;}
+      .mv-on-head{width:100%;display:flex;align-items:center;gap:8px;background:none;border:none;
+        padding:11px 13px;cursor:pointer;color:var(--muted,#9C9384);font:inherit;font-size:10.5px;
+        letter-spacing:.14em;text-transform:uppercase;border-bottom:1px solid var(--band,#3D372C);}
+      .mv-on-head:hover{color:var(--parchment,#EDE3CF);}
+      .mv-on-dot{width:7px;height:7px;border-radius:50%;background:var(--vine,#6E8B5D);
         box-shadow:0 0 0 3px rgba(110,139,93,.18);flex-shrink:0;}
-      .mv-pres-dot.solo{background:var(--band,#3D372C);box-shadow:none;}
-      .mv-pres-list{display:flex;flex-direction:column;gap:6px;max-height:150px;overflow-y:auto;}
-      .mv-pres-row{display:flex;align-items:center;gap:8px;min-width:0;}
-      .mv-pres-av{width:20px;height:20px;border-radius:50%;flex-shrink:0;overflow:hidden;
+      .mv-on-dot.solo{background:var(--band,#3D372C);box-shadow:none;}
+      .mv-on-title{flex:1;text-align:left;}
+      .mv-on-cpt{color:var(--or,#C9A961);font-size:11px;letter-spacing:0;
+        font-variant-numeric:tabular-nums;}
+      .mv-on-chev{transition:transform .22s ease;font-size:14px;line-height:1;}
+      .mv-on-list{display:flex;flex-direction:column;gap:2px;padding:8px 8px 10px;
+        max-height:min(46vh,320px);overflow-y:auto;}
+      .mv-on-row{display:flex;align-items:center;gap:9px;padding:6px 6px;border-radius:9px;min-width:0;}
+      .mv-on-row.moi{background:rgba(201,169,97,.08);}
+      .mv-on-av{width:26px;height:26px;border-radius:50%;flex-shrink:0;overflow:hidden;
         background:rgba(201,169,97,.15);border:1px solid var(--or-soft,#8E7C4E);
-        display:flex;align-items:center;justify-content:center;font-size:8.5px;font-weight:600;
+        display:flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:600;
         color:var(--or,#C9A961);}
-      .mv-pres-av img{width:100%;height:100%;object-fit:cover;}
-      .mv-pres-n{color:var(--parchment,#EDE3CF);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-      .mv-pres-p{margin-left:auto;color:var(--or-soft,#8E7C4E);font-size:10px;flex-shrink:0;
-        max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+      .mv-on-av img{width:100%;height:100%;object-fit:cover;}
+      .mv-on-txt{display:flex;flex-direction:column;min-width:0;line-height:1.35;}
+      .mv-on-n{font-size:12px;color:var(--parchment,#EDE3CF);
+        overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+      .mv-on-n i{font-style:normal;color:var(--or-soft,#8E7C4E);font-size:10px;}
+      .mv-on-p{font-size:10px;color:var(--muted,#9C9384);
+        overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+      .mv-on-vide{margin:6px 6px 2px;font-size:11px;line-height:1.5;color:var(--muted,#9C9384);}
+
+      /* Replié : il ne reste que la pastille et le compteur, en languette. */
+      .mv-online.plie{width:52px;}
+      .mv-online.plie .mv-on-list,
+      .mv-online.plie .mv-on-title{display:none;}
+      .mv-online.plie .mv-on-head{border-bottom:none;justify-content:center;padding:11px 8px;}
+      .mv-online.plie .mv-on-chev{transform:rotate(180deg);}
+
+      /* Sous 1200 px il masquerait le contenu : on l'efface. */
+      @media(max-width:1200px){.mv-online{display:none;}}
+      @media print{.mv-online{display:none;}}
 
       /* --- Barre d'affichage --- */
       .mv-viewbar{margin:0 -16px;padding:10px 16px;border-top:1px solid var(--band,#3D372C);
@@ -3204,6 +3229,18 @@
       .mv-vb.wide{margin-left:auto;}
       .mv-vb-l{font-size:10.5px;color:var(--muted,#9C9384);min-width:38px;text-align:center;
         font-variant-numeric:tabular-nums;}
+
+      /* --- Avertissements RH --- */
+      .av-seal{display:inline-block;margin-left:7px;padding:1px 7px;border-radius:999px;
+        font-size:10px;font-weight:600;vertical-align:middle;
+        background:rgba(214,167,92,.14);border:1px solid rgba(214,167,92,.42);color:var(--amber,#D6A75C);}
+      .av-seal.fort{background:rgba(150,52,60,.16);border-color:rgba(190,80,90,.5);color:#E08A7A;}
+      .av-pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:600;
+        border:1px solid;white-space:nowrap;}
+      .av-doux{color:var(--muted,#9C9384);border-color:var(--band,#3D372C);background:rgba(255,255,255,.03);}
+      .av-moyen{color:var(--amber,#D6A75C);border-color:rgba(214,167,92,.42);background:rgba(214,167,92,.10);}
+      .av-fort{color:#E08A7A;border-color:rgba(190,80,90,.5);background:rgba(150,52,60,.14);}
+      .mv-cpt-av{font-size:11px;font-weight:400;color:var(--muted,#9C9384);margin-left:6px;}
 
       /* --- Lecture seule --- */
       .mv-ro-bandeau{background:rgba(214,167,92,.10);border:1px solid rgba(214,167,92,.35);
@@ -3683,19 +3720,141 @@
 
   window.MarloweVitrine = vitrine;
 
+
+/* ==========================================================================
+   PRISE DE SERVICE — réservée aux postes de vente
+   --------------------------------------------------------------------------
+   Un saisonnier ne pointe pas : sa semaine se mesure en bouteilles, pas en
+   heures. Le pointage ne concerne que la boutique et le commerce.
+   ========================================================================== */
+
+  const POSTES_SERVICE = [
+    'Vendeur', 'Vendeuse', 'Assistant(e) magasin', 'Assistant magasin',
+    'Assistante magasin', 'Resp. Magasin', 'Responsable Magasin', 'Commercial',
+  ];
+
+  /* Comparaison indulgente : « Resp. Magasin », « resp magasin » et
+     « Responsable magasin » doivent tomber sur la même case. */
+  const clefPoste = t => String(t || '').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/^resp(onsable)?\b\.?/, 'resp')
+    .replace(/[^a-z0-9]+/g, ' ').trim();
+
+  const SERVICE_OK = POSTES_SERVICE.map(clefPoste);
+
+  function peutPointer() {
+    const s = window.MarloweSession;
+    if (!s) return true;                       /* hors connexion : on n'entrave rien */
+    if (s.isPatron || s.isOwner) return true;  /* la direction voit tout */
+
+    if ((s.roles || []).some(r => SERVICE_OK.includes(clefPoste(r)))) return true;
+
+    const moi = clefPoste(s.name);
+    const fiche = (typeof rhRosterData !== 'undefined' ? rhRosterData : [])
+      .find(e => clefPoste(e.name) === moi);
+    return !!(fiche && SERVICE_OK.includes(clefPoste(fiche.poste)));
+  }
+
+  function appliquerAccesService() {
+    const panel = $('servicePanel');
+    if (!panel) return;
+    const ok = peutPointer();
+    panel.hidden = !ok;
+    panel.style.display = ok ? '' : 'none';
+  }
+
+/* ==========================================================================
+   AVERTISSEMENTS RH
+   ========================================================================== */
+
+  const avertissements = [];
+  const NIVEAUX = ['Rappel à l\'ordre', 'Avertissement', 'Dernier avertissement'];
+
+  /* Un sceau discret à côté du nom dans le registre : on doit voir qu'une
+     personne a un dossier sans avoir à descendre jusqu'au tableau. */
+  function compteAvertissements(nom) {
+    const n = avertissements.filter(a => a.nom === nom).length;
+    if (!n) return '';
+    const dur = avertissements.some(a => a.nom === nom && a.niveau === NIVEAUX[2]);
+    return ` <span class="av-seal${dur ? ' fort' : ''}" title="${n} avertissement${n > 1 ? 's' : ''}">⚠ ${n}</span>`;
+  }
+
+  function renderAvertissements() {
+    const body = $('avertBody');
+    if (!body) return;
+
+    const cpt = $('avertCount');
+    if (cpt) cpt.textContent = avertissements.length
+      ? `· ${avertissements.length} au dossier` : '';
+
+    body.innerHTML = avertissements.length
+      ? avertissements.map((a, i) => `
+        <tr>
+          <td class="mono">${esc(a.date)}</td>
+          <td><b>${esc(a.nom)}</b></td>
+          <td><span class="av-pill av-${a.niveau === NIVEAUX[2] ? 'fort' : a.niveau === NIVEAUX[1] ? 'moyen' : 'doux'}">${esc(a.niveau)}</span></td>
+          <td>${esc(a.motif)}</td>
+          <td class="dim">${esc(a.par || '—')}</td>
+          <td style="text-align:right;"><button class="icon-btn danger" data-av-del="${i}" title="Retirer">×</button></td>
+        </tr>`).join('')
+      : `<tr><td colspan="6" class="empty-note" style="text-align:center;padding:18px;">Aucun avertissement au dossier.</td></tr>`;
+  }
+
+  async function donnerAvertissement() {
+    const noms = (typeof rhRosterData !== 'undefined' ? rhRosterData : []).map(e => e.name);
+    if (!noms.length) { toast("Le registre est vide — enregistrez d'abord un employé."); return; }
+
+    const r = await askForm('Donner un avertissement', [
+      { key: 'nom',    label: 'Employé', value: noms[0], options: noms },
+      { key: 'niveau', label: 'Niveau', value: NIVEAUX[1], options: NIVEAUX },
+      { key: 'motif',  label: 'Motif', value: '' },
+      { key: 'date',   label: 'Date', value: todayFR() },
+    ], "L'avertissement reste au dossier de l'employé et apparaît à côté de son nom dans le registre.");
+    if (!r) return;
+    if (!r.motif.trim()) { toast('Un avertissement sans motif ne sert à rien.'); return; }
+
+    const s = window.MarloweSession;
+    avertissements.unshift({
+      nom: r.nom, niveau: r.niveau, motif: r.motif.trim(), date: r.date,
+      par: (s && s.name) || 'Direction',
+    });
+    D().note(`a donné un avertissement à ${r.nom} (${r.niveau})`);
+    D().saveMany(['avertissements', 'rhRoster']);
+    toast(`Avertissement enregistré pour ${r.nom}.`);
+  }
+
+  function retirerAvertissement(i) {
+    const a = avertissements[i];
+    if (!a) return;
+    avertissements.splice(i, 1);
+    D().note(`a retiré un avertissement de ${a.nom}`);
+    D().saveMany(['avertissements', 'rhRoster']);
+    toast('Avertissement retiré.');
+  }
+
+  document.addEventListener('click', e => {
+    if (e.target.closest('#avertAddBtn')) { donnerAvertissement(); return; }
+    const d = e.target.closest('[data-av-del]');
+    if (d) retirerAvertissement(+d.dataset.avDel);
+  });
+
+  window.MarloweAvertissements = avertissements;
+
   window.MarloweActions = {
     recomputeRecruiters, refreshEffectifCount, reprintInvoice,
     refreshWeekDays, refreshWeekHeaders, renderEligibilite, closeWeek, undoClose,
     renderBilan, renderWeekHistory, copyDetailGDoc, copyDepensesGDoc,
     renderHistorique, renderPrimesExc, addPrimeExceptionnelle,
     renderCloture, renderEffectifHead, refreshEffectifFilters, applyEffectifFilter,
-    verifierVersion, battementPresence, setZoom, toggleFullscreen,
+    verifierVersion, battementPresence, renderPresence, setZoom, toggleFullscreen,
     renderQuotas3, renderJournal, appliquerLectureSeule, remplirVides, repartirDeZero,
-    renderVitrine,
+    renderVitrine, appliquerAccesService, renderAvertissements, compteAvertissements,
+    openInvoiceDoc,
   };
 
   window.MarloweClotureSteps = clotureSteps;
 
+  window.MarloweBcManuels = bcManuels;
   window.MarlowePrimesExc = primesExc;
   window.MarloweBilanConfig = bilanConfig;
 })();
