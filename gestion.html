@@ -516,6 +516,8 @@
       <div class="nav-item" data-page="statsgrades">Grades &amp; quotas</div>
       <div class="nav-item" data-page="statseffectif">Effectif</div>
       <div class="nav-item" data-page="statsprimes">Primes</div>
+      <div class="nav-section">Gestion</div>
+      <div class="nav-item" data-page="histo">Historique</div>
       <div class="nav-section">Personnel</div>
       <div class="nav-item" data-page="masemaine">Ma semaine</div>
       <div class="nav-item" data-page="agenda">Agenda</div>
@@ -845,11 +847,17 @@
           <div class="bilan-chip">Taux : <b id="bcTaux">—</b></div>
           <div class="bilan-chip">Plafond salaire : <b id="bcSalCap">—</b> emp/dir</div>
           <div class="bilan-chip">Plafond prime : <b id="bcPrimeCap">—</b> emp/dir</div>
-          <div class="bilan-chip accent">palier détecté automatiquement</div>
+          <div class="bilan-chip accent" style="padding:0;">
+            <select id="bcPalierMode" style="background:transparent;border:none;color:inherit;
+              font:inherit;padding:6px 10px;cursor:pointer;">
+              <option value="auto">palier détecté automatiquement</option>
+            </select>
+          </div>
           <button class="btn" id="toggleBaremeBtn">▾ Masquer le barème</button>
         </div>
       </div>
 
+      <div id="bcCards"></div>
       <div class="panel" id="baremePanel">
         <h3>Barème progressif — palier actuel : <span id="palierActuel">—</span>/13</h3>
         <table class="bareme-table">
@@ -1254,6 +1262,13 @@
         <h3>Historique personnel</h3>
         <p class="empty-note">Aucune semaine clôturée pour l'instant. Ton historique de production apparaîtra ici après la première clôture.</p>
       </div>
+    </div>
+
+    <!-- ================= HISTORIQUE ================= -->
+    <div class="page-content" id="page-histo">
+      <h1 class="page-title">Historique</h1>
+      <p class="page-sub" id="histoSub">Aucune semaine clôturée pour l'instant.</p>
+      <div id="histoBody"></div>
     </div>
 
     <!-- ================= AGENDA ================= -->

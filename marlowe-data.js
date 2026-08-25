@@ -67,12 +67,24 @@ window.MarloweData = (function () {
     tombola:         { ref: () => tombolaParticipants, render: [] },
     serviceHistory:  { ref: () => serviceHistory,      render: [call('renderServiceHistory')] },
 
+    /* Primes exceptionnelles de la semaine et réglage du palier :
+       vivent dans marlowe-actions.js, d'où le passage par window. */
+    primesExc: {
+      ref: () => window.MarlowePrimesExc,
+      render: [() => { const a = window.MarloweActions; if (a) { a.renderPrimesExc(); a.renderBilan(); } }],
+    },
+    bilanConfig: {
+      ref: () => window.MarloweBilanConfig,
+      render: [() => { const a = window.MarloweActions; if (a) a.renderBilan(); }],
+    },
+
     /* Semaines clôturées + photo permettant d'annuler la dernière clôture.
        Vit dans marlowe-actions.js, d'où le passage par window. */
     clotures: {
       ref: () => window.MarloweClotures,
       render: [() => { const a = window.MarloweActions;
-                       if (a) { a.renderEligibilite(); a.refreshWeekHeaders(); a.renderWeekHistory(); } }],
+                       if (a) { a.renderEligibilite(); a.refreshWeekHeaders();
+                                a.renderWeekHistory(); a.renderHistorique(); } }],
     },
   };
 

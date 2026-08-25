@@ -1240,6 +1240,16 @@
     const heures = serviceHistory.filter(s => s.end)
       .reduce((sum, s) => sum + durationMinutes(s.start, s.end), 0);
 
+    /* Photographie chiffrée de la semaine, pour la page Historique. */
+    const bil = bilanCompute();
+    const actifs = effectifData.filter(e => e.active);
+    const sansProd = actifs.filter(e => !e.barils).length;
+    const meilleur = actifs.slice().sort((a, b) => (b.barils || 0) - (a.barils || 0))[0];
+    const recrutes = rhRosterData.filter(e => {
+      const d = parseFR(e.date);
+      return d && d >= start && d <= end;
+    }).length;
+
     const ok = await confirmAction(
       `Clôturer ${label}`,
       `Du ${frDate(start)} au ${frDate(end)}.\n\n` +
@@ -1268,19 +1278,38 @@
       production: effectifData.map(e => ({
         name: e.name, grade: e.grade, barils: e.barils, quota: e.quota,
       })),
+
+      /* Récapitulatif de la semaine — alimente la page Historique. */
+      ca: bil.caTotal,
+      primes: bil.primes,
+      ventes: dash.reduce((s, d) => s + (d.ventes || 0), 0),
+      effectif: rhRosterData.filter(e => e.status === 'actif').length,
+      recrutements: recrutes,
+      sansProduction: actifs.length ? Math.round(sansProd / actifs.length * 100) : 0,
+      vainqueur: meilleur && meilleur.barils ? meilleur.name : null,
+      primesExceptionnelles: primesExc.slice(),
+      palier: bil.palierIndex + 1,
+      taux: bil.palier.taux,
+      impot: bil.impot,
+      tresorerie: bil.tresorerie,
     });
 
     /* Remise à zéro */
     effectifData.forEach(e => { e.barils = 0; e.distributed = false; });
     serviceHistory.length = 0;
     serviceActive = false;
+    primesExc.length = 0;
     resetServiceButton();
 
     D().saveMany(['effectif', 'serviceHistory']);
     D().save('clotures', false);
+    D().save('primesExc', false);
     refreshWeekHeaders();
     renderEligibilite();
     renderWeekHistory();
+    renderHistorique();
+    renderPrimesExc();
+    renderBilan();
     toast(`${label} clôturée — ${eligibles.length} éligible(s).`);
   }
 
@@ -1298,6 +1327,11 @@
     serviceHistory.length = 0;
     clotures.undo.serviceHistory.forEach(s => serviceHistory.push(s));
 
+    if (Array.isArray(w.primesExceptionnelles)) {
+      primesExc.length = 0;
+      w.primesExceptionnelles.forEach(x => primesExc.push(x));
+      D().save('primesExc', false);
+    }
     clotures.weeks.shift();
     clotures.undo = null;
 
@@ -1306,6 +1340,9 @@
     refreshWeekHeaders();
     renderEligibilite();
     renderWeekHistory();
+    renderHistorique();
+    renderPrimesExc();
+    renderBilan();
     toast('Clôture annulée.');
   }
 
@@ -1530,43 +1567,74 @@
     bcRows = auto.concat(manuels);
   }
 
+  /* Réglage du bilan : palier forcé ou détection automatique. */
+  const bilanConfig = { palier: 'auto' };
+
   function bilanCompute() {
     rebuildBcRows();
 
     const rows = (typeof bcRows !== 'undefined' ? bcRows : []);
+    const bareme = (typeof baremeData !== 'undefined') ? baremeData : [];
     const caTotal = rows.reduce((s, e) => s + (e.ca || 0), 0);
-    const salaires = rows.reduce((s, e) => s + (e.salaire || 0), 0);
-    const facturesRecues = facturesRecuesData
+    const autres = facturesRecuesData
       .reduce((s, g) => s + g.items.reduce((s2, i) => s2 + (i.montant || 0), 0), 0);
 
-    /* Palier calculé sur le bénéfice AVANT primes — sinon le calcul
-       tournerait en rond, les plafonds de prime dépendant du palier. */
-    const beneficeAvantPrimes = caTotal - salaires - facturesRecues;
+    const pickPalier = (benef) => {
+      if (bilanConfig.palier !== 'auto') {
+        const i = Math.max(0, Math.min(bareme.length - 1, parseInt(bilanConfig.palier, 10)));
+        return i;
+      }
+      let i = bareme.findIndex(b => benef >= b.min && benef <= b.max);
+      if (i < 0) i = benef < (bareme[0] ? bareme[0].min : 0) ? 0 : bareme.length - 1;
+      return i;
+    };
 
-    const bareme = (typeof baremeData !== 'undefined') ? baremeData : [];
-    let idx = bareme.findIndex(b => beneficeAvantPrimes >= b.min && beneficeAvantPrimes <= b.max);
-    if (idx < 0) idx = beneficeAvantPrimes < (bareme[0] ? bareme[0].min : 0) ? 0 : bareme.length - 1;
+    /* Les salaires sont plafonnés par le palier, et entrent dans le calcul
+       qui détermine ce même palier. Deux passes suffisent à se stabiliser. */
+    const isDir = r => DIR_RANKS().includes(r);
+    let idx = pickPalier(caTotal - rows.reduce((s, e) => s + (e.salaire || 0), 0) - autres);
+    for (let pass = 0; pass < 2; pass++) {
+      const p = bareme[idx] || { salEmp: 0, salDir: 0 };
+      const sal = rows.reduce((s, e) => s + Math.min(e.salaire || 0, isDir(e.rank) ? p.salDir : p.salEmp), 0);
+      idx = pickPalier(caTotal - sal - autres);
+    }
     const palier = bareme[idx] || { taux: 0, salEmp: 0, salDir: 0, primeEmp: 0, primeDir: 0 };
 
-    /* Salaires et primes plafonnés selon le palier */
     const detail = rows.map(e => {
-      const isDir = DIR_RANKS().includes(e.rank);
+      const dir = isDir(e.rank);
       const barils = Math.round((e.runs || 0) / 5);
       const mult = (typeof multiplierFor === 'object' && multiplierFor[e.rank]) || 1;
-      const prime = Math.min(barils * mult, isDir ? palier.primeDir : palier.primeEmp);
-      const salaire = Math.min(e.salaire || 0, isDir ? palier.salDir : palier.salEmp);
-      return Object.assign({}, e, { prime: Math.round(prime), salairePlafonne: Math.round(salaire), isDir });
+      const exc = primesExc.filter(x => x.nom === e.name).reduce((s, x) => s + x.montant, 0);
+      const prime = Math.min(barils * mult, dir ? palier.primeDir : palier.primeEmp) + exc;
+      return Object.assign({}, e, {
+        prime: Math.round(prime),
+        primeExc: exc,
+        salairePlafonne: Math.round(Math.min(e.salaire || 0, dir ? palier.salDir : palier.salEmp)),
+        isDir: dir,
+      });
     });
 
-    const salairesPlafonnes = detail.reduce((s, e) => s + e.salairePlafonne, 0);
-    const primes = detail.reduce((s, e) => s + e.prime, 0);
-    const depenses = salairesPlafonnes + primes + facturesRecues;
-    const benefice = caTotal - depenses;
-    const impot = Math.round(Math.max(0, benefice) * palier.taux / 100);
+    /* Primes accordées à quelqu'un qui n'est pas dans le tableau de bord */
+    const nomsDetail = new Set(detail.map(e => e.name));
+    const excHorsTableau = primesExc.filter(p => !nomsDetail.has(p.nom))
+      .reduce((s, p) => s + p.montant, 0);
+
+    const salaires = detail.reduce((s, e) => s + e.salairePlafonne, 0);
+    const primes = detail.reduce((s, e) => s + e.prime, 0) + excHorsTableau;
+    const depenses = salaires + autres;
+
+    const beneficeImposable = caTotal - depenses;
+    const impot = Math.round(Math.max(0, beneficeImposable) * palier.taux / 100);
+    const beneficeApresImpot = beneficeImposable - impot;
+    const beneficeApresPrimes = beneficeApresImpot - primes;
+    const retraits = retraitsData.reduce((s, r) => s + (r.montant || 0), 0);
+    const tresorerie = beneficeApresPrimes - retraits;
 
     return {
-      detail, caTotal, salaires: salairesPlafonnes, primes, facturesRecues,
-      depenses, beneficeAvantPrimes, benefice, palier, palierIndex: idx, impot,
+      detail, caTotal, salaires, autres, depenses, primes,
+      beneficeImposable, impot, beneficeApresImpot, beneficeApresPrimes,
+      retraits, tresorerie, palier, palierIndex: idx,
+      auto: bilanConfig.palier === 'auto',
     };
   }
 
@@ -1585,6 +1653,9 @@
     set('palierActuel', b.palierIndex + 1);
     set('bcDetailCount', b.detail.length);
     set('bcEffectif', rhRosterData.filter(e => e.status === 'actif').length);
+
+    renderPalierSelect(b);
+    renderBilanCards(b);
 
     /* Palier en cours mis en évidence dans le barème */
     const bb = $('baremeBody');
@@ -1617,9 +1688,10 @@
       </tr>`).join('');
 
     /* Dépenses déductibles : salaires, primes, puis chaque facture reçue */
+    /* Les primes ne sont PAS déductibles : elles se retranchent après impôt.
+       Le tableau ne contient donc que les salaires et les factures reçues. */
     depensesData.length = 0;
     depensesData.push({ date: '***********', label: 'Salaires', montant: b.salaires });
-    if (b.primes) depensesData.push({ date: '***********', label: 'Primes', montant: b.primes });
     facturesRecuesData.forEach(g => g.items.forEach(i => {
       depensesData.push({ date: i.date, label: `${g.supplier}${i.note && i.note !== '—' ? ' — ' + i.note : ''}`, montant: i.montant || 0 });
     }));
@@ -1644,6 +1716,65 @@
     }
 
     renderBilanSynthese(b);
+    renderPrimesExc();
+  }
+
+  /* Liste déroulante du palier : automatique, ou forcé sur l'un des 13. */
+  function renderPalierSelect(b) {
+    const sel = $('bcPalierMode');
+    if (!sel || typeof baremeData === 'undefined') return;
+
+    if (sel.options.length <= 1) {
+      sel.innerHTML = '<option value="auto">palier détecté automatiquement</option>'
+        + baremeData.map((p, i) => `<option value="${i}">palier ${i + 1} forcé — ${p.taux} %</option>`).join('');
+      sel.addEventListener('change', () => {
+        bilanConfig.palier = sel.value;
+        D().save('bilanConfig', false);
+        renderBilan();
+        toast(sel.value === 'auto'
+          ? 'Palier de nouveau détecté automatiquement.'
+          : `Palier ${Number(sel.value) + 1} forcé manuellement.`);
+      });
+    }
+    sel.value = bilanConfig.palier;
+
+    const chip = sel.closest('.bilan-chip');
+    if (chip) chip.classList.toggle('mv-forced', bilanConfig.palier !== 'auto');
+  }
+
+  /* Les huit cartes de la chaîne financière, du CA à la trésorerie. */
+  function renderBilanCards(b) {
+    const host = $('bcCards');
+    if (!host) return;
+    const f = n => Math.round(n || 0).toLocaleString('fr-FR') + ' $';
+    const sign = n => n < 0 ? 'neg' : '';
+
+    host.innerHTML = `<div class="mv-kpis mv-kpis-8">
+      <div class="mv-kpi"><div class="mv-kpi-l">CA brut réalisé</div>
+        <div class="mv-kpi-v accent">${f(b.caTotal)}</div>
+        <div class="mv-kpi-s">runs + factures + ventes</div></div>
+      <div class="mv-kpi"><div class="mv-kpi-l">Dépenses déductibles</div>
+        <div class="mv-kpi-v">${f(b.depenses)}</div>
+        <div class="mv-kpi-s">salaires ${f(b.salaires)} · autres ${f(b.autres)}</div></div>
+      <div class="mv-kpi"><div class="mv-kpi-l">Bénéfice imposable</div>
+        <div class="mv-kpi-v ${sign(b.beneficeImposable)}">${f(b.beneficeImposable)}</div>
+        <div class="mv-kpi-s">CA − dépenses</div></div>
+      <div class="mv-kpi"><div class="mv-kpi-l">Impôts (${b.palier.taux} %)</div>
+        <div class="mv-kpi-v">${f(b.impot)}</div>
+        <div class="mv-kpi-s">palier ${b.palierIndex + 1}${b.auto ? '' : ' — forcé'}</div></div>
+      <div class="mv-kpi"><div class="mv-kpi-l">Bénéfice après impôt</div>
+        <div class="mv-kpi-v ${sign(b.beneficeApresImpot)}">${f(b.beneficeApresImpot)}</div>
+        <div class="mv-kpi-s">imposable − impôts</div></div>
+      <div class="mv-kpi"><div class="mv-kpi-l">Total des primes</div>
+        <div class="mv-kpi-v">${f(b.primes)}</div>
+        <div class="mv-kpi-s">déduites après impôt</div></div>
+      <div class="mv-kpi"><div class="mv-kpi-l">Bénéfice après primes</div>
+        <div class="mv-kpi-v ${sign(b.beneficeApresPrimes)}">${f(b.beneficeApresPrimes)}</div>
+        <div class="mv-kpi-s">après rémunération de l'équipe</div></div>
+      <div class="mv-kpi"><div class="mv-kpi-l">Trésorerie nette finale</div>
+        <div class="mv-kpi-v ${sign(b.tresorerie)}">${f(b.tresorerie)}</div>
+        <div class="mv-kpi-s">après retraits (${f(b.retraits)})</div></div>
+    </div>`;
   }
 
   /* Récapitulatif chiffré, inséré sous le détail par employé. */
@@ -1663,10 +1794,13 @@
     const fmt$ = n => Math.round(n).toLocaleString('fr-FR') + ' $';
     box.innerHTML = `
       <div class="mv-synth-row"><span>Chiffre d'affaires total</span><b>${fmt$(b.caTotal)}</b></div>
-      <div class="mv-synth-row"><span>Dépenses déductibles</span><b class="neg">− ${fmt$(b.depenses)}</b></div>
-      <div class="mv-synth-row big"><span>Bénéfice</span><b class="${b.benefice < 0 ? 'neg' : 'pos'}">${fmt$(b.benefice)}</b></div>
-      <div class="mv-synth-row"><span>Impôt dû — palier ${b.palierIndex + 1} à ${b.palier.taux} %</span><b>${fmt$(b.impot)}</b></div>
-      <div class="mv-synth-note">Le palier est déterminé par le bénéfice avant primes : ${fmt$(b.beneficeAvantPrimes)}.</div>`;
+      <div class="mv-synth-row"><span>Salaires</span><b class="neg">− ${fmt$(b.salaires)}</b></div>
+      <div class="mv-synth-row"><span>Factures reçues</span><b class="neg">− ${fmt$(b.autres)}</b></div>
+      <div class="mv-synth-row big"><span>Bénéfice imposable</span><b class="${b.beneficeImposable < 0 ? 'neg' : 'pos'}">${fmt$(b.beneficeImposable)}</b></div>
+      <div class="mv-synth-row"><span>Impôt — palier ${b.palierIndex + 1} à ${b.palier.taux} %</span><b class="neg">− ${fmt$(b.impot)}</b></div>
+      <div class="mv-synth-row"><span>Primes versées</span><b class="neg">− ${fmt$(b.primes)}</b></div>
+      <div class="mv-synth-row"><span>Retraits</span><b class="neg">− ${fmt$(b.retraits)}</b></div>
+      <div class="mv-synth-row big"><span>Trésorerie nette finale</span><b class="${b.tresorerie < 0 ? 'neg' : 'pos'}">${fmt$(b.tresorerie)}</b></div>`;
   }
 
   /* ========================================================================
@@ -1791,6 +1925,347 @@
   }
 
   /* ========================================================================
+     GRAPHIQUES — SVG écrit à la main, sans bibliothèque
+     ------------------------------------------------------------------------
+     Palette vérifiée sur le fond sombre du panel (#262320) :
+     l'or et l'ambre passent le contraste 3:1. Chaque graphique ne porte
+     qu'une seule série, donc pas de légende — le titre nomme la donnée.
+
+     Les flèches de tendance ▲▼ portent l'information par leur forme :
+     vert et rouge sont indiscernables en deutéranopie, la couleur seule
+     ne dirait rien à une partie des lecteurs.
+     ======================================================================== */
+  const CHART = {
+    or:     '#E0BE72',   /* production */
+    ambre:  '#E08A50',   /* primes */
+    grille: 'rgba(255,255,255,.07)',
+    axe:    'rgba(255,255,255,.30)',
+    encre:  '#9C9384',
+  };
+
+  const niceMax = v => {
+    if (v <= 0) return 1;
+    const p = Math.pow(10, Math.floor(Math.log10(v)));
+    return Math.ceil(v / (p / 2)) * (p / 2);
+  };
+
+  const shortNum = n => {
+    const a = Math.abs(n);
+    if (a >= 1e6) return (n / 1e6).toFixed(a >= 1e7 ? 0 : 1).replace('.', ',') + ' M';
+    if (a >= 1e3) return Math.round(n / 1e3) + ' k';
+    return String(Math.round(n));
+  };
+
+  /* Histogramme — une barre par semaine, extrémité arrondie côté valeur. */
+  function barChart(data, color, unit) {
+    const W = 720, H = 260, L = 54, R = 12, T = 14, B = 30;
+    const max = niceMax(Math.max(...data.map(d => d.v), 0));
+    const iw = W - L - R, ih = H - T - B;
+    const step = iw / Math.max(1, data.length);
+    const bw = Math.min(46, step * 0.6);
+    const ticks = [0, .25, .5, .75, 1].map(f => Math.round(max * f));
+
+    return `<svg viewBox="0 0 ${W} ${H}" class="mv-chart" role="img"
+      aria-label="Production par semaine">
+      ${ticks.map(t => {
+        const y = T + ih - (t / max) * ih;
+        return `<line x1="${L}" x2="${W - R}" y1="${y}" y2="${y}" stroke="${CHART.grille}" stroke-width="1"/>
+                <text x="${L - 8}" y="${y + 4}" text-anchor="end" fill="${CHART.encre}" font-size="10">${shortNum(t)}</text>`;
+      }).join('')}
+      ${data.map((d, i) => {
+        const h = max ? (d.v / max) * ih : 0;
+        const x = L + step * i + (step - bw) / 2;
+        const y = T + ih - h;
+        return `<g class="mv-bar"><title>${esc(d.k)} — ${d.v.toLocaleString('fr-FR')} ${esc(unit)}</title>
+          <rect x="${x}" y="${y}" width="${bw}" height="${Math.max(h, 1)}"
+                rx="4" ry="4" fill="${color}"/>
+          <rect x="${x}" y="${Math.min(y + 6, T + ih)}" width="${bw}" height="${Math.max(h - 6, 0)}" fill="${color}"/>
+        </g>`;
+      }).join('')}
+      <line x1="${L}" x2="${W - R}" y1="${T + ih}" y2="${T + ih}" stroke="${CHART.axe}" stroke-width="1"/>
+      ${data.map((d, i) => `<text x="${L + step * i + step / 2}" y="${H - 10}" text-anchor="middle"
+        fill="${CHART.encre}" font-size="10.5">${esc(d.k)}</text>`).join('')}
+    </svg>`;
+  }
+
+  /* Courbe avec aire — évolution des primes versées. */
+  function areaChart(data, color, unit) {
+    const W = 720, H = 260, L = 62, R = 12, T = 14, B = 30;
+    const max = niceMax(Math.max(...data.map(d => d.v), 0));
+    const iw = W - L - R, ih = H - T - B;
+    const x = i => L + (data.length === 1 ? iw / 2 : (iw * i) / (data.length - 1));
+    const y = v => T + ih - (max ? (v / max) * ih : 0);
+    const pts = data.map((d, i) => [x(i), y(d.v)]);
+    const line = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
+    const area = `${line} L ${pts[pts.length - 1][0].toFixed(1)} ${T + ih} L ${pts[0][0].toFixed(1)} ${T + ih} Z`;
+    const ticks = [0, .25, .5, .75, 1].map(f => Math.round(max * f));
+
+    return `<svg viewBox="0 0 ${W} ${H}" class="mv-chart" role="img" aria-label="Primes versées par semaine">
+      <defs><linearGradient id="mvFade" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${color}" stop-opacity=".34"/>
+        <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+      </linearGradient></defs>
+      ${ticks.map(t => {
+        const yy = y(t);
+        return `<line x1="${L}" x2="${W - R}" y1="${yy}" y2="${yy}" stroke="${CHART.grille}" stroke-width="1"/>
+                <text x="${L - 8}" y="${yy + 4}" text-anchor="end" fill="${CHART.encre}" font-size="10">${shortNum(t)}</text>`;
+      }).join('')}
+      <path d="${area}" fill="url(#mvFade)"/>
+      <path d="${line}" fill="none" stroke="${color}" stroke-width="2"
+            stroke-linejoin="round" stroke-linecap="round"/>
+      ${pts.map((p, i) => `<g class="mv-dot"><title>${esc(data[i].k)} — ${data[i].v.toLocaleString('fr-FR')} ${esc(unit)}</title>
+        <circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="4.5" fill="${color}"
+                stroke="#262320" stroke-width="2"/></g>`).join('')}
+      <line x1="${L}" x2="${W - R}" y1="${T + ih}" y2="${T + ih}" stroke="${CHART.axe}" stroke-width="1"/>
+      ${data.map((d, i) => `<text x="${x(i)}" y="${H - 10}" text-anchor="middle"
+        fill="${CHART.encre}" font-size="10.5">${esc(d.k)}</text>`).join('')}
+    </svg>`;
+  }
+
+  /* ========================================================================
+     PAGE HISTORIQUE
+     ======================================================================== */
+
+  /* Flèche de tendance. `bonSiMonte` dit dans quel sens va le progrès :
+     un pourcentage d'inactifs qui grimpe est une mauvaise nouvelle. */
+  function trend(cur, prev, bonSiMonte) {
+    if (prev == null || cur === prev) return '<span class="mv-tr eq" title="stable">=</span>';
+    const monte = cur > prev;
+    const bon = bonSiMonte ? monte : !monte;
+    return `<span class="mv-tr ${bon ? 'up' : 'down'}" title="${
+      monte ? 'en hausse' : 'en baisse'} par rapport à la semaine précédente">${monte ? '▲' : '▼'}</span>`;
+  }
+
+  function renderHistorique() {
+    const host = $('histoBody');
+    if (!host) return;
+    const weeks = (clotures.weeks || []).slice();          /* plus récente en tête */
+    const sub = $('histoSub');
+
+    if (!weeks.length) {
+      if (sub) sub.textContent = "Aucune semaine clôturée pour l'instant — l'historique se construit à chaque clôture du lundi.";
+      host.innerHTML = `<div class="panel"><p class="empty-note" style="padding:26px 0;text-align:center;">
+        Clôturez une semaine depuis <b>Primes</b> pour voir apparaître ici le récapitulatif complet :
+        production, chiffre d'affaires, primes versées, effectif et tendances.</p></div>`;
+      return;
+    }
+
+    const chrono = weeks.slice().reverse();                /* plus ancienne en tête */
+    const prod = w => (w.production || []).reduce((s, p) => s + (p.barils || 0), 0);
+    const fmt$ = n => Math.round(n || 0).toLocaleString('fr-FR') + ' $';
+
+    /* --- Records --- */
+    const best = chrono.reduce((a, w) => prod(w) > prod(a) ? w : a, chrono[0]);
+    const cumul = chrono.reduce((s, w) => s + prod(w), 0);
+    const moyenne = Math.round(cumul / chrono.length);
+
+    const victoires = {};
+    chrono.forEach(w => { if (w.vainqueur) victoires[w.vainqueur] = (victoires[w.vainqueur] || 0) + 1; });
+    const record = Object.entries(victoires).sort((a, b) => b[1] - a[1])[0];
+
+    if (sub) sub.textContent = `${weeks.length} semaine(s) clôturée(s) · records du domaine`;
+
+    /* --- Séries --- */
+    const serieProd = chrono.map(w => ({ k: w.label.replace(/^Semaine\s*/i, 'S'), v: prod(w) }));
+    const seriePrimes = chrono.map(w => ({ k: w.label.replace(/^Semaine\s*/i, 'S'), v: Math.round(w.primes || 0) }));
+
+    host.innerHTML = `
+      <div class="mv-kpis">
+        <div class="mv-kpi"><div class="mv-kpi-l">🏆 Meilleure semaine</div>
+          <div class="mv-kpi-v">${prod(best).toLocaleString('fr-FR')}</div>
+          <div class="mv-kpi-s">bouteilles · ${esc(best.label)}</div></div>
+        <div class="mv-kpi"><div class="mv-kpi-l">Moyenne par semaine</div>
+          <div class="mv-kpi-v">${moyenne.toLocaleString('fr-FR')}</div>
+          <div class="mv-kpi-s">bouteilles</div></div>
+        <div class="mv-kpi"><div class="mv-kpi-l">Production cumulée</div>
+          <div class="mv-kpi-v accent">${cumul.toLocaleString('fr-FR')}</div>
+          <div class="mv-kpi-s">depuis la première clôture</div></div>
+        <div class="mv-kpi"><div class="mv-kpi-l">👑 Recordman</div>
+          <div class="mv-kpi-v small">${record ? esc(record[0]) : '—'}</div>
+          <div class="mv-kpi-s">${record ? record[1] + ' victoire(s) hebdo' : 'aucune victoire enregistrée'}</div></div>
+      </div>
+
+      <div class="grid2">
+        <div class="panel"><h3>Production par semaine <span class="mv-unit">bouteilles</span></h3>
+          ${barChart(serieProd, CHART.or, 'bouteilles')}</div>
+        <div class="panel"><h3>Primes versées par semaine <span class="mv-unit">$</span></h3>
+          ${areaChart(seriePrimes, CHART.ambre, '$')}</div>
+      </div>
+
+      <div class="panel">
+        <h3>Statistiques par semaine — tendances</h3>
+        <div class="table-wrap"><table class="gtable">
+          <thead><tr><th>Semaine</th><th class="num">Recrutements</th><th class="num">CA</th>
+            <th class="num">Ventes</th><th class="num">Production</th>
+            <th class="num">% sans production</th><th class="num">Effectif</th></tr></thead>
+          <tbody>${chrono.map((w, i) => {
+            const p = i > 0 ? chrono[i - 1] : null;
+            const cell = (v, prev, bonSiMonte, txt) =>
+              `<td class="num">${txt}${p ? ' ' + trend(v, prev, bonSiMonte) : ''}</td>`;
+            return `<tr>
+              <td><b>${esc(w.label)}</b></td>
+              ${cell(w.recrutements || 0, p && (p.recrutements || 0), true, (w.recrutements || 0))}
+              ${cell(w.ca || 0, p && (p.ca || 0), true, fmt$(w.ca))}
+              ${cell(w.ventes || 0, p && (p.ventes || 0), true, (w.ventes || 0).toLocaleString('fr-FR'))}
+              ${cell(prod(w), p && prod(p), true, prod(w).toLocaleString('fr-FR'))}
+              ${cell(w.sansProduction || 0, p && (p.sansProduction || 0), false, (w.sansProduction || 0) + ' %')}
+              ${cell(w.effectif || 0, p && (p.effectif || 0), true, (w.effectif || 0))}
+            </tr>`; }).join('')}</tbody>
+        </table></div>
+        <p class="empty-note" style="margin-top:12px;">
+          ▲▼ = évolution par rapport à la semaine précédente · <b class="mv-tr up">vert</b> = favorable,
+          <b class="mv-tr down">rouge</b> = défavorable. Un pourcentage d'inactifs qui monte, ou un effectif
+          qui baisse, sont comptés comme défavorables.</p>
+      </div>
+
+      <div class="panel">
+        <div class="toolbar" style="margin-bottom:14px;">
+          <h3 style="margin:0;flex:1;">Détail des semaines</h3>
+          <button class="btn" id="histoCopyBtn">📋 Copier pour GDoc</button>
+        </div>
+        <div class="table-wrap"><table class="gtable">
+          <thead><tr><th>Semaine</th><th>Période</th><th>Clôturée le</th>
+            <th class="num">Production</th><th class="num">CA</th><th class="num">Primes</th>
+            <th class="num">Éligibles</th><th class="num">Heures</th><th>🏆 Vainqueur</th><th></th></tr></thead>
+          <tbody>${weeks.map(w => `
+            <tr>
+              <td><b>${esc(w.label)}</b></td>
+              <td class="mono">${esc(w.du)} → ${esc(w.au)}</td>
+              <td class="mono">${esc(w.closedAt)}</td>
+              <td class="num">${prod(w).toLocaleString('fr-FR')}</td>
+              <td class="num">${fmt$(w.ca)}</td>
+              <td class="num" style="color:var(--prime);">${fmt$(w.primes)}</td>
+              <td class="num">${w.eligibles.length}</td>
+              <td class="num">${Math.floor((w.heures || 0) / 60)}h${pad((w.heures || 0) % 60)}</td>
+              <td>${esc(w.vainqueur || '—')}</td>
+              <td style="text-align:right;"><button class="icon-btn danger" data-histo-del="${esc(w.id)}"
+                  title="Supprimer cette semaine de l'historique">×</button></td>
+            </tr>`).join('')}</tbody>
+        </table></div>
+      </div>`;
+
+    const cp = $('histoCopyBtn');
+    if (cp) cp.addEventListener('click', copyHistoGDoc);
+  }
+
+  async function copyHistoGDoc() {
+    const weeks = (clotures.weeks || []).slice().reverse();
+    if (!weeks.length) { toast('Aucune semaine à copier.'); return; }
+    const r = await askForm('Copier pour le tableur', [
+      { key: 'entete', label: 'Inclure la ligne d\'en-tête', value: 'Oui', options: ['Oui', 'Non'] },
+    ], `${weeks.length} semaine(s) clôturée(s).`);
+    if (!r) return;
+
+    const prod = w => (w.production || []).reduce((s, p) => s + (p.barils || 0), 0);
+    const out = [];
+    if (r.entete === 'Oui') {
+      out.push(['Semaine', 'Du', 'Au', 'Clôturée le', 'Production', 'CA', 'Primes',
+                'Éligibles', 'Recrutements', 'Ventes', '% sans production', 'Effectif', 'Vainqueur'].join('\t'));
+    }
+    weeks.forEach(w => out.push([
+      w.label, w.du, w.au, w.closedAt, prod(w), Math.round(w.ca || 0), Math.round(w.primes || 0),
+      w.eligibles.length, w.recrutements || 0, w.ventes || 0, w.sansProduction || 0,
+      w.effectif || 0, w.vainqueur || '',
+    ].join('\t')));
+
+    copyToClipboard(out.join('\n'), 'Historique des semaines');
+  }
+
+  async function deleteHistoWeek(id) {
+    const i = clotures.weeks.findIndex(w => w.id === id);
+    if (i < 0) return;
+    const w = clotures.weeks[i];
+    if (!await confirmAction('Supprimer de l\'historique',
+      `${w.label} (${w.du} → ${w.au}) sera définitivement retirée. Cela n'annule pas la clôture, cela efface seulement son archive.`, true)) return;
+    clotures.weeks.splice(i, 1);
+    if (clotures.undo && clotures.undo.weekId === id) clotures.undo = null;
+    D().save('clotures', false);
+    renderHistorique();
+    renderWeekHistory();
+    refreshWeekHeaders();
+    toast('Semaine retirée de l\'historique.');
+  }
+
+  /* ========================================================================
+     PRIMES EXCEPTIONNELLES
+     ------------------------------------------------------------------------
+     Une gratification ponctuelle, hors barème et hors plafond : elle
+     s'ajoute au total des primes de la semaine en cours et se retrouve
+     dans l'archive à la clôture.
+     ======================================================================== */
+  const primesExc = [];
+
+  async function addPrimeExceptionnelle() {
+    const noms = [...new Set([
+      ...dash.map(d => d.name),
+      ...rhRosterData.map(e => e.name),
+    ])].sort();
+
+    const r = await askForm('Prime exceptionnelle', [
+      { key: 'nom', label: 'Bénéficiaire', value: noms[0] || '', options: noms.length ? noms : undefined },
+      { key: 'montant', label: 'Montant ($)', value: '10000' },
+      { key: 'motif', label: 'Motif', value: '' },
+    ], 'Hors barème et hors plafond. Elle s\'ajoute au total des primes de la semaine et sera archivée à la clôture.');
+    if (!r) return;
+
+    const montant = parseInt(String(r.montant).replace(/[^\d-]/g, ''), 10) || 0;
+    if (!r.nom) { toast('Choisissez un bénéficiaire.'); return; }
+    if (montant <= 0) { toast('Indiquez un montant supérieur à zéro.'); return; }
+
+    primesExc.push({ nom: r.nom, montant, motif: r.motif || '—', date: todayFR() });
+    D().save('primesExc', false);
+    renderPrimesExc();
+    renderBilan();
+    toast(`Prime exceptionnelle de ${montant.toLocaleString('fr-FR')} $ pour ${r.nom}.`);
+  }
+
+  async function removePrimeExc(i) {
+    const p = primesExc[Number(i)];
+    if (!p) return;
+    if (!await confirmAction('Retirer la prime exceptionnelle',
+      `${p.nom} — ${p.montant.toLocaleString('fr-FR')} $.`, true)) return;
+    primesExc.splice(Number(i), 1);
+    D().save('primesExc', false);
+    renderPrimesExc();
+    renderBilan();
+    toast('Prime retirée.');
+  }
+
+  /* Encart listant les primes exceptionnelles, inséré sur la page Primes. */
+  function renderPrimesExc() {
+    const head = document.querySelector('#page-statsprimes .primes-head');
+    if (!head) return;
+
+    let box = $('mvPrimesExc');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'mvPrimesExc';
+      box.className = 'panel';
+      box.style.marginTop = '18px';
+      head.parentNode.insertBefore(box, head.nextSibling);
+    }
+
+    const total = primesExc.reduce((s, p) => s + p.montant, 0);
+    box.style.display = primesExc.length ? '' : 'none';
+    if (!primesExc.length) return;
+
+    box.innerHTML = `
+      <h3>Primes exceptionnelles <span class="mv-unit">${primesExc.length} · ${total.toLocaleString('fr-FR')} $</span></h3>
+      <table class="gtable">
+        <thead><tr><th>Date</th><th>Bénéficiaire</th><th>Motif</th><th class="num">Montant</th><th></th></tr></thead>
+        <tbody>${primesExc.map((p, i) => `
+          <tr>
+            <td class="mono">${esc(p.date)}</td>
+            <td><b>${esc(p.nom)}</b></td>
+            <td>${esc(p.motif)}</td>
+            <td class="num" style="color:var(--prime);">${p.montant.toLocaleString('fr-FR')} $</td>
+            <td style="text-align:right;"><button class="icon-btn danger" data-primeexc-del="${i}"
+                title="Retirer">×</button></td>
+          </tr>`).join('')}</tbody>
+      </table>`;
+  }
+
+  /* ========================================================================
      LOT A — AJUSTEMENTS D'AFFICHAGE
      ======================================================================== */
   function injectStyles() {
@@ -1834,6 +2309,39 @@
         border-top:1px solid var(--band,#3D372C);font-family:'Fraunces',serif;}
       .mv-synth-row b.pos{color:var(--vine,#6E8B5D);} .mv-synth-row b.neg{color:#E08A7A;}
       .mv-synth-note{font-size:11px;color:var(--muted,#9C9384);margin-top:8px;text-align:right;font-style:italic;}
+
+      /* --- Cartes de synthèse et page Historique --- */
+      .mv-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px;}
+      .mv-kpis-8{margin-bottom:22px;}
+      @media(max-width:1200px){.mv-kpis{grid-template-columns:repeat(2,1fr);}}
+      @media(max-width:680px){.mv-kpis{grid-template-columns:1fr;}}
+      .mv-kpi{background:var(--oak,rgba(38,35,30,.86));border:1px solid var(--band,#3D372C);
+        border-radius:14px;padding:16px 18px;border-top:2px solid var(--or-soft,#8E7C4E);}
+      .mv-kpi-l{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
+        color:var(--muted,#9C9384);margin-bottom:9px;}
+      .mv-kpi-v{font-family:'Fraunces',serif;font-size:26px;font-weight:600;
+        color:var(--parchment,#EDE3CF);line-height:1.1;font-variant-numeric:tabular-nums;}
+      .mv-kpi-v.accent{color:var(--or,#C9A961);}
+      .mv-kpi-v.neg{color:#E88A72;}
+      .mv-kpi-v.small{font-size:19px;}
+      .mv-kpi-s{font-size:11px;color:var(--muted,#9C9384);margin-top:7px;line-height:1.45;}
+
+      .mv-chart{width:100%;height:auto;display:block;margin-top:6px;}
+      .mv-bar rect,.mv-dot circle{transition:opacity .15s;}
+      .mv-chart:hover .mv-bar{opacity:.55;} .mv-chart .mv-bar:hover{opacity:1;}
+      .mv-chart:hover .mv-dot{opacity:.55;} .mv-chart .mv-dot:hover{opacity:1;}
+      .mv-unit{font-family:'Inter',sans-serif;font-size:11px;font-weight:400;
+        color:var(--muted,#9C9384);margin-left:8px;letter-spacing:.04em;}
+
+      /* Les flèches disent le sens ; la couleur ne fait que confirmer —
+         vert et rouge sont indiscernables en deutéranopie. */
+      .mv-tr{font-size:10px;margin-left:5px;}
+      .mv-tr.up{color:#7FBF6A;} .mv-tr.down{color:#E88A72;} .mv-tr.eq{color:var(--muted,#9C9384);}
+
+      .bilan-chip.mv-forced{border-color:var(--amber,#D6A75C) !important;
+        color:var(--amber,#D6A75C) !important;}
+
+      .table-wrap{overflow-x:auto;}
 
       .action-icons{white-space:nowrap;}
       .action-icons .icon-btn{margin-left:4px;}`;
@@ -1885,7 +2393,8 @@
         '[data-hist-del],[data-hist-pdf],[data-client-del],[data-client-edit],' +
         '[data-article-del],[data-article-edit],[data-fr-del],[data-fr-edit],' +
         '[data-canva-del],[data-dash-del],[data-agenda-del],' +
-        '[data-eff-promote],[data-eff-edit],[data-eff-del],[data-abs-del]');
+        '[data-eff-promote],[data-eff-edit],[data-eff-del],[data-abs-del],' +
+        '[data-histo-del],[data-primeexc-del]');
       if (!t) return;
       const d = t.dataset;
       ev.preventDefault();
@@ -1905,6 +2414,8 @@
       if (d.canvaDel)      return deleteCanva(d.canvaDel);
       if (d.dashDel)       return deleteDashRow(d.dashDel);
       if (d.absDel)        return removeAbsence(d.absDel);
+      if (d.histoDel)      return deleteHistoWeek(d.histoDel);
+      if (d.primeexcDel)   return removePrimeExc(d.primeexcDel);
       if (d.effPromote)    return promoteEmployee(d.effPromote);
       if (d.effEdit)       return editEffectif(d.effEdit);
       if (d.effDel)        return deleteEffectif(d.effDel);
@@ -1918,6 +2429,7 @@
     on('addClientBtn', addClient);
     on('addArticleBtn', addArticle);
     on('mvAddEvent', addEvent);
+    on('primesExcBtn', addPrimeExceptionnelle);
     on('bcCopyBtn', copyDetailGDoc);
     on('depCopyBtn', copyDepensesGDoc);
     on('frArchiveBtn', archiveFactureRecue);
@@ -1959,6 +2471,7 @@
     renderEligibilite();
     renderBilan();
     renderWeekHistory();
+    renderHistorique();
     D().redraw('rhRecruiters');
   }
 
@@ -1986,5 +2499,9 @@
     recomputeRecruiters, refreshEffectifCount, reprintInvoice,
     refreshWeekDays, refreshWeekHeaders, renderEligibilite, closeWeek, undoClose,
     renderBilan, renderWeekHistory, copyDetailGDoc, copyDepensesGDoc,
+    renderHistorique, renderPrimesExc, addPrimeExceptionnelle,
   };
+
+  window.MarlowePrimesExc = primesExc;
+  window.MarloweBilanConfig = bilanConfig;
 })();

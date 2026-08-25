@@ -108,6 +108,8 @@
     { id: 'statseffectif',  label: 'Effectif',        group: 'Stats & Quotas' },
     { id: 'statsprimes',    label: 'Primes',          group: 'Stats & Quotas' },
 
+    { id: 'histo',          label: 'Historique',      group: 'Gestion' },
+
     { id: 'masemaine',      label: 'Ma semaine',      group: 'Personnel' },
     { id: 'agenda',         label: 'Agenda',          group: 'Personnel' },
     { id: 'tombola',        label: 'Tombola',         group: 'Personnel' },
@@ -125,6 +127,7 @@
   /* Répartition de départ — modifiable ensuite dans Paramètres.
      Le patron a tout, il n'a pas besoin d'être listé.                        */
   const PERSONNEL = ['masemaine', 'agenda', 'tombola'];
+  const GESTION   = ['histo'];
   const RH_PAGES  = ['rhemployes', 'rhrecrutement', 'blacklist'];
   const COMMERCE  = ['facturation', 'catalogue', 'bilan', 'facturesrecues'];
   const STATS     = ['eligibilite', 'statsvue', 'statsdash', 'statsgrades', 'statseffectif', 'statsprimes'];
@@ -140,11 +143,11 @@
     /* Tout le monde accède à son espace personnel */
     DEMO_ROLES.forEach(r => give(r, PERSONNEL));
 
-    /* Responsables */
-    give('DRH',                    [...RH_PAGES, ...STATS]);
-    give('Responsable Commercial', [...COMMERCE, ...STATS]);
-    give('Responsable Magasin',    ['facturation', 'catalogue', ...STATS]);
-    give('Responsable Runner',     ['catalogue', ...STATS]);
+    /* Responsables — l'historique du domaine leur est ouvert */
+    give('DRH',                    [...RH_PAGES, ...STATS, ...GESTION]);
+    give('Responsable Commercial', [...COMMERCE, ...STATS, ...GESTION]);
+    give('Responsable Magasin',    ['facturation', 'catalogue', ...STATS, ...GESTION]);
+    give('Responsable Runner',     ['catalogue', ...STATS, ...GESTION]);
 
     /* Employés */
     give('RH',                     [...RH_PAGES, 'eligibilite']);
