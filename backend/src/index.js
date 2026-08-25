@@ -416,6 +416,30 @@ async function handlePresence(request, env) {
   return json(env, { membres, moi: s.user.id });
 }
 
+/* GET /api/orga  —  ROUTE PUBLIQUE
+   La vitrine est un site public : elle ne peut pas se connecter avec un compte.
+   Cette route lui donne donc le strict minimum pour dessiner l'organigramme —
+   un prénom-nom et un poste, rien d'autre.
+
+   Ce qui reste DANS le panel et ne sort jamais d'ici : numéro civil, téléphone,
+   RIB, Discord, recruteur, dates, motifs d'absence. Une fiche RH complète ne
+   doit jamais se retrouver sur une page ouverte à tout San Andreas. */
+async function handleOrga(request, env) {
+  if (request.method !== 'GET') return json(env, { error: 'method' }, 405);
+
+  const d = await env.MARLOWE.get('data', 'json') || {};
+  const roster = Array.isArray(d.rhRoster) ? d.rhRoster : [];
+
+  const membres = roster.slice(0, 400).map(e => ({
+    nom:    String(e && e.name || '').slice(0, 60),
+    poste:  String(e && e.poste || '').slice(0, 60),
+    absent: (e && e.status) ? e.status !== 'actif' : false,
+  })).filter(m => m.nom && m.poste);
+
+  const m = await env.MARLOWE.get('datameta', 'json');
+  return json(env, { membres, rev: (m && m.rev) || 0 });
+}
+
 /* GET | PUT /api/settings
    Réglages du panel. Aujourd'hui : la liste des rôles retenus comme rôles
    du domaine (les autres — partenaires, décoratifs — sont écartés). */
@@ -583,6 +607,7 @@ export default {
         case '/api/roles':       return handleRoles(request, env);
         case '/api/permissions': return handlePermissions(request, env);
         case '/api/settings':    return handleSettings(request, env);
+        case '/api/orga':        return handleOrga(request, env);
         case '/api/data':        return handleData(request, env);
         case '/api/presence':    return handlePresence(request, env);
         case '/api/journal':     return handleJournal(request, env);

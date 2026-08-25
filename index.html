@@ -51,6 +51,7 @@
     --speck:rgba(217,184,114,.30);
     --shadow:0 20px 50px rgba(0,0,0,.5);
     --card-shadow:none;
+    --veil:linear-gradient(165deg, rgba(9,17,12,.90) 0%, rgba(15,34,23,.88) 45%, rgba(11,24,16,.93) 100%);
 
     --g1:#8FBF8F;  /* Saisonnier */
     --g2:#D9B872;  /* Ouvrier viticole */
@@ -89,6 +90,7 @@
     --speck:rgba(143,110,36,.18);
     --shadow:0 20px 50px rgba(20,40,28,.14);
     --card-shadow:0 2px 10px rgba(20,40,28,.05);
+    --veil:linear-gradient(165deg, rgba(250,247,240,.93) 0%, rgba(245,241,230,.90) 45%, rgba(239,235,221,.94) 100%);
 
     --g1:#4E7A52;
     --g2:#8F6E24;
@@ -253,6 +255,24 @@
   .org-card .who{font-size:12.5px;color:var(--muted);margin-top:7px;line-height:1.6;}
 
   .org-top{max-width:340px;margin:0 auto;}
+  .org-duo{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;max-width:620px;margin:0 auto;}
+  .org-solo{max-width:340px;margin:0 auto;}
+  @media(max-width:640px){.org-duo{grid-template-columns:1fr;}}
+  .org-card .who[data-names] span{display:block;}
+  .who .absent{color:var(--gold-soft);opacity:.75;}
+  .who .vacant, .pill-names .vacant{font-style:italic;opacity:.55;}
+  .org-pill{display:flex;flex-direction:column;gap:5px;padding:11px 16px;border-radius:14px;}
+  .pill-role{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold-soft);}
+  .pill-names{font-size:12.5px;color:var(--text);line-height:1.55;}
+  .pill-names span{display:block;}
+  .org-ladder{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;}
+  @media(max-width:900px){.org-ladder{grid-template-columns:1fr;}}
+  .org-step{border:1px solid var(--line);border-radius:14px;background:var(--card);padding:18px 20px;
+    text-align:center;box-shadow:var(--card-shadow);}
+  .org-step .grade-tag{display:block;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--gold-soft);margin-bottom:8px;}
+  .org-step .role{font-family:'Fraunces',serif;font-weight:600;font-size:15px;}
+  .org-step .who{font-size:12.5px;color:var(--muted);margin-top:7px;line-height:1.6;}
+  .org-note{text-align:center;font-size:12px;color:var(--muted);margin:26px 0 0;}
   .org-connector{width:1px;height:34px;background:var(--gold-line);margin:0 auto;}
   .org-branches{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;position:relative;padding-top:34px;}
   .org-branches::before{content:'';position:absolute;top:0;left:12.5%;right:12.5%;height:1px;background:var(--gold-line);}
@@ -267,6 +287,65 @@
     .org-branches::before{left:50%;right:auto;width:1px;top:0;bottom:0;height:auto;}
     .org-branch::before{display:none;}
   }
+
+
+
+  /* ===== FOND ANIMÉ (photos du domaine) =====
+     Une scène fixe derrière toute la page : les photos se fondent l'une dans
+     l'autre et l'angle de vue suit la souris. Le voile au-dessus garantit que
+     le texte reste lisible quelle que soit la photo affichée. */
+  .bg-scene{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;}
+  .bg-move{position:absolute;inset:-7%;will-change:transform;
+    transition:transform .5s cubic-bezier(.22,.61,.36,1);}
+  .bg-shot{position:absolute;inset:0;background-size:cover;background-position:center;
+    opacity:0;transition:opacity 2s ease;}
+  .bg-shot.on{opacity:1;}
+  .bg-veil{position:absolute;inset:0;background:var(--veil);}
+  @media(prefers-reduced-motion:reduce){
+    .bg-move{transition:none;}
+    .bg-shot{transition:none;}
+  }
+
+  /* ===== LOCATION DU DOMAINE ===== */
+  .loc-intro{display:grid;grid-template-columns:1.02fr .98fr;gap:44px;align-items:start;}
+  @media(max-width:960px){.loc-intro{grid-template-columns:1fr;gap:32px;}}
+  .loc-lead{font-size:15.5px;line-height:1.75;color:var(--muted);}
+  .loc-lead p + p{margin-top:16px;}
+  .loc-lead b{color:var(--text);font-weight:600;}
+
+  .loc-options{display:flex;flex-direction:column;gap:16px;}
+  .loc-opt{border:1px solid var(--line);border-radius:16px;background:var(--card);padding:22px 24px;
+    box-shadow:var(--card-shadow);}
+  .loc-opt.main{border-color:var(--gold-line-2);background:var(--card-2);}
+  .loc-opt-top{display:flex;align-items:baseline;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:9px;}
+  .loc-opt h3{font-family:'Fraunces',serif;font-weight:600;font-size:16.5px;}
+  .loc-price{font-family:'Fraunces',serif;font-weight:600;font-size:22px;color:var(--gold);white-space:nowrap;}
+  .loc-opt p{font-size:13.5px;line-height:1.65;color:var(--muted);}
+  .loc-opt .tag{display:inline-block;font-size:10px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--gold-soft);margin-bottom:10px;}
+
+  .loc-gal{display:flex;flex-direction:column;gap:18px;margin-top:44px;}
+  .loc-gal figure{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--card);
+    box-shadow:var(--card-shadow);}
+  .loc-gal img{display:block;width:100%;height:auto;}
+  .loc-gal figcaption{font-size:12px;color:var(--muted);padding:12px 18px;border-top:1px solid var(--line);}
+
+  .part-head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin:56px 0 8px;}
+  .part-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;margin-top:22px;}
+  @media(max-width:860px){.part-grid{grid-template-columns:1fr;}}
+  .part-card{border:1px solid var(--line);border-radius:16px;background:var(--card);padding:20px 22px;
+    box-shadow:var(--card-shadow);}
+  .part-card h4{font-family:'Fraunces',serif;font-weight:600;font-size:15.5px;margin-bottom:12px;
+    display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+  .part-card h4 .cut{font-family:'Inter',sans-serif;font-size:11.5px;font-weight:600;color:var(--gold);
+    border:1px solid var(--gold-line);border-radius:999px;padding:4px 11px;white-space:nowrap;}
+  .part-card ul{list-style:none;display:flex;flex-direction:column;gap:7px;}
+  .part-card li{font-size:13px;line-height:1.6;color:var(--muted);padding-left:15px;position:relative;}
+  .part-card li::before{content:'';position:absolute;left:0;top:8px;width:5px;height:5px;border-radius:50%;
+    background:var(--gold-soft);opacity:.7;}
+  .part-card li b{color:var(--text);font-weight:600;}
+  .part-note{font-size:12.5px;line-height:1.7;color:var(--muted);margin-top:22px;
+    border-left:2px solid var(--gold-line);padding-left:16px;}
 
   /* ===== GRADES & RÉMUNÉRATION ===== */
   .base-pay{display:flex;align-items:center;gap:16px;flex-wrap:wrap;
@@ -322,6 +401,8 @@
 
   .join-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:52px;align-items:start;}
   @media(max-width:900px){.join-grid{grid-template-columns:1fr;gap:36px;}}
+  .join-grid.solo{grid-template-columns:minmax(0,560px);justify-content:center;}
+  .join-grid.solo .discord-panel{text-align:center;}
   .expect h3{font-family:'Fraunces',serif;font-weight:600;font-size:21px;margin-bottom:22px;}
   .expect ul{list-style:none;display:flex;flex-direction:column;gap:16px;}
   .expect li{display:grid;grid-template-columns:auto 1fr;gap:12px;font-size:14px;line-height:1.65;color:var(--muted);}
@@ -384,6 +465,16 @@
   </svg>
 </template>
 
+<div class="bg-scene" id="bgScene" aria-hidden="true">
+  <div class="bg-move" id="bgMove">
+    <div class="bg-shot" data-shot="img/bg1.jpg"></div>
+    <div class="bg-shot" data-shot="img/bg2.jpg"></div>
+    <div class="bg-shot" data-shot="img/bg3.jpg"></div>
+    <div class="bg-shot" data-shot="img/bg4.jpg"></div>
+  </div>
+  <div class="bg-veil"></div>
+</div>
+
 <div class="wrap">
 
   <nav>
@@ -403,6 +494,7 @@
       <li><a href="#">Le Domaine</a></li>
       <li><a href="#catalogue">Catalogue</a></li>
       <li><a href="#">Feuilleter</a></li>
+      <li><a href="#location">Location</a></li>
       <li><a href="#organigramme">Organisation</a></li>
       <li><a href="#grades">Grades</a></li>
       <li><a href="#carrieres">Carrières</a></li>
@@ -467,41 +559,65 @@
     </div>
 
     <div class="org-tier">Direction</div>
-    <div class="org-top">
-      <div class="org-card lead">
-        <div class="role">Direction</div>
-        <div class="who">Patron<br>Co-Patrons</div>
+    <div class="org-duo">
+      <div class="org-card lead" data-poste="Patron">
+        <div class="role">Patron</div><div class="who" data-names>—</div>
+      </div>
+      <div class="org-card lead" data-poste="Co-Patron">
+        <div class="role">Co-Patron</div><div class="who" data-names>—</div>
       </div>
     </div>
 
     <div class="org-connector"></div>
-    <div class="org-tier" style="margin:0 0 6px;">Responsables</div>
+    <div class="org-solo">
+      <div class="org-card lead" data-poste="Responsable Général">
+        <div class="role">Responsable Général</div><div class="who" data-names>—</div>
+      </div>
+    </div>
+
+    <div class="org-connector"></div>
+    <div class="org-tier" style="margin:0 0 6px;">Responsables &amp; pôles</div>
 
     <div class="org-branches">
       <div class="org-branch">
-        <div class="org-card"><div class="role">DRH</div><div class="who">Ressources humaines</div></div>
-        <div class="org-down">↓</div>
-        <div class="org-sub"><div class="org-pill">RH</div></div>
-      </div>
-      <div class="org-branch">
-        <div class="org-card"><div class="role">Resp. Commercial</div><div class="who">Ventes &amp; partenariats</div></div>
-        <div class="org-down">↓</div>
-        <div class="org-sub"><div class="org-pill">Commercial</div></div>
-      </div>
-      <div class="org-branch">
-        <div class="org-card"><div class="role">Resp. Magasin</div><div class="who">Boutique &amp; stock</div></div>
+        <div class="org-card" data-poste="DRH"><div class="role">DRH</div><div class="who" data-names>—</div></div>
         <div class="org-down">↓</div>
         <div class="org-sub">
-          <div class="org-pill">Assistant(e) magasin</div>
-          <div class="org-pill">Vendeur</div>
+          <div class="org-pill" data-poste="RH"><span class="pill-role">RH</span><span class="pill-names" data-names>—</span></div>
         </div>
       </div>
       <div class="org-branch">
-        <div class="org-card"><div class="role">Resp. Runner</div><div class="who">Livraisons</div></div>
+        <div class="org-card" data-poste="Resp. Commercial"><div class="role">Resp. Commercial</div><div class="who" data-names>—</div></div>
         <div class="org-down">↓</div>
-        <div class="org-sub"><div class="org-pill">Runner</div></div>
+        <div class="org-sub">
+          <div class="org-pill" data-poste="Commercial"><span class="pill-role">Commercial</span><span class="pill-names" data-names>—</span></div>
+        </div>
+      </div>
+      <div class="org-branch">
+        <div class="org-card" data-poste="Resp. Magasin"><div class="role">Resp. Magasin</div><div class="who" data-names>—</div></div>
+        <div class="org-down">↓</div>
+        <div class="org-sub">
+          <div class="org-pill" data-poste="Assistant(e) magasin"><span class="pill-role">Assistant(e) magasin</span><span class="pill-names" data-names>—</span></div>
+          <div class="org-pill" data-poste="Vendeur|Vendeuse"><span class="pill-role">Vendeur · Vendeuse</span><span class="pill-names" data-names>—</span></div>
+        </div>
+      </div>
+      <div class="org-branch">
+        <div class="org-card" data-poste="Resp. Runner"><div class="role">Resp. Runner</div><div class="who" data-names>—</div></div>
+        <div class="org-down">↓</div>
+        <div class="org-sub">
+          <div class="org-pill" data-poste="Runner"><span class="pill-role">Runner</span><span class="pill-names" data-names>—</span></div>
+        </div>
       </div>
     </div>
+
+    <div class="org-tier" style="margin:52px 0 20px;">Parcours production</div>
+    <div class="org-ladder">
+      <div class="org-step" data-poste="Chef de culture"><div class="grade-tag">Grade 3</div><div class="role">Chef de culture</div><div class="who" data-names>—</div></div>
+      <div class="org-step" data-poste="Ouvrier viticole"><div class="grade-tag">Grade 2</div><div class="role">Ouvrier viticole</div><div class="who" data-names>—</div></div>
+      <div class="org-step" data-poste="Saisonnier"><div class="grade-tag">Grade 1</div><div class="role">Saisonnier</div><div class="who" data-names>—</div></div>
+    </div>
+
+    <p class="org-note" id="orgNote" hidden></p>
   </section>
 
   <!-- ===== GRADES & RÉMUNÉRATION ===== -->
@@ -509,12 +625,12 @@
     <div class="sec-head">
       <div class="eyebrow">Carrière</div>
       <h2>Grades &amp; <em>rémunération</em>.</h2>
-      <p class="sec-desc">Tu montes en grade en produisant. Chaque palier a son quota hebdomadaire, ses récompenses et sa prime — et plus tu montes, plus chaque bouteille te rapporte.</p>
+      <p class="sec-desc">Tu montes en grade en produisant. Chaque palier a son quota hebdomadaire, son salaire, ses récompenses — et plus tu montes, plus le bonus versé au quota est élevé.</p>
     </div>
 
     <div class="base-pay">
       <div class="bp-amount">10 $ / bouteille</div>
-      <div class="bp-text">La <b>base commune à tous les grades</b> : 10 $ pour chaque bouteille vendue. Les primes et les bonus ci-dessous viennent s'ajouter dès que le quota hebdomadaire est atteint.</div>
+      <div class="bp-text">La <b>base commune à tous les grades</b> : 10 $ pour chaque bouteille vendue. Les salaires et les bonus ci-dessous viennent s'ajouter dès que le quota hebdomadaire est atteint.</div>
     </div>
 
     <div class="grade-grid">
@@ -527,7 +643,7 @@
         <div class="grade-block">
           <div class="grade-lbl">Quota hebdomadaire</div>
           <div class="grade-big">3 000 <span>bouteilles</span></div>
-          <div class="grade-bonus">Prime <b>30 000 $</b> + <b>1 $</b> par bouteille vendue</div>
+          <div class="grade-bonus">Salaire <b>30 000 $</b> + <b>3 000 $</b> de bonus au quota</div>
         </div>
         <div class="grade-block">
           <div class="grade-lbl">Si le quota est fait</div>
@@ -547,7 +663,7 @@
         <div class="grade-block">
           <div class="grade-lbl">Quota hebdomadaire</div>
           <div class="grade-big">5 000 <span>bouteilles</span></div>
-          <div class="grade-bonus">Prime <b>50 000 $</b> + <b>2 $</b> par bouteille vendue</div>
+          <div class="grade-bonus">Salaire <b>50 000 $</b> + <b>10 000 $</b> de bonus au quota</div>
         </div>
         <div class="grade-block">
           <div class="grade-lbl">Si le quota est fait</div>
@@ -568,7 +684,7 @@
         <div class="grade-block">
           <div class="grade-lbl">Quota hebdomadaire</div>
           <div class="grade-big">8 000 <span>bouteilles</span></div>
-          <div class="grade-bonus">Prime <b>80 000 $</b> + <b>3 $</b> par bouteille vendue</div>
+          <div class="grade-bonus">Salaire <b>80 000 $</b> + <b>24 000 $</b> de bonus au quota</div>
         </div>
         <div class="grade-block">
           <div class="grade-lbl">Si le quota est fait</div>
@@ -583,32 +699,32 @@
 
     </div>
 
-    <h3 class="sub-head">Rémunération &amp; primes en un coup d'œil</h3>
+    <h3 class="sub-head">Salaires &amp; bonus en un coup d'œil</h3>
     <div class="table-scroll">
       <table class="pay">
         <thead>
-          <tr><th>Grade</th><th>Quota hebdo</th><th>Prime si quota atteint</th><th>Bonus / bouteille</th><th>Récompenses</th></tr>
+          <tr><th>Grade</th><th>Quota hebdo</th><th>Salaire en poche</th><th>Bonus au quota</th><th>Récompenses</th></tr>
         </thead>
         <tbody>
           <tr>
             <td><span class="g-pill g-1">Saisonnier</span></td>
             <td class="num">3 000 bouteilles</td>
             <td class="prime">30 000 $</td>
-            <td class="num">+ 1 $</td>
+            <td class="num">+ 3 000 $</td>
             <td>15 menus · 15 bidons</td>
           </tr>
           <tr>
             <td><span class="g-pill g-2">Ouvrier Viticole</span></td>
             <td class="num">5 000 bouteilles</td>
             <td class="prime">50 000 $</td>
-            <td class="num">+ 2 $</td>
+            <td class="num">+ 10 000 $</td>
             <td>25 menus · 20 bidons · 1 ticket tombola</td>
           </tr>
           <tr>
             <td><span class="g-pill g-3">Chef de Culture</span></td>
             <td class="num">8 000 bouteilles</td>
             <td class="prime">80 000 $</td>
-            <td class="num">+ 3 $</td>
+            <td class="num">+ 24 000 $</td>
             <td>50 menus · 30 bidons · 2 tickets tombola</td>
           </tr>
         </tbody>
@@ -633,7 +749,7 @@
       <div class="perk-card">
         <div class="ico">💰</div>
         <h3>Payé chaque semaine</h3>
-        <p>10 $ garantis par bouteille vendue, plus une prime calculée sur ta production réelle. Tout est transparent dans ton espace membre.</p>
+        <p>10 $ garantis par bouteille vendue, plus ton salaire et le bonus versé dès que le quota est atteint. Tout est transparent dans ton espace membre.</p>
       </div>
       <div class="perk-card">
         <div class="ico">📈</div>
@@ -655,22 +771,21 @@
         <h3>Ambiance domaine</h3>
         <p>Dégustations, événements privés, soirées vendanges. On travaille sérieusement sans se prendre au sérieux.</p>
       </div>
+      <div class="perk-card">
+        <div class="ico">🎟️</div>
+        <h3>Tombola chaque semaine</h3>
+        <p>Un ticket gagné dès l'Ouvrier Viticole, deux au Chef de Culture. Tirage tous les lundis, lots offerts par le domaine et ses partenaires.</p>
+      </div>
+      <div class="perk-card">
+        <div class="ico">🎉</div>
+        <h3>Événements réguliers</h3>
+        <p>Vendanges, dégustations, soirées privées et locations du domaine. Il y a toujours quelque chose à faire vivre sur place.</p>
+      </div>
     </div>
 
     <div class="pull-quote">« Tu plantes. Tu récoltes. Tu progresses. »</div>
 
-    <div class="join-grid">
-      <div class="expect">
-        <h3>Ce qu'on attend de toi</h3>
-        <ul>
-          <li><div><b>Le respect avant tout.</b> Collègues, clients, concurrents : tout le monde est traité correctement. C'est non négociable.</div></li>
-          <li><div><b>De la régularité.</b> Mieux vaut deux sessions calmes par semaine que dix heures d'un coup puis plus rien.</div></li>
-          <li><div><b>Un micro qui fonctionne.</b> On travaille en équipe sur le Discord du domaine.</div></li>
-          <li><div><b>Un personnage cohérent.</b> Pas de RP incohérent sur le domaine, on tient à notre réputation.</div></li>
-          <li><div><b>L'envie d'apprendre.</b> Aucune expérience demandée : on t'apprend tout, de la taille à la vinification.</div></li>
-        </ul>
-      </div>
-
+    <div class="join-grid solo">
       <div class="discord-panel">
         <div class="dico">
           <svg viewBox="0 0 127.14 96.36" fill="currentColor" aria-hidden="true"><path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21H0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,46,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,46,96.12,53,91.08,65.69,84.69,65.69Z"/></svg>
@@ -702,8 +817,8 @@
         <div class="step">
           <div class="step-n">2</div>
           <div>
-            <h3>Faire une demande de devis</h3>
-            <p>Indiquez les cuvées, les quantités et le lieu de livraison. Un commercial du domaine revient vers vous avec une facture détaillée.</p>
+            <h3>Créer un ticket</h3>
+            <p>Indiquez vos besoins, les quantités et le lieu de livraison. Un commercial du domaine revient vers vous avec une facture détaillée.</p>
           </div>
         </div>
         <div class="step">
@@ -718,7 +833,6 @@
       <div class="client-panel">
         <h3>Ce que ça vous apporte</h3>
         <ul class="perks">
-          <li><div>Tarifs dégressifs <span>— remises appliquées automatiquement selon le volume commandé.</span></div></li>
           <li><div>Accès au catalogue entreprise <span>— grilles B2B et cuvées non disponibles à la vente publique.</span></div></li>
           <li><div>Un interlocuteur dédié <span>— un commercial du domaine suit votre compte et vos commandes.</span></div></li>
           <li><div>Livraison sous 24 h <span>— sur tout San Andreas, assurée par nos runners.</span></div></li>
@@ -726,6 +840,117 @@
         <a href="https://discord.gg/CG4gYAEat" target="_blank" rel="noopener" class="btn btn-gold">Ouvrir un compte client</a>
       </div>
     </div>
+  </section>
+
+  <!-- ===== LOCATION DU DOMAINE ===== -->
+  <section id="location">
+    <div class="sec-head">
+      <div class="eyebrow">Location</div>
+      <h2>Location <em>du domaine</em>.</h2>
+      <p class="sec-desc">Un cadre d'exception pour vos projets — événements, shootings photo &amp; vidéo, séminaires et expériences immersives.</p>
+    </div>
+
+    <div class="loc-intro">
+      <div class="loc-lead">
+        <p>Le domaine <b>Marlowe Vineyard</b> vous ouvre ses portes pour vos événements, shootings photo &amp; vidéo, séminaires et expériences immersives.</p>
+        <p>Cadre luxueux au cœur des vignes, <b>espaces intérieurs et extérieurs modulables</b> : villa, salons, suites, zone VIP, terrasses et parcelles.</p>
+        <p>Nous sommes ouverts à toute proposition de collaboration et de partenariat. Contactez-nous sur le Discord du domaine pour discuter de votre projet.</p>
+        <a href="https://discord.gg/CG4gYAEat" target="_blank" rel="noopener" class="btn btn-gold" style="margin-top:8px;">Réserver le domaine</a>
+      </div>
+
+      <div class="loc-options">
+        <div class="loc-opt main">
+          <span class="tag">Option 1</span>
+          <div class="loc-opt-top">
+            <h3>Intérieur &amp; Extérieur de la Villa</h3>
+            <div class="loc-price">50 000 $</div>
+          </div>
+          <p>Accès complet aux espaces intérieurs et extérieurs du domaine.</p>
+        </div>
+        <div class="loc-opt">
+          <span class="tag">Option 2 · en complément</span>
+          <div class="loc-opt-top">
+            <h3>Supplément Suite &amp; Zone VIP</h3>
+            <div class="loc-price">25 000 $</div>
+          </div>
+          <p>Accès aux suites privées et à la zone VIP, en complément de l'Option 1.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="loc-gal">
+      <figure>
+        <img src="img/villa1.jpg" alt="Cuisine, salon et vue aérienne du domaine" loading="lazy" width="930" height="645">
+        <figcaption>Cuisine, grand salon, salle de billard et vue d'ensemble sur les vignes.</figcaption>
+      </figure>
+      <figure>
+        <img src="img/villa2.jpg" alt="Salle de jeux, bar, suites et salle de bain du domaine" loading="lazy" width="1319" height="523">
+        <figcaption>Zone VIP, bar avec service, suites privées et salles d'eau.</figcaption>
+      </figure>
+    </div>
+
+    <div class="part-head">
+      <h3 class="sub-head" style="margin:0;">Nos partenaires</h3>
+    </div>
+    <p class="sec-desc" style="margin-bottom:0;">Ces réductions s'appliquent dès lors qu'une location du domaine Marlowe a lieu.</p>
+
+    <div class="part-grid">
+      <div class="part-card">
+        <h4>Ls Event</h4>
+        <ul>
+          <li>Décoration et/ou table de mixage — <b>30 000 $</b></li>
+        </ul>
+      </div>
+      <div class="part-card">
+        <h4>Burning Bush</h4>
+        <ul>
+          <li>DJ — <b>20 000 $</b> par heure</li>
+          <li>Danseuse — <b>6 000 $</b> par heure</li>
+          <li>+ <b>5 000 $</b> pour 5 minutes de danse privée</li>
+        </ul>
+      </div>
+      <div class="part-card">
+        <h4>Nyrex Créative <span class="cut">Totalité −20 %</span></h4>
+        <ul>
+          <li>Photographe — réduction de <b>15 %</b></li>
+          <li>Stylisme — réduction de <b>15 %</b></li>
+          <li>Graphiste — réduction de <b>15 %</b></li>
+        </ul>
+      </div>
+      <div class="part-card">
+        <h4>Shashin Sutajio <span class="cut">−15 %</span></h4>
+        <ul>
+          <li>Shooting Event</li>
+          <li>Album photo WWI</li>
+          <li>Album Custom</li>
+          <li>Tenue Event</li>
+          <li>Tenue mariage (mariés + témoins)</li>
+        </ul>
+      </div>
+      <div class="part-card">
+        <h4>Favela's Record</h4>
+        <ul>
+          <li>Mega Mix — <b>100 000 $</b></li>
+          <li>Show case de leurs artistes — selon l'artiste</li>
+        </ul>
+      </div>
+      <div class="part-card">
+        <h4>Gruppe Sechs <span class="cut">−20 %</span></h4>
+        <ul>
+          <li>Réduction de <b>20 %</b> sur le tarif en vigueur</li>
+        </ul>
+      </div>
+      <div class="part-card">
+        <h4>Les Restaurants</h4>
+        <ul>
+          <li>Burger Shot Sud</li>
+          <li>Umami</li>
+          <li>Pizzeria Sud</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="part-note">Cette carte est vouée à évoluer en fonction de nos partenariats.</p>
   </section>
 
   <div class="coming-next">Les sections « Le Domaine », « Feuilleter » et « Contact » seront complétées avec les contenus à venir.</div>
@@ -766,6 +991,14 @@ const CATALOGUE_CANVA = [
    desc:'Grille publique, remises par volume et délais sur San Andreas.',
    embedUrl:null},
 ];
+
+/* --- L'ORGANIGRAMME --------------------------------------------------
+   Les noms ne se saisissent PAS ici : ils viennent des fiches employés
+   du panneau de gestion. Tu ajoutes quelqu'un dans « Recrutement » avec
+   le bon poste, et il apparaît ici tout seul.
+   Cette adresse est celle du backend ; ne la change que si tu redéploies
+   le Worker sous un autre nom.                                        */
+const ORGA_API = 'https://marlowe-api.marlowe-vineyard.workers.dev/api/orga';
 
 /* ==================================================================
    ▲▲▲  FIN DU CONTENU ÉDITABLE  ▲▲▲
@@ -902,6 +1135,131 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
     const d = e.target.closest('[data-go]');
     if(d) show(Number(d.dataset.go));
   });
+})();
+
+/* ==================================================================
+   FOND ANIMÉ — fondu entre les photos + angle de vue qui suit la souris
+   ================================================================== */
+(function(){
+  const move  = document.getElementById('bgMove');
+  const shots = move ? [...move.querySelectorAll('.bg-shot')] : [];
+  if(!shots.length) return;
+
+  const calme = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* La première photo se charge tout de suite, les autres seulement une fois
+     la page affichée : le premier rendu n'attend jamais 800 Ko d'images. */
+  function charger(i){
+    const el = shots[i];
+    if(!el || el.dataset.pret) return;
+    el.dataset.pret = '1';
+    el.style.backgroundImage = `url("${el.dataset.shot}")`;
+  }
+  charger(0);
+  shots[0].classList.add('on');
+
+  const reste = () => shots.forEach((_, i) => i && charger(i));
+  if(document.readyState === 'complete') reste();
+  else window.addEventListener('load', reste, { once:true });
+
+  /* Fondu enchaîné. À l'arrêt si l'onglet est en arrière-plan : inutile de
+     faire tourner une animation que personne ne regarde. */
+  if(!calme && shots.length > 1){
+    let i = 0;
+    setInterval(() => {
+      if(document.hidden) return;
+      shots[i].classList.remove('on');
+      i = (i + 1) % shots.length;
+      charger(i);
+      shots[i].classList.add('on');
+    }, 9000);
+  }
+
+  /* Parallaxe. Le pointeur donne une cible, un lissage l'y amène :
+     sans ça le fond sautille à chaque pixel de souris. */
+  if(!calme && matchMedia('(hover: hover)').matches){
+    let cx = 0, cy = 0, x = 0, y = 0, anime = false;
+
+    function boucle(){
+      x += (cx - x) * .06;
+      y += (cy - y) * .06;
+      move.style.transform = `translate3d(${x.toFixed(2)}%, ${y.toFixed(2)}%, 0) scale(1.04)`;
+      if(Math.abs(cx - x) > .01 || Math.abs(cy - y) > .01) requestAnimationFrame(boucle);
+      else anime = false;
+    }
+
+    window.addEventListener('pointermove', e => {
+      cx = ((e.clientX / window.innerWidth)  - .5) * -3.2;
+      cy = ((e.clientY / window.innerHeight) - .5) * -3.2;
+      if(!anime){ anime = true; requestAnimationFrame(boucle); }
+    }, { passive:true });
+  }
+})();
+
+/* ==================================================================
+   ORGANIGRAMME — les noms viennent des fiches RH du panneau
+   ================================================================== */
+(function(){
+  const boxes = document.querySelectorAll('#organigramme [data-poste]');
+  const note  = document.getElementById('orgNote');
+  if(!boxes.length) return;
+
+  /* Deux personnes peuvent écrire « Résp. Magasin », « resp magasin »
+     ou « Resp. Magasin  ». On compare donc sur une forme neutre :
+     minuscules, sans accents, sans ponctuation.                      */
+  const clef = s => String(s || '').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ').trim();
+
+  function poser(membres){
+    const parPoste = new Map();
+    membres.forEach(m => {
+      const k = clef(m.poste);
+      if(!parPoste.has(k)) parPoste.set(k, []);
+      parPoste.get(k).push(m);
+    });
+
+    boxes.forEach(box => {
+      const cible = box.querySelector('[data-names]');
+      if(!cible) return;
+
+      /* « Vendeur|Vendeuse » : un même encadré peut réunir deux libellés. */
+      const gens = box.dataset.poste.split('|')
+        .flatMap(p => parPoste.get(clef(p)) || []);
+
+      if(!gens.length){
+        cible.innerHTML = '<span class="vacant">Poste à pourvoir</span>';
+        return;
+      }
+      gens.sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
+      cible.innerHTML = gens.map(m =>
+        `<span class="${m.absent ? 'absent' : ''}">${esc(m.nom)}${m.absent ? ' · absent' : ''}</span>`
+      ).join('');
+    });
+  }
+
+  /* Si le backend ne répond pas, la page garde les postes sans les noms :
+     un organigramme incomplet vaut mieux qu'un organigramme faux.      */
+  fetch(ORGA_API, { cache: 'no-store' })
+    .then(r => r.ok ? r.json() : Promise.reject(r.status))
+    .then(d => {
+      const membres = Array.isArray(d && d.membres) ? d.membres : [];
+      poser(membres);
+      if(!membres.length && note){
+        note.textContent = "Les noms s'affichent dès que les fiches employés sont saisies dans l'espace membre.";
+        note.hidden = false;
+      }
+    })
+    .catch(() => {
+      boxes.forEach(b => {
+        const c = b.querySelector('[data-names]');
+        if(c) c.innerHTML = '';
+      });
+      if(note){
+        note.textContent = "Les noms n'ont pas pu être chargés — l'organisation des pôles reste à jour ci-dessus.";
+        note.hidden = false;
+      }
+    });
 })();
 </script>
 </body>

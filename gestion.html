@@ -629,7 +629,21 @@
           <div class="card-head"><div class="ci">+</div><div class="card-title">Nouvel employé</div></div>
           <div class="field-row">
             <div class="field"><label>Prénom Nom</label><input type="text" id="newEmpName" placeholder="Prénom Nom"></div>
-            <div class="field"><label>Poste</label><select id="newEmpPoste"><option>Saisonnier</option><option>Ouvrier viticole</option><option>Chef de culture</option><option>Vendeur</option><option>Commercial</option></select></div>
+            <div class="field"><label>Poste</label><select id="newEmpPoste">
+              <optgroup label="Direction">
+                <option>Patron</option><option>Co-Patron</option><option>Responsable Général</option>
+              </optgroup>
+              <optgroup label="Responsables">
+                <option>DRH</option><option>Resp. Commercial</option><option>Resp. Magasin</option><option>Resp. Runner</option>
+              </optgroup>
+              <optgroup label="Pôles">
+                <option>RH</option><option>Commercial</option><option>Assistant(e) magasin</option>
+                <option>Vendeur</option><option>Vendeuse</option><option>Runner</option>
+              </optgroup>
+              <optgroup label="Production">
+                <option>Saisonnier</option><option>Ouvrier viticole</option><option>Chef de culture</option>
+              </optgroup>
+            </select></div>
           </div>
           <div class="field-row">
             <div class="field"><label>Date d'arrivée</label><input type="text" id="newEmpDate" placeholder="jj/mm/aaaa"></div>
