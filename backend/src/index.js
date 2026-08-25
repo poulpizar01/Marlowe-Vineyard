@@ -341,6 +341,8 @@ const COLLECTION_PAGES = {
   agenda:          ['agenda'],
   serviceHistory:  ['masemaine'],
   tombola:         ['tombola'],
+  /* La vitrine ne se règle que depuis Paramètres, donc réservée au patron. */
+  vitrine:         [],
 };
 
 function canWrite(session, collection, perms, ro) {
@@ -438,6 +440,88 @@ async function handleOrga(request, env) {
 
   const m = await env.MARLOWE.get('datameta', 'json');
   return json(env, { membres, rev: (m && m.rev) || 0 });
+}
+
+/* ---------------------------------------------------------------------------
+   Images de la vitrine
+   ---------------------------------------------------------------------------
+   Le patron dépose ses visuels depuis le panel ; ils sont stockés ici et servis
+   publiquement à la page d'accueil. Les fichiers sont déjà réduits par le
+   navigateur avant l'envoi — ce plafond n'est qu'un garde-fou contre un envoi
+   accidentel de 12 Mo.                                                       */
+
+const IMG_MAX   = 1200 * 1024;                       // 1,2 Mo par image
+const IMG_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+
+/* GET /api/img/{id}  —  PUBLIC
+   Sert un visuel déposé depuis le panel. Mis en cache un an côté navigateur :
+   l'identifiant change à chaque nouveau dépôt, donc une image ne peut jamais
+   rester périmée dans le cache de quelqu'un. */
+async function handleImage(request, env, id) {
+  if (request.method !== 'GET') return json(env, { error: 'method' }, 405);
+  if (!/^[a-z0-9]{6,40}$/.test(id)) return json(env, { error: 'not_found' }, 404);
+
+  const bin = await env.MARLOWE.getWithMetadata('img:' + id, { type: 'arrayBuffer' });
+  if (!bin || !bin.value) return json(env, { error: 'not_found' }, 404);
+
+  const type = (bin.metadata && bin.metadata.type) || 'application/octet-stream';
+  return new Response(bin.value, {
+    headers: {
+      'Content-Type': type,
+      'Cache-Control': 'public, max-age=31536000, immutable',
+      'Access-Control-Allow-Origin': allowedOrigin(env),
+    },
+  });
+}
+
+/* POST /api/upload  —  patron uniquement
+   Le corps est le fichier brut ; le type arrive dans Content-Type. On répond
+   avec l'identifiant, que le panel range dans ses données. */
+async function handleUpload(request, env) {
+  if (request.method !== 'POST') return json(env, { error: 'method' }, 405);
+
+  const s = await currentSession(request, env);
+  if (!s) return json(env, { error: 'unauthorized' }, 401);
+  if (!s.isPatron) return json(env, { error: 'forbidden' }, 403);
+
+  const type = (request.headers.get('Content-Type') || '').split(';')[0].trim();
+  if (!IMG_TYPES.includes(type)) return json(env, { error: 'bad_type', accepte: IMG_TYPES }, 415);
+
+  const buf = await request.arrayBuffer();
+  if (!buf.byteLength) return json(env, { error: 'empty' }, 400);
+  if (buf.byteLength > IMG_MAX) return json(env, { error: 'too_large', max: IMG_MAX }, 413);
+
+  const id = [...crypto.getRandomValues(new Uint8Array(10))]
+    .map(b => b.toString(36).padStart(2, '0')).join('').slice(0, 20);
+
+  await env.MARLOWE.put('img:' + id, buf, { metadata: { type, taille: buf.byteLength } });
+  return json(env, { id, url: '/api/img/' + id, type, taille: buf.byteLength });
+}
+
+/* GET /api/vitrine  —  PUBLIC
+   Ce que la page d'accueil a le droit de savoir : les nouveautés et les pages
+   du catalogue. Rien d'autre du panel ne transite par ici. */
+async function handleVitrine(request, env) {
+  if (request.method !== 'GET') return json(env, { error: 'method' }, 405);
+
+  const d = await env.MARLOWE.get('data', 'json') || {};
+  const v = (d.vitrine && typeof d.vitrine === 'object') ? d.vitrine : {};
+
+  const texte = (x, n) => String(x == null ? '' : x).slice(0, n);
+  const nouveautes = (Array.isArray(v.nouveautes) ? v.nouveautes : [])
+    .slice(0, 5)
+    .map(n => ({ img: texte(n && n.img, 400), titre: texte(n && n.titre, 120), texte: texte(n && n.texte, 300) }))
+    .filter(n => n.img);
+
+  const catalogue = {
+    titre: texte(v.catTitre, 120) || 'Catalogue du domaine',
+    desc:  texte(v.catDesc, 300),
+    pdf:   texte(v.catPdf, 400),
+    pages: (Array.isArray(v.catPages) ? v.catPages : []).slice(0, 40).map(x => texte(x, 400)).filter(Boolean),
+  };
+
+  const m = await env.MARLOWE.get('datameta', 'json');
+  return json(env, { nouveautes, catalogue, rev: (m && m.rev) || 0 });
 }
 
 /* GET | PUT /api/settings
@@ -600,6 +684,12 @@ export default {
     }
 
     try {
+      /* /api/img/{id} porte l'identifiant dans le chemin : le switch ne sait
+         pas filtrer là-dessus, on l'attrape avant. */
+      if (url.pathname.startsWith('/api/img/')) {
+        return handleImage(request, env, url.pathname.slice('/api/img/'.length));
+      }
+
       switch (url.pathname) {
         case '/api/login':       return handleLogin(request, env, url);
         case '/api/callback':    return handleCallback(request, env, url);
@@ -608,6 +698,8 @@ export default {
         case '/api/permissions': return handlePermissions(request, env);
         case '/api/settings':    return handleSettings(request, env);
         case '/api/orga':        return handleOrga(request, env);
+        case '/api/vitrine':     return handleVitrine(request, env);
+        case '/api/upload':      return handleUpload(request, env);
         case '/api/data':        return handleData(request, env);
         case '/api/presence':    return handlePresence(request, env);
         case '/api/journal':     return handleJournal(request, env);

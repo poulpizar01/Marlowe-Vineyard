@@ -233,28 +233,33 @@
   .sec-desc{font-size:15px;line-height:1.75;color:var(--muted);margin-top:16px;}
   .sub-head{font-family:'Fraunces',serif;font-weight:600;font-size:21px;margin:56px 0 20px;}
 
-  /* ===== CATALOGUE / CANVA ===== */
-  .canva-viewport{position:relative;border-radius:14px;overflow:hidden;border:1px solid var(--line);
-    background:var(--surface);aspect-ratio:16/7.2;}
-  @media(max-width:760px){.canva-viewport{aspect-ratio:4/3;}}
-  .canva-slide{position:absolute;inset:0;opacity:0;transition:opacity .3s ease;pointer-events:none;}
-  .canva-slide.active{opacity:1;pointer-events:auto;}
-  .canva-slide iframe{position:absolute;inset:0;width:100%;height:100%;border:none;}
-  .canva-placeholder{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:0 60px;text-align:center;}
-  .canva-placeholder span{font-family:'Fraunces',serif;font-style:italic;color:var(--gold-soft);opacity:.75;font-size:15px;}
-  .canva-cap{position:absolute;left:0;right:0;bottom:0;padding:18px 22px;
-    background:linear-gradient(0deg, rgba(0,0,0,.80), transparent);}
-  .canva-cap .ct{font-weight:600;font-size:14.5px;color:#F3EFE4;}
-  .canva-cap .cd{font-size:12px;color:#C4D0C6;margin-top:3px;}
-  .canva-arrow{position:absolute;top:50%;transform:translateY(-50%);width:36px;height:36px;border-radius:50%;
-    background:var(--glass);border:1px solid var(--line-2);color:var(--text);
-    display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;
-    backdrop-filter:blur(4px);transition:.15s;z-index:3;}
-  .canva-arrow:hover{background:var(--glass-2);border-color:var(--gold);color:var(--gold);}
-  .canva-arrow.prev{left:14px;} .canva-arrow.next{right:14px;}
-  .canva-dots{display:flex;justify-content:center;gap:6px;margin-top:16px;}
-  .canva-dot{width:7px;height:7px;border-radius:50%;background:var(--dot);cursor:pointer;transition:.18s;border:none;padding:0;}
-  .canva-dot.active{background:var(--gold);width:20px;border-radius:4px;}
+  /* ===== CATALOGUE ===== */
+  .cat-viewport{position:relative;border-radius:14px;overflow:hidden;border:1px solid var(--line);
+    background:var(--surface);aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;}
+  @media(max-width:760px){.cat-viewport{aspect-ratio:3/4;}}
+  .cat-viewport img{max-width:100%;max-height:100%;width:auto;height:auto;display:block;
+    opacity:0;transition:opacity .25s ease;}
+  /* display:block l'emporte sur la règle par défaut de [hidden] : sans cette
+     ligne les pages masquées restent dans le flux et se rangent côte à côte. */
+  .cat-viewport img[hidden]{display:none;}
+  .cat-viewport img.on{opacity:1;}
+  /* En plein écran le cadre occupe l'écran : l'aspect fixe n'a plus lieu d'être. */
+  .cat-viewport:fullscreen{aspect-ratio:auto;width:100vw;height:100vh;border-radius:0;
+    background:var(--glass-2);}
+  .cat-bar{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-top:14px;}
+  .cat-bar[hidden]{display:none;}
+  .cat-nav{display:flex;align-items:center;gap:10px;}
+  .cat-count{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;min-width:64px;text-align:center;}
+  .cat-tools{display:flex;gap:9px;flex-wrap:wrap;}
+  .cat-btn{border:1px solid var(--line-2);background:transparent;color:var(--text);cursor:pointer;
+    border-radius:999px;width:38px;height:38px;font-size:17px;line-height:1;display:inline-flex;
+    align-items:center;justify-content:center;font-family:inherit;text-decoration:none;transition:.15s;}
+  .cat-btn.wide{width:auto;padding:0 18px;font-size:13px;font-weight:500;}
+  .cat-btn:hover{border-color:var(--gold);color:var(--gold);}
+  .cat-btn:disabled{opacity:.35;cursor:default;}
+  .cat-btn[hidden]{display:none;}
+  .cat-placeholder{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:0 60px;text-align:center;}
+  .cat-placeholder span{font-family:'Fraunces',serif;font-style:italic;color:var(--gold-soft);opacity:.75;font-size:15px;}
 
   /* ===== ORGANIGRAMME ===== */
   .org-tier{font-size:10.5px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:var(--gold-soft);
@@ -589,12 +594,22 @@
     <div class="sec-head">
       <div class="eyebrow">Catalogue</div>
       <h2>La gamme du domaine, <em>à feuilleter</em>.</h2>
-      <p class="sec-desc">Cuvées, millésimes, tarifs et conditions de livraison — tout est réuni dans nos catalogues. Utilisez les flèches pour passer d'un document à l'autre.</p>
+      <p class="sec-desc" id="catDesc">Cuvées, millésimes, tarifs et conditions de livraison — tout est réuni dans notre catalogue. Utilisez les flèches pour tourner les pages.</p>
     </div>
 
-    <div class="canva-carousel">
-      <div class="canva-viewport" id="canvaViewport"></div>
-      <div class="canva-dots" id="canvaDots"></div>
+    <div class="cat-wrap">
+      <div class="cat-viewport" id="catViewport"></div>
+      <div class="cat-bar" id="catBar" hidden>
+        <div class="cat-nav">
+          <button class="cat-btn" data-page="-1" aria-label="Page précédente">‹</button>
+          <span class="cat-count" id="catCount">1 / 1</span>
+          <button class="cat-btn" data-page="1" aria-label="Page suivante">›</button>
+        </div>
+        <div class="cat-tools">
+          <button class="cat-btn wide" id="catFull">⛶ Plein écran</button>
+          <a class="cat-btn wide" id="catPdf" hidden download>⬇ Télécharger le PDF</a>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -1018,35 +1033,16 @@
    directement ici.
    ================================================================== */
 
-/* --- LES NOUVEAUTÉS : 5 images maximum -------------------------------
-   Format : {img:'URL de l\'image', titre:'Titre', texte:'Description'}
-   Exemple :
-     {img:'https://cdn.discordapp.com/.../affiche.png',
-      titre:'Cuvée d\'automne 2026',
-      texte:'Disponible au domaine dès vendredi soir.'}
-   Liste vide  ->  le blason du domaine s'affiche à la place.        */
-const NOUVEAUTES = [];
-
-/* --- LE CATALOGUE : liens Canva du carrousel -------------------------
-   embedUrl : l'URL d'intégration Canva
-              (Canva ▸ Partager ▸ Plus ▸ Intégrer ▸ « Lien intelligent »)
-   null      ->  un aperçu « à venir » s'affiche à la place.          */
-const CATALOGUE_CANVA = [
-  {titre:'Marlowe Vineyard · Carte des cuvées',
-   desc:'La gamme complète du domaine, millésime par millésime.',
-   embedUrl:null},
-  {titre:'Tarifs & conditions de livraison',
-   desc:'Grille publique, remises par volume et délais sur San Andreas.',
-   embedUrl:null},
-];
-
-/* --- L'ORGANIGRAMME --------------------------------------------------
-   Les noms ne se saisissent PAS ici : ils viennent des fiches employés
-   du panneau de gestion. Tu ajoutes quelqu'un dans « Recrutement » avec
-   le bon poste, et il apparaît ici tout seul.
-   Cette adresse est celle du backend ; ne la change que si tu redéploies
-   le Worker sous un autre nom.                                        */
-const ORGA_API = 'https://marlowe-api.marlowe-vineyard.workers.dev/api/orga';
+/* --- RIEN NE SE SAISIT ICI -------------------------------------------
+   Les nouveautés, le catalogue et l'organigramme sont pilotés depuis
+   l'espace membre :
+     · Paramètres ▸ Vitrine du site   pour les images et le catalogue
+     · Recrutement                    pour les noms de l'organigramme
+   Cette adresse est celle du backend ; ne la changez que si le Worker
+   est redéployé sous un autre nom.                                    */
+const API_BASE     = 'https://marlowe-api.marlowe-vineyard.workers.dev';
+const ORGA_API     = API_BASE + '/api/orga';
+const VITRINE_API  = API_BASE + '/api/vitrine';
 
 /* ==================================================================
    ▲▲▲  FIN DU CONTENU ÉDITABLE  ▲▲▲
@@ -1081,108 +1077,152 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
   });
 })();
 
-/* ---------------- Nouveautés ---------------- */
+/* ==================================================================
+   VITRINE PILOTÉE PAR L'ESPACE MEMBRE
+   Les nouveautés et le catalogue viennent du panneau de gestion.
+   Un seul appel sert les deux : c'est la même donnée côté serveur.
+   ================================================================== */
 (function(){
   const frame   = document.getElementById('newsFrame');
   const dotsBox = document.getElementById('newsDots');
   const eyebrow = document.getElementById('newsEyebrow');
-  const news    = (Array.isArray(NOUVEAUTES) ? NOUVEAUTES : []).slice(0, MAX_NOUVEAUTES);
-  let idx = 0;
+  const vue     = document.getElementById('catViewport');
+  const barre   = document.getElementById('catBar');
 
-  if(!news.length){
+  /* Le blason tient la place tant que rien n'est publié — et pour toujours si
+     le patron n'a rien mis. Il s'affiche AVANT l'appel réseau : la page ne doit
+     jamais montrer un trou en attendant le serveur. */
+  function blason(){
     frame.classList.add('is-crest');
     frame.innerHTML = document.getElementById('crestTpl').innerHTML;
-    return;
+    eyebrow.hidden = true;
+    dotsBox.innerHTML = '';
+  }
+  blason();
+  vue.innerHTML = `<div class="cat-placeholder"><span>Catalogue en préparation — bientôt disponible.</span></div>`;
+
+  /* ---------------- Les nouveautés ---------------- */
+  function poserNouveautes(news){
+    if(!news.length){ blason(); return; }
+
+    frame.classList.remove('is-crest');
+    eyebrow.hidden = false;
+    const multi = news.length > 1;
+
+    frame.innerHTML =
+      news.map((n, i) => `
+        <div class="news-slide${i === 0 ? ' active' : ''}">
+          <img src="${esc(n.img)}" alt="${esc(n.titre || 'Nouveauté du domaine')}" loading="lazy">
+          ${(n.titre || n.texte) ? `<div class="news-cap">
+            ${n.titre ? `<div class="nt">${esc(n.titre)}</div>` : ''}
+            ${n.texte ? `<div class="nd">${esc(n.texte)}</div>` : ''}
+          </div>` : ''}
+        </div>`).join('')
+      + (multi ? `<button class="news-arrow prev" data-step="-1" aria-label="Nouveauté précédente">‹</button>
+                  <button class="news-arrow next" data-step="1"  aria-label="Nouveauté suivante">›</button>` : '');
+
+    dotsBox.innerHTML = multi ? news.map((_, i) =>
+      `<button class="news-dot${i === 0 ? ' active' : ''}" data-go="${i}" aria-label="Nouveauté ${i+1}"></button>`).join('') : '';
+
+    const slides = frame.querySelectorAll('.news-slide');
+    const dots   = dotsBox.querySelectorAll('.news-dot');
+    let idx = 0;
+
+    function show(i){
+      idx = (i + news.length) % news.length;
+      slides.forEach((s, k) => s.classList.toggle('active', k === idx));
+      dots.forEach((d, k) => d.classList.toggle('active', k === idx));
+    }
+    frame.addEventListener('click', e => {
+      const a = e.target.closest('[data-step]');
+      if(a) show(idx + Number(a.dataset.step));
+    });
+    dotsBox.addEventListener('click', e => {
+      const d = e.target.closest('[data-go]');
+      if(d) show(Number(d.dataset.go));
+    });
   }
 
-  eyebrow.hidden = false;
-  const multi = news.length > 1;
+  /* ---------------- Le catalogue ---------------- */
+  function poserCatalogue(cat){
+    const pages = Array.isArray(cat.pages) ? cat.pages : [];
 
-  frame.innerHTML =
-    news.map((n, i) => `
-      <div class="news-slide${i === 0 ? ' active' : ''}">
-        <img src="${esc(n.img)}" alt="${esc(n.titre || 'Nouveauté du domaine')}" loading="lazy">
-        ${(n.titre || n.texte) ? `<div class="news-cap">
-          ${n.titre ? `<div class="nt">${esc(n.titre)}</div>` : ''}
-          ${n.texte ? `<div class="nd">${esc(n.texte)}</div>` : ''}
-        </div>` : ''}
-      </div>`).join('')
-    + (multi ? `<button class="news-arrow prev" data-step="-1" aria-label="Nouveauté précédente">‹</button>
-                <button class="news-arrow next" data-step="1"  aria-label="Nouveauté suivante">›</button>` : '');
+    if(cat.titre) document.querySelector('#catalogue h2').innerHTML = esc(cat.titre);
+    if(cat.desc)  document.getElementById('catDesc').textContent = cat.desc;
 
-  if(multi){
-    dotsBox.innerHTML = news.map((_, i) =>
-      `<button class="news-dot${i === 0 ? ' active' : ''}" data-go="${i}" aria-label="Nouveauté ${i+1}"></button>`).join('');
+    const lienPdf = document.getElementById('catPdf');
+    if(cat.pdf){
+      lienPdf.href = cat.pdf;
+      lienPdf.hidden = false;
+      barre.hidden = false;
+    }
+    if(!pages.length) return;
+
+    vue.innerHTML = pages.map((u, i) =>
+      `<img src="${esc(u)}" alt="Page ${i+1} du catalogue" hidden ${i ? 'loading="lazy"' : ''}>`).join('');
+
+    const imgs   = [...vue.querySelectorAll('img')];
+    const compte = document.getElementById('catCount');
+    const prec   = barre.querySelector('[data-page="-1"]');
+    const suiv   = barre.querySelector('[data-page="1"]');
+    let p = 0;
+
+    function montrer(i){
+      p = Math.min(Math.max(i, 0), imgs.length - 1);
+      imgs.forEach((im, k) => {
+        im.hidden = k !== p;
+        im.classList.toggle('on', k === p);
+      });
+      compte.textContent = `${p + 1} / ${imgs.length}`;
+      prec.disabled = p === 0;
+      suiv.disabled = p === imgs.length - 1;
+      /* La page suivante est préchargée dès qu'on arrive sur celle-ci :
+         tourner la page doit être instantané, pas attendre le réseau. */
+      const apres = imgs[p + 1];
+      if(apres) apres.removeAttribute('loading');
+    }
+
+    barre.hidden = false;
+    montrer(0);
+
+    barre.addEventListener('click', e => {
+      const b = e.target.closest('[data-page]');
+      if(b) montrer(p + Number(b.dataset.page));
+    });
+
+    /* Plein écran : le cadre lui-même passe en plein écran, pas la page —
+       comme ça les flèches du clavier continuent de tourner les pages. */
+    const plein = document.getElementById('catFull');
+    plein.addEventListener('click', () => {
+      if(document.fullscreenElement) document.exitFullscreen();
+      else if(vue.requestFullscreen) vue.requestFullscreen().catch(() => {});
+    });
+    document.addEventListener('fullscreenchange', () => {
+      plein.textContent = document.fullscreenElement ? '⛶ Quitter' : '⛶ Plein écran';
+    });
+
+    document.addEventListener('keydown', e => {
+      if(e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      const dedans = document.fullscreenElement === vue
+        || vue.getBoundingClientRect().top < innerHeight * .7;
+      if(!dedans) return;
+      montrer(p + (e.key === 'ArrowRight' ? 1 : -1));
+    });
+
+    vue.addEventListener('click', e => {
+      /* Un clic à droite avance, à gauche recule : le réflexe d'une liseuse. */
+      const r = vue.getBoundingClientRect();
+      montrer(p + (e.clientX - r.left > r.width / 2 ? 1 : -1));
+    });
   }
 
-  const slides = frame.querySelectorAll('.news-slide');
-  const dots   = dotsBox.querySelectorAll('.news-dot');
-
-  function show(i){
-    idx = (i + news.length) % news.length;
-    slides.forEach((s, k) => s.classList.toggle('active', k === idx));
-    dots.forEach((d, k) => d.classList.toggle('active', k === idx));
-  }
-
-  frame.addEventListener('click', e => {
-    const a = e.target.closest('[data-step]');
-    if(a) show(idx + Number(a.dataset.step));
-  });
-  dotsBox.addEventListener('click', e => {
-    const d = e.target.closest('[data-go]');
-    if(d) show(Number(d.dataset.go));
-  });
-})();
-
-/* ---------------- Catalogue Canva ---------------- */
-(function(){
-  const view    = document.getElementById('canvaViewport');
-  const dotsBox = document.getElementById('canvaDots');
-  const slidesData = Array.isArray(CATALOGUE_CANVA) ? CATALOGUE_CANVA : [];
-  let idx = 0;
-
-  if(!slidesData.length){
-    view.innerHTML = `<div class="canva-placeholder"><span>Catalogue en préparation — bientôt disponible.</span></div>`;
-    return;
-  }
-  const multi = slidesData.length > 1;
-
-  view.innerHTML =
-    slidesData.map((s, i) => `
-      <div class="canva-slide${i === 0 ? ' active' : ''}">
-        ${s.embedUrl
-          ? `<iframe src="${esc(s.embedUrl)}" allowfullscreen loading="lazy" title="${esc(s.titre)}"></iframe>`
-          : `<div class="canva-placeholder"><span>Lien Canva non renseigné — aperçu à venir</span></div>`}
-        <div class="canva-cap">
-          <div class="ct">${esc(s.titre)}</div>
-          <div class="cd">${esc(s.desc)}</div>
-        </div>
-      </div>`).join('')
-    + (multi ? `<button class="canva-arrow prev" data-step="-1" aria-label="Document précédent">‹</button>
-                <button class="canva-arrow next" data-step="1"  aria-label="Document suivant">›</button>` : '');
-
-  if(multi){
-    dotsBox.innerHTML = slidesData.map((_, i) =>
-      `<button class="canva-dot${i === 0 ? ' active' : ''}" data-go="${i}" aria-label="Document ${i+1}"></button>`).join('');
-  }
-
-  const slides = view.querySelectorAll('.canva-slide');
-  const dots   = dotsBox.querySelectorAll('.canva-dot');
-
-  function show(i){
-    idx = (i + slidesData.length) % slidesData.length;
-    slides.forEach((s, k) => s.classList.toggle('active', k === idx));
-    dots.forEach((d, k) => d.classList.toggle('active', k === idx));
-  }
-
-  view.addEventListener('click', e => {
-    const a = e.target.closest('[data-step]');
-    if(a) show(idx + Number(a.dataset.step));
-  });
-  dotsBox.addEventListener('click', e => {
-    const d = e.target.closest('[data-go]');
-    if(d) show(Number(d.dataset.go));
-  });
+  fetch(VITRINE_API, { cache: 'no-store' })
+    .then(r => r.ok ? r.json() : Promise.reject(r.status))
+    .then(d => {
+      poserNouveautes((Array.isArray(d.nouveautes) ? d.nouveautes : []).slice(0, MAX_NOUVEAUTES));
+      poserCatalogue((d && d.catalogue) || {});
+    })
+    .catch(() => { /* serveur injoignable : le blason et le message d'attente restent */ });
 })();
 
 /* ==================================================================

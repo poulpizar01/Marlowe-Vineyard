@@ -3428,6 +3428,252 @@
      comme n'importe quelle autre collection. */
   window.MarloweClotures = clotures;
 
+
+/* ==========================================================================
+   VITRINE DU SITE — nouveautés et catalogue
+   --------------------------------------------------------------------------
+   Le patron dépose ici les visuels qui s'afficheront sur la page d'accueil.
+   Les fichiers sont réduits DANS LE NAVIGATEUR avant d'être envoyés : une
+   capture de jeu fait facilement 4 Mo, et personne n'a envie d'attendre ça au
+   chargement de la vitrine. On monte le résultat à 1 600 px de large, ce qui
+   reste net sur un grand écran.
+   ========================================================================== */
+
+  const vitrine = { nouveautes: [], catTitre: '', catDesc: '', catPdf: '', catPages: [] };
+  const NOUV_MAX = 5;
+  const CAT_MAX  = 40;
+
+  function cfgAuth() { return (window.MarloweAuth && window.MarloweAuth.CONFIG) || {}; }
+
+  function jeton() {
+    try { return JSON.parse(localStorage.getItem('mv.token') || 'null'); } catch (e) { return null; }
+  }
+
+  /* Réduit un fichier image et renvoie un Blob JPEG. Un PDF passe tel quel :
+     il n'y a rien à redimensionner, et le recompresser le casserait. */
+  function reduireImage(file, cote = 1600) {
+    if (file.type === 'application/pdf') return Promise.resolve(file);
+
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const im = new Image();
+      im.onload = () => {
+        URL.revokeObjectURL(url);
+        const ech = Math.min(1, cote / Math.max(im.width, im.height));
+        const c = document.createElement('canvas');
+        c.width  = Math.round(im.width  * ech);
+        c.height = Math.round(im.height * ech);
+        c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+        c.toBlob(b => b ? resolve(b) : reject(new Error('conversion impossible')), 'image/jpeg', 0.82);
+      };
+      im.onerror = () => { URL.revokeObjectURL(url); reject(new Error('image illisible')); };
+      im.src = url;
+    });
+  }
+
+  async function envoyerFichier(file) {
+    const cfg = cfgAuth();
+    const tok = jeton();
+    if (!cfg.API_BASE || !tok) throw new Error('connectez-vous au panel avant de déposer un visuel');
+
+    const blob = await reduireImage(file);
+    const res = await fetch(cfg.API_BASE + '/api/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': blob.type || file.type, 'Authorization': 'Bearer ' + tok },
+      body: blob,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (res.status === 413) throw new Error('fichier trop lourd même après réduction');
+      if (res.status === 403) throw new Error('seul le patron peut déposer un visuel');
+      throw new Error(data.error || ('erreur ' + res.status));
+    }
+    return cfg.API_BASE + data.url;
+  }
+
+  function renderVitrine() {
+    const box = document.getElementById('mvVitrine');
+    if (!box) return;
+
+    const n = vitrine.nouveautes;
+    const cartes = n.length ? n.map((x, i) => `
+      <li class="mv-nouv" data-i="${i}">
+        <div class="mv-nouv-vis" style="background-image:url('${String(x.img).replace(/'/g, "%27")}')"></div>
+        <div class="mv-nouv-champs">
+          <input type="text" data-champ="titre" data-i="${i}" placeholder="Titre (facultatif)" value="${esc(x.titre || '')}">
+          <input type="text" data-champ="texte" data-i="${i}" placeholder="Une ligne de description (facultatif)" value="${esc(x.texte || '')}">
+        </div>
+        <div class="mv-nouv-actions">
+          <button class="btn" data-mv="up"   data-i="${i}" title="Monter"    ${i === 0 ? 'disabled' : ''}>↑</button>
+          <button class="btn" data-mv="down" data-i="${i}" title="Descendre" ${i === n.length - 1 ? 'disabled' : ''}>↓</button>
+          <button class="btn" data-mv="del"  data-i="${i}" title="Retirer">✕</button>
+        </div>
+      </li>`).join('')
+      : `<li class="mv-vide-note">Aucune nouveauté publiée — la page d'accueil affiche le blason du domaine à la place.</li>`;
+
+    const pages = vitrine.catPages.length
+      ? vitrine.catPages.map((u, i) => `
+          <li class="mv-page" data-i="${i}">
+            <span class="mv-page-n">${i + 1}</span>
+            <div class="mv-page-vis" style="background-image:url('${String(u).replace(/'/g, "%27")}')"></div>
+            <button class="btn" data-cat="up"   data-i="${i}" ${i === 0 ? 'disabled' : ''}>↑</button>
+            <button class="btn" data-cat="down" data-i="${i}" ${i === vitrine.catPages.length - 1 ? 'disabled' : ''}>↓</button>
+            <button class="btn" data-cat="del"  data-i="${i}">✕</button>
+          </li>`).join('')
+      : `<li class="mv-vide-note">Aucune page déposée — le site affiche « catalogue en préparation ».</li>`;
+
+    box.innerHTML = `
+      <h3>Vitrine du site</h3>
+      <p class="mv-sub">Ce que vous déposez ici s'affiche sur la page d'accueil publique,
+        sans rien avoir à republier.</p>
+
+      <div class="mv-vit-sec">
+        <div class="mv-vit-head">
+          <h4>Les nouveautés <span class="mv-cpt">${n.length} / ${NOUV_MAX}</span></h4>
+          <div>
+            <input type="file" id="mvNouvFile" accept="image/*" hidden>
+            <button class="btn primary" id="mvNouvAdd" ${n.length >= NOUV_MAX ? 'disabled' : ''}>+ Ajouter une image</button>
+          </div>
+        </div>
+        <ul class="mv-nouv-list">${cartes}</ul>
+      </div>
+
+      <div class="mv-vit-sec">
+        <div class="mv-vit-head">
+          <h4>Catalogue <span class="mv-cpt">${vitrine.catPages.length} page${vitrine.catPages.length > 1 ? 's' : ''}</span></h4>
+          <div>
+            <input type="file" id="mvCatFiles" accept="image/*" multiple hidden>
+            <input type="file" id="mvCatPdf" accept="application/pdf" hidden>
+            <button class="btn primary" id="mvCatAdd">+ Déposer des pages</button>
+            <button class="btn" id="mvCatPdfBtn">${vitrine.catPdf ? 'Remplacer le PDF' : 'Joindre le PDF'}</button>
+          </div>
+        </div>
+        <div class="mv-vit-champs">
+          <input type="text" id="mvCatTitre" placeholder="Titre du catalogue" value="${esc(vitrine.catTitre || '')}">
+          <input type="text" id="mvCatDesc" placeholder="Une ligne de présentation" value="${esc(vitrine.catDesc || '')}">
+        </div>
+        ${vitrine.catPdf ? `<p class="mv-pdf-ok">PDF joint — un bouton de téléchargement s'affiche sur le site.
+            <button class="btn" id="mvCatPdfDel">Retirer</button></p>` : ''}
+        <ul class="mv-page-list">${pages}</ul>
+        <p class="mv-hint">Exportez votre catalogue en <b>PNG ou JPG</b> pour l'affichage — une image par page,
+          dans l'ordre. Le PDF est facultatif : il sert uniquement au bouton de téléchargement.</p>
+      </div>
+
+      <div class="btn-row" style="margin-top:6px;align-items:center;">
+        <button class="btn primary" id="mvVitSave">Publier sur le site</button>
+        <span class="mv-saved" id="mvVitSaved">Publié ✓</span>
+      </div>`;
+  }
+
+  function sauverVitrine(note) {
+    const D = window.MarloweData;
+    if (!D) return;
+    D.note(note || 'Vitrine du site mise à jour');
+    D.save('vitrine', false);
+    renderVitrine();
+  }
+
+  function occupe(btn, actif, texte) {
+    if (!btn) return;
+    btn.disabled = actif;
+    if (actif) { btn.dataset.avant = btn.textContent; btn.textContent = texte || 'Envoi…'; }
+    else if (btn.dataset.avant) { btn.textContent = btn.dataset.avant; }
+  }
+
+  /* Toute la vitrine passe par la délégation : le panneau se redessine à chaque
+     ajout, des écouteurs posés sur les boutons seraient perdus aussitôt. */
+  document.addEventListener('click', async e => {
+    const box = document.getElementById('mvVitrine');
+    if (!box || !box.contains(e.target)) return;
+
+    if (e.target.closest('#mvNouvAdd'))   { document.getElementById('mvNouvFile').click(); return; }
+    if (e.target.closest('#mvCatAdd'))    { document.getElementById('mvCatFiles').click(); return; }
+    if (e.target.closest('#mvCatPdfBtn')) { document.getElementById('mvCatPdf').click();   return; }
+
+    if (e.target.closest('#mvCatPdfDel')) { vitrine.catPdf = ''; sauverVitrine('PDF du catalogue retiré'); return; }
+
+    const b = e.target.closest('[data-mv]');
+    if (b) {
+      const i = +b.dataset.i, l = vitrine.nouveautes;
+      if (b.dataset.mv === 'del')  l.splice(i, 1);
+      if (b.dataset.mv === 'up'   && i > 0)            [l[i - 1], l[i]] = [l[i], l[i - 1]];
+      if (b.dataset.mv === 'down' && i < l.length - 1) [l[i + 1], l[i]] = [l[i], l[i + 1]];
+      sauverVitrine('Nouveautés réorganisées');
+      return;
+    }
+
+    const c = e.target.closest('[data-cat]');
+    if (c) {
+      const i = +c.dataset.i, l = vitrine.catPages;
+      if (c.dataset.cat === 'del')  l.splice(i, 1);
+      if (c.dataset.cat === 'up'   && i > 0)            [l[i - 1], l[i]] = [l[i], l[i - 1]];
+      if (c.dataset.cat === 'down' && i < l.length - 1) [l[i + 1], l[i]] = [l[i], l[i + 1]];
+      sauverVitrine('Pages du catalogue réorganisées');
+      return;
+    }
+
+    if (e.target.closest('#mvVitSave')) {
+      vitrine.catTitre = (document.getElementById('mvCatTitre') || {}).value || '';
+      vitrine.catDesc  = (document.getElementById('mvCatDesc')  || {}).value || '';
+      sauverVitrine('Vitrine publiée');
+      const ok = document.getElementById('mvVitSaved');
+      if (ok) { ok.classList.add('on'); setTimeout(() => ok.classList.remove('on'), 1800); }
+    }
+  });
+
+  /* Les champs de texte ne déclenchent pas de redessin : on les recopie dans les
+     données au fil de la frappe, sinon le curseur sauterait à chaque lettre. */
+  document.addEventListener('input', e => {
+    const ch = e.target.closest('#mvVitrine [data-champ]');
+    if (!ch) return;
+    const x = vitrine.nouveautes[+ch.dataset.i];
+    if (x) x[ch.dataset.champ] = ch.value;
+  });
+  document.addEventListener('change', async e => {
+    const box = document.getElementById('mvVitrine');
+    if (!box || !box.contains(e.target)) return;
+    const input = e.target;
+    const files = [...(input.files || [])];
+    if (!files.length) return;
+
+    const btn = document.getElementById(
+      input.id === 'mvNouvFile' ? 'mvNouvAdd' : input.id === 'mvCatPdf' ? 'mvCatPdfBtn' : 'mvCatAdd');
+
+    try {
+      occupe(btn, true);
+      if (input.id === 'mvNouvFile') {
+        if (vitrine.nouveautes.length >= NOUV_MAX) throw new Error(NOUV_MAX + ' images au maximum');
+        vitrine.nouveautes.push({ img: await envoyerFichier(files[0]), titre: '', texte: '' });
+        sauverVitrine('Nouveauté ajoutée');
+
+      } else if (input.id === 'mvCatPdf') {
+        vitrine.catPdf = await envoyerFichier(files[0]);
+        sauverVitrine('PDF du catalogue joint');
+
+      } else {
+        const place = CAT_MAX - vitrine.catPages.length;
+        if (place <= 0) throw new Error(CAT_MAX + ' pages au maximum');
+        /* Les fichiers sont envoyés un par un et dans l'ordre : un envoi
+           parallèle irait plus vite mais mélangerait les pages. */
+        for (const f of files.slice(0, place)) {
+          vitrine.catPages.push(await envoyerFichier(f));
+          renderVitrine();
+        }
+        sauverVitrine('Pages du catalogue ajoutées');
+      }
+    } catch (err) {
+      alert('Dépôt impossible : ' + (err.message || err));
+    } finally {
+      occupe(btn, false);
+      input.value = '';
+      renderVitrine();
+    }
+  });
+
+  document.addEventListener('mv:parametres-pret', renderVitrine);
+
+  window.MarloweVitrine = vitrine;
+
   window.MarloweActions = {
     recomputeRecruiters, refreshEffectifCount, reprintInvoice,
     refreshWeekDays, refreshWeekHeaders, renderEligibilite, closeWeek, undoClose,
@@ -3436,6 +3682,7 @@
     renderCloture, renderEffectifHead, refreshEffectifFilters, applyEffectifFilter,
     verifierVersion, battementPresence, setZoom, toggleFullscreen,
     renderQuotas3, renderJournal, appliquerLectureSeule, remplirVides, repartirDeZero,
+    renderVitrine,
   };
 
   window.MarloweClotureSteps = clotureSteps;

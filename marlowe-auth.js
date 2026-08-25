@@ -449,6 +449,37 @@
   .mv-cell.mv-oui{color:#1C1B18;background:var(--or,#C9A961);border-color:var(--or,#C9A961);font-weight:700;}
   .mv-cell.mv-ro{color:var(--amber,#D6A75C);border-color:rgba(214,167,92,.6);background:rgba(214,167,92,.12);}
   .mv-cell:hover{transform:scale(1.12);}
+  /* --- panneau Vitrine --- */
+  #mvVitrine{margin-top:24px;}
+  #mvVitrine .mv-sub{font-size:12.5px;color:var(--muted,#9C9384);margin:6px 0 20px;}
+  .mv-vit-sec{border-top:1px solid var(--band,#3D372C);padding-top:18px;margin-bottom:22px;}
+  .mv-vit-head{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:14px;}
+  .mv-vit-head h4{margin:0;font-size:14px;font-weight:600;}
+  .mv-cpt{font-size:11px;color:var(--muted,#9C9384);font-weight:400;margin-left:8px;}
+  .mv-nouv-list,.mv-page-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px;}
+  .mv-vide-note{font-size:12.5px;color:var(--muted,#9C9384);font-style:italic;
+    border:1px dashed var(--band,#3D372C);border-radius:10px;padding:16px;text-align:center;}
+  .mv-nouv{display:flex;align-items:center;gap:14px;border:1px solid var(--band,#3D372C);
+    border-radius:12px;padding:10px 12px;background:rgba(255,255,255,.02);}
+  .mv-nouv-vis{width:104px;height:64px;flex-shrink:0;border-radius:8px;background-size:cover;
+    background-position:center;background-color:#1a1814;border:1px solid var(--band,#3D372C);}
+  .mv-nouv-champs{flex:1;display:flex;flex-direction:column;gap:7px;min-width:0;}
+  .mv-nouv-champs input,.mv-vit-champs input{width:100%;background:rgba(0,0,0,.22);color:inherit;
+    border:1px solid var(--band,#3D372C);border-radius:8px;padding:8px 11px;font:inherit;font-size:12.5px;}
+  .mv-nouv-actions{display:flex;gap:6px;flex-shrink:0;}
+  .mv-nouv-actions .btn{padding:6px 10px;}
+  .mv-vit-champs{display:grid;grid-template-columns:1fr 1.6fr;gap:10px;margin-bottom:12px;}
+  @media(max-width:760px){.mv-vit-champs{grid-template-columns:1fr;}
+    .mv-nouv{flex-wrap:wrap;} .mv-nouv-champs{flex-basis:100%;}}
+  .mv-page{display:flex;align-items:center;gap:10px;border:1px solid var(--band,#3D372C);
+    border-radius:10px;padding:8px 10px;}
+  .mv-page-n{width:22px;text-align:center;font-size:11px;color:var(--muted,#9C9384);flex-shrink:0;}
+  .mv-page-vis{flex:1;height:52px;border-radius:6px;background-size:contain;background-repeat:no-repeat;
+    background-position:left center;background-color:#141210;}
+  .mv-page .btn{padding:5px 9px;}
+  .mv-pdf-ok{font-size:12.5px;color:var(--muted,#9C9384);margin:0 0 12px;display:flex;align-items:center;gap:12px;}
+  .mv-hint{font-size:11.5px;color:var(--muted,#9C9384);margin:12px 0 0;line-height:1.65;}
+
   .mv-danger{margin-top:24px;border-color:rgba(138,53,64,.45);background:rgba(138,53,64,.07);}
   .mv-danger h3{color:#E08A7A;}
   .mv-danger p{font-size:12.5px;line-height:1.7;color:var(--muted,#9C9384);margin:8px 0 16px;max-width:760px;}
@@ -738,6 +769,8 @@
         <span class="mv-saved" id="mvSaved">Enregistré ✓</span>
       </div>
 
+      <div class="panel" id="mvVitrine"></div>
+
       <div class="panel mv-danger">
         <h3>Repartir de zéro</h3>
         <p>Vide les données du panel pour démarrer proprement — employés, factures, production,
@@ -747,6 +780,11 @@
       </div>`;
 
     document.querySelector('.content').appendChild(page);
+
+    /* Le panneau « Vitrine » est monté par marlowe-actions.js : c'est lui qui
+       tient les données et sait parler au serveur d'images. On le prévient que
+       son point d'accroche existe maintenant. */
+    document.dispatchEvent(new CustomEvent('mv:parametres-pret', { detail: { page } }));
 
     /* --- choix des rôles retenus --- */
     const pick = page.querySelector('#mvPick');

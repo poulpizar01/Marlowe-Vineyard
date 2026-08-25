@@ -84,6 +84,14 @@ window.MarloweData = (function () {
       render: [() => { const a = window.MarloweActions; if (a) a.renderCloture(); }],
     },
 
+    /* Ce que le patron publie sur la page d'accueil : les nouveautés et les
+       pages du catalogue. Objet et non tableau — l'hydratation sur place sait
+       traiter les deux. */
+    vitrine: {
+      ref: () => window.MarloweVitrine,
+      render: [() => { const a = window.MarloweActions; if (a) a.renderVitrine(); }],
+    },
+
     /* Semaines clôturées + photo permettant d'annuler la dernière clôture.
        Vit dans marlowe-actions.js, d'où le passage par window. */
     clotures: {
