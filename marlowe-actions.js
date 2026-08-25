@@ -3484,7 +3484,9 @@
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      if (res.status === 413) throw new Error('fichier trop lourd même après réduction');
+      if (res.status === 413) throw new Error(file.type === 'application/pdf'
+        ? 'PDF trop lourd — le plafond est de 12 Mo, allégez-le avant de le joindre'
+        : 'fichier trop lourd même après réduction');
       if (res.status === 403) throw new Error('seul le patron peut déposer un visuel');
       throw new Error(data.error || ('erreur ' + res.status));
     }

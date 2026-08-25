@@ -450,7 +450,12 @@ async function handleOrga(request, env) {
    navigateur avant l'envoi — ce plafond n'est qu'un garde-fou contre un envoi
    accidentel de 12 Mo.                                                       */
 
-const IMG_MAX   = 1200 * 1024;                       // 1,2 Mo par image
+/* Deux plafonds distincts. Les images sont réduites par le navigateur avant
+   l'envoi, donc 1,2 Mo est déjà large. Un PDF, lui, part tel quel : un
+   catalogue de vingt pages fait couramment plusieurs mégaoctets, et le
+   refuser à 1,2 Mo n'aurait aucun sens. */
+const IMG_MAX   = 1200 * 1024;        // 1,2 Mo par image
+const PDF_MAX   = 12 * 1024 * 1024;   // 12 Mo pour un catalogue complet
 const IMG_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
 
 /* GET /api/img/{id}  —  PUBLIC
@@ -487,9 +492,10 @@ async function handleUpload(request, env) {
   const type = (request.headers.get('Content-Type') || '').split(';')[0].trim();
   if (!IMG_TYPES.includes(type)) return json(env, { error: 'bad_type', accepte: IMG_TYPES }, 415);
 
+  const plafond = type === 'application/pdf' ? PDF_MAX : IMG_MAX;
   const buf = await request.arrayBuffer();
   if (!buf.byteLength) return json(env, { error: 'empty' }, 400);
-  if (buf.byteLength > IMG_MAX) return json(env, { error: 'too_large', max: IMG_MAX }, 413);
+  if (buf.byteLength > plafond) return json(env, { error: 'too_large', max: plafond }, 413);
 
   const id = [...crypto.getRandomValues(new Uint8Array(10))]
     .map(b => b.toString(36).padStart(2, '0')).join('').slice(0, 20);
