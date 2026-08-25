@@ -51,7 +51,11 @@
     --speck:rgba(217,184,114,.30);
     --shadow:0 20px 50px rgba(0,0,0,.5);
     --card-shadow:none;
-    --veil:linear-gradient(165deg, rgba(9,17,12,.90) 0%, rgba(15,34,23,.88) 45%, rgba(11,24,16,.93) 100%);
+    --veil:linear-gradient(165deg, rgba(9,17,12,.92) 0%, rgba(15,34,23,.90) 45%, rgba(11,24,16,.94) 100%);
+    --veil-min:.34;
+    --page-solid:#0B140F;
+    --scrim:linear-gradient(100deg, rgba(7,14,10,.86) 0%, rgba(7,14,10,.72) 32%, rgba(7,14,10,.22) 62%, rgba(7,14,10,0) 82%);
+    --vignette:radial-gradient(ellipse 120% 92% at 50% 42%, transparent 38%, rgba(0,0,0,.42) 100%);
 
     --g1:#8FBF8F;  /* Saisonnier */
     --g2:#D9B872;  /* Ouvrier viticole */
@@ -90,7 +94,11 @@
     --speck:rgba(143,110,36,.18);
     --shadow:0 20px 50px rgba(20,40,28,.14);
     --card-shadow:0 2px 10px rgba(20,40,28,.05);
-    --veil:linear-gradient(165deg, rgba(250,247,240,.93) 0%, rgba(245,241,230,.90) 45%, rgba(239,235,221,.94) 100%);
+    --veil:linear-gradient(165deg, rgba(250,247,240,.94) 0%, rgba(245,241,230,.92) 45%, rgba(239,235,221,.95) 100%);
+    --veil-min:.58;
+    --page-solid:#FAF7F0;
+    --scrim:linear-gradient(100deg, rgba(252,250,244,.94) 0%, rgba(252,250,244,.86) 32%, rgba(252,250,244,.38) 62%, rgba(252,250,244,0) 82%);
+    --vignette:radial-gradient(ellipse 120% 92% at 50% 42%, transparent 44%, rgba(90,70,30,.16) 100%);
 
     --g1:#4E7A52;
     --g2:#8F6E24;
@@ -132,6 +140,9 @@
   .brandmark #brandFallback{display:flex;} .brandmark #brandFallback[hidden]{display:none;}
   .brand-logo{height:46px;width:auto;flex-shrink:0;display:block;margin:-8px 0;}
   @media(max-width:640px){.brand-logo{height:38px;}}
+  /* Sous 480 px le blason porte déjà le nom : le répéter à côté force un
+     retour à la ligne sur trois lignes et écrase la barre. */
+  @media(max-width:480px){.brand-text{display:none;}}
   .brand-text{line-height:1.15;}
   .brand-text .t1{font-family:'Fraunces',serif;font-weight:600;font-size:15px;letter-spacing:.02em;}
   .brand-text .t2{font-size:9.5px;letter-spacing:.22em;color:var(--gold-soft);text-transform:uppercase;}
@@ -298,12 +309,46 @@
   .bg-move{position:absolute;inset:-7%;will-change:transform;
     transition:transform .5s cubic-bezier(.22,.61,.36,1);}
   .bg-shot{position:absolute;inset:0;background-size:cover;background-position:center;
-    opacity:0;transition:opacity 2s ease;}
+    opacity:0;transition:opacity 2.4s ease;transform:scale(1.02);}
   .bg-shot.on{opacity:1;}
-  .bg-veil{position:absolute;inset:0;background:var(--veil);}
+
+  /* Ken Burns : la photo affichée dérive lentement. C'est ce mouvement continu,
+     plus que la parallaxe, qui donne l'impression d'un plan de cinéma. */
+  .bg-shot.on{animation:kenburns 13s ease-out forwards;}
+  @keyframes kenburns{
+    from{transform:scale(1.02) translate3d(0,0,0);}
+    to  {transform:scale(1.11) translate3d(-1.1%,-1.4%,0);}
+  }
+
+  /* Le voile s'épaissit au fil du défilement : la photo est presque nue en haut
+     de page, et entièrement calmée dès qu'on entre dans le contenu. */
+  .bg-veil{position:absolute;inset:0;background:var(--veil);opacity:var(--veil-o,1);}
+  .bg-vignette{position:absolute;inset:0;background:var(--vignette);}
+
+  /* Entrée : le fond s'ouvre au chargement plutôt que d'apparaître d'un bloc. */
+  .bg-scene{opacity:0;transition:opacity 1.6s ease;}
+  .bg-scene.pret{opacity:1;}
+
   @media(prefers-reduced-motion:reduce){
     .bg-move{transition:none;}
-    .bg-shot{transition:none;}
+    .bg-shot{transition:none;animation:none;transform:none;}
+    .bg-scene{transition:none;}
+    .bg-veil{opacity:1 !important;}
+  }
+
+  /* Deux voiles locaux, posés dans la scène fixe plutôt qu'en pseudo-éléments :
+     une bande sous la navigation, et un dégradé latéral derrière le texte
+     d'accueil. Ils garantissent la lisibilité même sur une photo en plein
+     soleil, et s'effacent au défilement quand le voile général prend le relais. */
+  .bg-scrim{position:absolute;inset:0;background:var(--scrim);opacity:var(--scrim-o,1);}
+  .bg-topfade{position:absolute;top:0;left:0;right:0;height:200px;
+    background:linear-gradient(180deg, color-mix(in srgb, var(--page-solid) 90%, transparent) 0%,
+      color-mix(in srgb, var(--page-solid) 66%, transparent) 55%, transparent 100%);}
+  @media(max-width:980px){
+    .bg-scrim{background:linear-gradient(180deg,
+      color-mix(in srgb, var(--page-solid) 70%, transparent) 0%,
+      color-mix(in srgb, var(--page-solid) 84%, transparent) 60%,
+      color-mix(in srgb, var(--page-solid) 88%, transparent) 100%);}
   }
 
   /* ===== LOCATION DU DOMAINE ===== */
@@ -473,6 +518,9 @@
     <div class="bg-shot" data-shot="img/bg4.jpg"></div>
   </div>
   <div class="bg-veil"></div>
+  <div class="bg-scrim"></div>
+  <div class="bg-topfade"></div>
+  <div class="bg-vignette"></div>
 </div>
 
 <div class="wrap">
@@ -783,7 +831,7 @@
       </div>
     </div>
 
-    <div class="pull-quote">« Tu plantes. Tu récoltes. Tu progresses. »</div>
+    <div class="pull-quote">« Entrez dans les vignes, écrivez votre histoire. »</div>
 
     <div class="join-grid solo">
       <div class="discord-panel">
@@ -1146,6 +1194,28 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
   if(!shots.length) return;
 
   const calme = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const scene = document.getElementById('bgScene');
+
+  /* Le voile suit le défilement : quasi transparent en haut de page pour que la
+     photo frappe, opaque dès qu'on entre dans le contenu pour qu'il reste net.
+     Lu dans un rAF — un handler de scroll qui touche au style à chaque pixel
+     fait ramer la page. */
+  const veilMin = parseFloat(getComputedStyle(document.documentElement)
+    .getPropertyValue('--veil-min')) || .5;
+  let attend = false;
+  function voile(){
+    attend = false;
+    const h = Math.max(window.innerHeight * .85, 1);
+    const t = Math.min(Math.max(window.scrollY / h, 0), 1);
+    const r = document.documentElement.style;
+    r.setProperty('--veil-o',  (veilMin + (1 - veilMin) * t).toFixed(3));
+    r.setProperty('--scrim-o', (1 - t).toFixed(3));
+  }
+  if(!calme){
+    voile();
+    addEventListener('scroll', () => { if(!attend){ attend = true; requestAnimationFrame(voile); } }, { passive:true });
+    addEventListener('resize', voile, { passive:true });
+  }
 
   /* La première photo se charge tout de suite, les autres seulement une fois
      la page affichée : le premier rendu n'attend jamais 800 Ko d'images. */
@@ -1156,7 +1226,16 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
     el.style.backgroundImage = `url("${el.dataset.shot}")`;
   }
   charger(0);
-  shots[0].classList.add('on');
+
+  /* On attend que la première photo soit réellement décodée avant d'ouvrir la
+     scène : sinon le fondu d'entrée joue sur un rectangle vide. */
+  const first = new Image();
+  first.onload = first.onerror = () => {
+    shots[0].classList.add('on');
+    if(scene) scene.classList.add('pret');
+  };
+  first.src = shots[0].dataset.shot;
+  setTimeout(() => { shots[0].classList.add('on'); if(scene) scene.classList.add('pret'); }, 2500);
 
   const reste = () => shots.forEach((_, i) => i && charger(i));
   if(document.readyState === 'complete') reste();
@@ -1171,8 +1250,12 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
       shots[i].classList.remove('on');
       i = (i + 1) % shots.length;
       charger(i);
+      /* Retirer puis remettre la classe relance le Ken Burns depuis le début.
+         Le reflow forcé au milieu n'est pas décoratif : sans lui le navigateur
+         regroupe les deux changements et l'animation ne repart jamais. */
+      void shots[i].offsetWidth;
       shots[i].classList.add('on');
-    }, 9000);
+    }, 11000);
   }
 
   /* Parallaxe. Le pointeur donne une cible, un lissage l'y amène :
@@ -1183,14 +1266,14 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
     function boucle(){
       x += (cx - x) * .06;
       y += (cy - y) * .06;
-      move.style.transform = `translate3d(${x.toFixed(2)}%, ${y.toFixed(2)}%, 0) scale(1.04)`;
+      move.style.transform = `translate3d(${x.toFixed(2)}%, ${y.toFixed(2)}%, 0)`;
       if(Math.abs(cx - x) > .01 || Math.abs(cy - y) > .01) requestAnimationFrame(boucle);
       else anime = false;
     }
 
     window.addEventListener('pointermove', e => {
-      cx = ((e.clientX / window.innerWidth)  - .5) * -3.2;
-      cy = ((e.clientY / window.innerHeight) - .5) * -3.2;
+      cx = ((e.clientX / window.innerWidth)  - .5) * -4.2;
+      cy = ((e.clientY / window.innerHeight) - .5) * -4.2;
       if(!anime){ anime = true; requestAnimationFrame(boucle); }
     }, { passive:true });
   }
