@@ -56,6 +56,11 @@
   .sidebar{width:220px;flex-shrink:0;background:var(--oak-2);border-right:1px solid var(--band);backdrop-filter:blur(8px);padding:24px 16px;position:sticky;top:0;height:100vh;overflow-y:auto;}
   .sidebar-brand{display:flex;align-items:center;gap:12px;padding:0 8px 22px;border-bottom:1px solid var(--band);margin-bottom:18px;}
   .brand-mark{width:34px;height:34px;border:1px solid var(--or-soft);border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Fraunces',serif;font-style:italic;font-weight:600;color:var(--or);font-size:13px;flex-shrink:0;}
+  .brand-mark[hidden]{display:none;}
+  .brand-logo{height:40px;width:auto;flex-shrink:0;display:block;margin:-5px 0;}
+  .sidebar-brand{gap:9px;}
+  .sidebar-brand .brand-sub{letter-spacing:.055em;font-size:9px;white-space:nowrap;}
+  .sidebar-brand .brand-name{white-space:nowrap;}
   .brand-name{font-family:'Fraunces',serif;font-weight:600;font-size:13.5px;line-height:1.2;}
   .brand-sub{font-size:9.5px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;}
   .nav-section{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--or-soft);font-weight:600;margin:20px 8px 8px;}
@@ -492,7 +497,9 @@
 
   <aside class="sidebar">
     <div class="sidebar-brand">
-      <div class="brand-mark">MV</div>
+      <img class="brand-logo" src="logo.png" alt="Marlowe Vineyard"
+           onerror="this.remove();document.getElementById('brandFallback').hidden=false;">
+      <div class="brand-mark" id="brandFallback" hidden>MV</div>
       <div>
         <div class="brand-name">Marlowe Vineyard</div>
         <div class="brand-sub">Gestion du domaine</div>

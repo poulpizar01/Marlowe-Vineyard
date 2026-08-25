@@ -126,6 +126,9 @@
   nav{display:flex;align-items:center;justify-content:space-between;padding:26px 0;border-bottom:1px solid var(--line);gap:20px;}
   .brandmark{display:flex;align-items:center;gap:11px;}
   .brandmark svg{flex-shrink:0;color:var(--gold);}
+  .brandmark #brandFallback{display:flex;} .brandmark #brandFallback[hidden]{display:none;}
+  .brand-logo{height:46px;width:auto;flex-shrink:0;display:block;margin:-8px 0;}
+  @media(max-width:640px){.brand-logo{height:38px;}}
   .brand-text{line-height:1.15;}
   .brand-text .t1{font-family:'Fraunces',serif;font-weight:600;font-size:15px;letter-spacing:.02em;}
   .brand-text .t2{font-size:9.5px;letter-spacing:.22em;color:var(--gold-soft);text-transform:uppercase;}
@@ -384,13 +387,15 @@
 
   <nav>
     <div class="brandmark">
-      <svg width="34" height="34" viewBox="0 0 34 34" fill="none">
+      <img class="brand-logo" src="logo.png" alt="Marlowe Vineyard"
+           onerror="this.remove();document.getElementById('brandFallback').hidden=false;">
+      <span id="brandFallback" hidden><svg width="34" height="34" viewBox="0 0 34 34" fill="none">
         <circle cx="17" cy="17" r="16" stroke="currentColor" stroke-width="1"/>
         <path d="M17 9c-2 3-2 5 0 7 2-2 2-4 0-7Z" fill="currentColor"/>
         <path d="M11 15c2 2 4 2 6 0M17 15c2 2 4 2 6 0" stroke="currentColor" stroke-width="1" fill="none"/>
         <circle cx="14" cy="20" r="1.4" fill="currentColor"/><circle cx="17" cy="21.5" r="1.4" fill="currentColor"/><circle cx="20" cy="20" r="1.4" fill="currentColor"/>
         <circle cx="15.5" cy="23" r="1.4" fill="currentColor"/><circle cx="18.5" cy="23" r="1.4" fill="currentColor"/>
-      </svg>
+      </svg></span>
       <div class="brand-text"><div class="t1">Marlowe Vineyard</div><div class="t2">Domaine viticole</div></div>
     </div>
     <ul class="nav-links">
