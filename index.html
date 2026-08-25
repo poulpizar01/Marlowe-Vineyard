@@ -258,7 +258,7 @@
   .org-duo{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;max-width:620px;margin:0 auto;}
   .org-solo{max-width:340px;margin:0 auto;}
   @media(max-width:640px){.org-duo{grid-template-columns:1fr;}}
-  .org-card .who[data-names] span{display:block;}
+  .who[data-names] span{display:block;}
   .who .absent{color:var(--gold-soft);opacity:.75;}
   .who .vacant, .pill-names .vacant{font-style:italic;opacity:.55;}
   .org-pill{display:flex;flex-direction:column;gap:5px;padding:11px 16px;border-radius:14px;}
@@ -612,9 +612,9 @@
 
     <div class="org-tier" style="margin:52px 0 20px;">Parcours production</div>
     <div class="org-ladder">
-      <div class="org-step" data-poste="Chef de culture"><div class="grade-tag">Grade 3</div><div class="role">Chef de culture</div><div class="who" data-names>—</div></div>
-      <div class="org-step" data-poste="Ouvrier viticole"><div class="grade-tag">Grade 2</div><div class="role">Ouvrier viticole</div><div class="who" data-names>—</div></div>
-      <div class="org-step" data-poste="Saisonnier"><div class="grade-tag">Grade 1</div><div class="role">Saisonnier</div><div class="who" data-names>—</div></div>
+      <div class="org-step"><div class="grade-tag">Grade 3</div><div class="role">Chef de culture</div><div class="who">8 000 bouteilles par semaine</div></div>
+      <div class="org-step"><div class="grade-tag">Grade 2</div><div class="role">Ouvrier viticole</div><div class="who">5 000 bouteilles par semaine</div></div>
+      <div class="org-step"><div class="grade-tag">Grade 1</div><div class="role">Saisonnier</div><div class="who">3 000 bouteilles par semaine</div></div>
     </div>
 
     <p class="org-note" id="orgNote" hidden></p>
