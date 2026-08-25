@@ -199,6 +199,7 @@
 
     rhRosterData.splice(i, 1);
     refreshEffectifCount();
+    D().note(`a déclaré le départ de ${emp.name} (${res.reason})`);
     D().saveMany(['rhRoster', 'rhDeparts']);
     toast(`${emp.name} a quitté le domaine.`);
   }
@@ -291,6 +292,7 @@
     clear('newEmpName', 'newEmpCivil', 'newEmpPhone', 'newEmpRib', 'newEmpDiscord', 'newEmpDate');
     const w = $('blWarning'); if (w) w.style.display = 'none';
 
+    D().note(`a recruté ${name} au poste de ${poste}`);
     D().saveMany(['rhRoster', 'rhRecruiters']);
     toast(`${name} a rejoint le domaine.`);
   }
@@ -322,6 +324,7 @@
     clear('absId', 'absStart', 'absReturn');
     if ($('absIndef')) $('absIndef').checked = false;
 
+    D().note(`a déclaré l'absence de ${emp.name} (${range})`);
     D().saveMany(['rhRoster', 'rhAbsences']);
     toast(`${emp.name} est désormais absent.`);
   }
@@ -347,6 +350,7 @@
       refreshEffectifCount();
     }
 
+    D().note(`a marqué le retour de ${name}`);
     D().saveMany(keys);
     toast(`${name} est de retour.`);
   }
@@ -379,6 +383,7 @@
     blacklistData.unshift({ uid, name, reason, date, by: val('blBy') || '—' });
     clear('blUid', 'blNom', 'blRaison', 'blBy');
 
+    D().note(`a blacklisté ${name} (${reason})`);
     D().save('blacklist');
     toast(`${name} a été ajouté à la blacklist.`);
   }
@@ -389,6 +394,7 @@
     if (!b) return;
     if (!await confirmAction('Retirer de la blacklist',
       `${b.name} pourra de nouveau être recruté au domaine.`, true)) return;
+    D().note(`a retiré ${b.name} de la blacklist`);
     blacklistData.splice(i, 1);
     D().save('blacklist');
     toast('Entrée retirée.');
@@ -429,6 +435,7 @@
     const h = historiqueData[i];
     if (!await confirmAction('Supprimer la facture',
       `Facture n°${h.num} — ${h.client} — ${h.total.toLocaleString('fr-FR')} $. Cette suppression est définitive.`, true)) return;
+    D().note(`a supprimé la facture n°${h.num} (${h.client}, ${h.total.toLocaleString('fr-FR')} $)`);
     historiqueData.splice(i, 1);
     const c = $('histCount'); if (c) c.textContent = historiqueData.length;
     D().save('historique');
@@ -845,6 +852,7 @@
     const c = $('histCount'); if (c) c.textContent = historiqueData.length;
 
     /* Numéro suivant préparé pour la facture d'après. */
+    D().note(`a émis la facture n°${inv.num} pour ${inv.client} (${inv.net.toLocaleString('fr-FR')} $)`);
     const next = String(parseInt(inv.num, 10) + 1);
     if ($('invNum') && /^\d+$/.test(inv.num)) $('invNum').value = next;
 
@@ -899,6 +907,7 @@
 
     clear('frSupplier', 'frMontant', 'frNote', 'frLien');
     refreshFrCounts();
+    D().note(`a archivé une facture de ${supplier} (${item.montant.toLocaleString('fr-FR')} $)`);
     D().save('facturesRecues');
     toast(`Facture de ${supplier} archivée.`);
   }
@@ -907,6 +916,7 @@
     const i = clientsData.findIndex(c => c.name === name);
     if (i < 0) return;
     if (!await confirmAction('Retirer le client', `${name} sera retiré de la base clients.`, true)) return;
+    D().note(`a retiré le client ${name}`);
     clientsData.splice(i, 1);
     refreshClientCounts();
     D().save('clients');
@@ -953,6 +963,7 @@
     if (i < 0) return;
     if (!await confirmAction('Retirer l\'article',
       `${articlesData[i].desc} sera retiré du catalogue.`, true)) return;
+    D().note(`a retiré l'article ${articlesData[i].desc}`);
     articlesData.splice(i, 1);
     refreshArticleCount();
     D().save('articles');
@@ -1022,6 +1033,7 @@
     if (!f) return;
     if (!await confirmAction('Supprimer la facture reçue',
       `${f.g.supplier} — ${f.item.montant.toLocaleString('fr-FR')} $ du ${f.item.date}.`, true)) return;
+    D().note(`a supprimé une facture reçue de ${f.g.supplier} (${f.item.montant.toLocaleString('fr-FR')} $)`);
     f.g.items.splice(f.ii, 1);
     if (!f.g.items.length) facturesRecuesData.splice(f.gi, 1);
     refreshFrCounts();
@@ -1084,6 +1096,7 @@
     const i = dash.findIndex(d => d.name === name);
     if (i < 0) return;
     if (!await confirmAction('Retirer la ligne', `${name} sera retiré du tableau de bord.`, true)) return;
+    D().note(`a retiré ${name} du tableau de bord`);
     dash.splice(i, 1);
     D().save('dash');
     toast('Ligne retirée.');
@@ -1159,6 +1172,7 @@
     e.nextGrade = step.nextNext;
     e.isFinal = step.final;
 
+    D().note(`a promu ${e.name} au grade de ${step.next}`);
     D().save('effectif');
     toast(`${e.name} est promu ${step.next}.`);
   }
@@ -1186,6 +1200,7 @@
     if (i < 0) return;
     if (!await confirmAction('Retirer la fiche',
       `${name} ne sera plus suivi dans les quotas ni dans l'éligibilité.`, true)) return;
+    D().note(`a retiré la fiche de production de ${name}`);
     effectifData.splice(i, 1);
     D().save('effectif');
     toast('Fiche retirée.');
@@ -1262,6 +1277,7 @@
     clotures.undo = {
       effectif: JSON.parse(JSON.stringify(effectifData)),
       serviceHistory: JSON.parse(JSON.stringify(serviceHistory)),
+      dash: JSON.parse(JSON.stringify(dash)),
       weekId: label + ' ' + frDate(start),
     };
 
@@ -1296,12 +1312,19 @@
 
     /* Remise à zéro */
     effectifData.forEach(e => { e.barils = 0; e.distributed = false; });
+
+    /* Le tableau de bord repart lui aussi de zéro : sans ça, le chiffre
+       d'affaires de la semaine écoulée serait recompté la semaine suivante.
+       Les personnes restent, seuls leurs compteurs sont remis à plat. */
+    dash.forEach(d => { d.runs = 0; d.factures = 0; d.ventes = 0; d.part = 0; d.heures = '0h00min'; });
+
     serviceHistory.length = 0;
     serviceActive = false;
     primesExc.length = 0;
     resetServiceButton();
 
-    D().saveMany(['effectif', 'serviceHistory']);
+    D().note(`a clôturé ${label} (${eligibles.length} éligible(s), ${Math.round(bil.caTotal).toLocaleString('fr-FR')} $ de CA)`);
+    D().saveMany(['effectif', 'serviceHistory', 'dash']);
     D().save('clotures', false);
     D().save('primesExc', false);
     refreshWeekHeaders();
@@ -1332,6 +1355,10 @@
     clotures.undo.effectif.forEach(e => effectifData.push(e));
     serviceHistory.length = 0;
     clotures.undo.serviceHistory.forEach(s => serviceHistory.push(s));
+    if (Array.isArray(clotures.undo.dash)) {
+      dash.length = 0;
+      clotures.undo.dash.forEach(d => dash.push(d));
+    }
 
     if (Array.isArray(w.primesExceptionnelles)) {
       primesExc.length = 0;
@@ -1341,7 +1368,8 @@
     clotures.weeks.shift();
     clotures.undo = null;
 
-    D().saveMany(['effectif', 'serviceHistory']);
+    D().note(`a annulé la clôture de ${w.label}`);
+    D().saveMany(['effectif', 'serviceHistory', 'dash']);
     D().save('clotures', false);
     refreshWeekHeaders();
     renderEligibilite();
@@ -1563,6 +1591,32 @@
 
   const DIR_RANKS = () => (typeof bcDirectionRanks !== 'undefined' ? bcDirectionRanks : ['Patron', 'Co-Patron']);
 
+  /* ------------------------------------------------------------------------
+     LA formule de prime — une seule, partagée.
+     Le fichier d'origine en contenait deux qui ne donnaient pas le même
+     résultat : la page Primes plafonnait les barils puis multipliait, le
+     bilan multipliait puis plafonnait la somme. Les deux plafonds existent
+     bel et bien, ils s'appliquent donc l'un après l'autre :
+
+         barils = runs / 5, écrêtés à PLAFOND (19 000 par semaine)
+         prime  = barils × multiplicateur du grade
+         prime  = min(prime, plafond de prime du palier)
+
+     Toute modification de la règle se fait ici et nulle part ailleurs.
+     ------------------------------------------------------------------------ */
+  const PLAFOND_BARILS = (typeof PLAFOND !== 'undefined') ? PLAFOND : 19000;
+
+  window.mvCalculPrime = function (runs, rang, palier) {
+    const barils = Math.min(Math.round((runs || 0) / 5), PLAFOND_BARILS);
+    const mult = (typeof multiplierFor === 'object' && multiplierFor[rang]) || 1;
+    let prime = barils * mult;
+    if (palier) {
+      const dir = DIR_RANKS().includes(rang);
+      prime = Math.min(prime, dir ? palier.primeDir : palier.primeEmp);
+    }
+    return Math.round(prime);
+  };
+
   function rebuildBcRows() {
     if (typeof bcRows === 'undefined') return;
     const manuels = bcRows.filter(r => r.rank === 'Manuel');
@@ -1611,10 +1665,8 @@
 
     const detail = rows.map(e => {
       const dir = isDir(e.rank);
-      const barils = Math.round((e.runs || 0) / 5);
-      const mult = (typeof multiplierFor === 'object' && multiplierFor[e.rank]) || 1;
       const exc = primesExc.filter(x => x.nom === e.name).reduce((s, x) => s + x.montant, 0);
-      const prime = Math.min(barils * mult, dir ? palier.primeDir : palier.primeEmp) + exc;
+      const prime = window.mvCalculPrime(e.runs, e.rank, palier) + exc;
       return Object.assign({}, e, {
         prime: Math.round(prime),
         primeExc: exc,
@@ -2222,6 +2274,7 @@
     if (montant <= 0) { toast('Indiquez un montant supérieur à zéro.'); return; }
 
     primesExc.push({ nom: r.nom, montant, motif: r.motif || '—', date: todayFR() });
+    D().note(`a accordé une prime exceptionnelle de ${montant.toLocaleString('fr-FR')} $ à ${r.nom} (${r.motif || 'sans motif'})`);
     D().save('primesExc', false);
     renderPrimesExc();
     renderBilan();
@@ -2671,6 +2724,220 @@
   }
 
   /* ========================================================================
+     LECTURE SEULE
+     ------------------------------------------------------------------------
+     Un rôle peut voir une page sans pouvoir la modifier. Ici on neutralise
+     les boutons d'action et on l'annonce clairement — le vrai verrou est
+     côté serveur, qui refuse l'écriture quoi qu'il arrive.
+     ======================================================================== */
+  function appliquerLectureSeule() {
+    const ses = window.MarloweSession || {};
+    const ro = new Set(ses.readOnly || []);
+    if (!ro.size) return;
+
+    ro.forEach(id => {
+      const page = $('page-' + id);
+      if (!page || page.querySelector('.mv-ro-bandeau')) return;
+
+      page.classList.add('mv-ro');
+      const b = document.createElement('div');
+      b.className = 'mv-ro-bandeau';
+      b.innerHTML = '👁 <b>Lecture seule</b> — vous pouvez consulter cette page, '
+                  + 'mais pas la modifier. Adressez-vous à la direction si besoin.';
+      page.insertBefore(b, page.firstChild);
+    });
+  }
+
+  /* ========================================================================
+     QUOTAS SUR TROIS SEMAINES
+     ------------------------------------------------------------------------
+     Une semaine isolée ne dit rien : c'est la tendance qui permet de décider
+     d'une promotion, d'une descente de grade ou d'un licenciement.
+     ======================================================================== */
+  function renderQuotas3() {
+    const host = $('q3Body');
+    if (!host) return;
+
+    const weeks = (clotures.weeks || []).slice(0, 3);   /* les 3 plus récentes */
+    const sub = $('q3Sub');
+
+    if (!weeks.length) {
+      if (sub) sub.textContent = 'Aucune semaine clôturée pour l\'instant.';
+      host.innerHTML = `<div class="panel"><p class="empty-note" style="padding:26px 0;text-align:center;">
+        Ce tableau se remplit à partir des semaines clôturées. Clôturez une première semaine
+        depuis <b>Clôture du lundi</b> pour commencer à suivre les tendances.</p></div>`;
+      return;
+    }
+
+    const anciennes = weeks.slice().reverse();          /* de la plus ancienne */
+    if (sub) {
+      sub.textContent = `${anciennes.length} semaine(s) suivie(s), de ${anciennes[0].du} `
+        + `à ${anciennes[anciennes.length - 1].au} · la semaine en cours est ajoutée à droite.`;
+    }
+
+    /* Tous ceux qui apparaissent quelque part, archives ou semaine en cours. */
+    const noms = [...new Set([
+      ...anciennes.flatMap(w => (w.production || []).map(p => p.name)),
+      ...effectifData.filter(e => e.active).map(e => e.name),
+    ])].sort();
+
+    const lignes = noms.map(nom => {
+      const cases = anciennes.map(w => (w.production || []).find(p => p.name === nom) || null);
+      const encours = effectifData.find(e => e.name === nom);
+      cases.push(encours ? { grade: encours.grade, barils: encours.barils, quota: encours.quota } : null);
+
+      const pcts = cases.map(c => (c && c.quota > 0) ? Math.round(c.barils / c.quota * 100) : null);
+      const connus = pcts.filter(v => v !== null);
+      const moyenne = connus.length ? Math.round(connus.reduce((a, b) => a + b, 0) / connus.length) : 0;
+
+      /* Trois semaines de suite sous le quota : le signal qui compte. */
+      const archives = pcts.slice(0, anciennes.length).filter(v => v !== null);
+      const alerte = archives.length >= 2 && archives.every(v => v < 100);
+      const progression = connus.length >= 2 ? connus[connus.length - 1] - connus[connus.length - 2] : null;
+
+      return { nom, cases, pcts, moyenne, alerte, progression };
+    });
+
+    /* Les plus faibles en premier : c'est là qu'il faut agir. */
+    lignes.sort((a, b) => a.moyenne - b.moyenne);
+
+    const entetes = [...anciennes.map(w => w.label.replace(/^Semaine\s*/i, 'S')), 'En cours'];
+    const cellule = (c, pct) => {
+      if (!c) return '<td class="num dim">—</td>';
+      const cls = pct === null ? '' : (pct >= 100 ? 'q3-ok' : (pct >= 50 ? 'q3-mid' : 'q3-bad'));
+      return `<td class="num"><span class="q3-cell ${cls}">
+        ${(c.barils || 0).toLocaleString('fr-FR')}
+        <small>${pct === null ? 'hors quota' : pct + ' %'}</small></span></td>`;
+    };
+
+    host.innerHTML = `
+      <div class="panel">
+        <div class="table-wrap"><table class="gtable">
+          <thead><tr><th>Employé</th><th>Grade</th>
+            ${entetes.map(h => `<th class="num">${esc(h)}</th>`).join('')}
+            <th class="num">Moyenne</th><th>Tendance</th></tr></thead>
+          <tbody>${lignes.map(l => {
+            const dernier = l.cases[l.cases.length - 1] || l.cases.filter(Boolean).pop();
+            const g = dernier ? dernier.grade : '—';
+            return `<tr${l.alerte ? ' class="q3-alerte"' : ''}>
+              <td><b>${esc(l.nom)}</b>${l.alerte
+                ? ' <span class="q3-flag" title="Sous son quota sur toutes les semaines archivées">⚠</span>' : ''}</td>
+              <td><span class="grade-pill ${typeof gradePillClass === 'function' ? gradePillClass(g) : ''}">${esc(g)}</span></td>
+              ${l.cases.map((c, i) => cellule(c, l.pcts[i])).join('')}
+              <td class="num"><b>${l.moyenne} %</b></td>
+              <td>${l.progression === null ? '<span class="mv-tr eq">—</span>'
+                : l.progression === 0 ? '<span class="mv-tr eq">= stable</span>'
+                : `<span class="mv-tr ${l.progression > 0 ? 'up' : 'down'}">${
+                    l.progression > 0 ? '▲ +' : '▼ '}${l.progression} pts</span>`}</td>
+            </tr>`; }).join('')}</tbody>
+        </table></div>
+        <p class="empty-note" style="margin-top:12px;">
+          Trié du plus faible au plus fort — les situations à traiter sont en haut.
+          <span class="q3-flag">⚠</span> signale un employé sous son quota sur <b>toutes</b> les semaines archivées.
+          La tendance compare la dernière semaine à la précédente.</p>
+      </div>`;
+  }
+
+  /* ========================================================================
+     JOURNAL DES ACTIONS
+     ======================================================================== */
+  function tempsRelatif(iso) {
+    const d = new Date(iso);
+    if (isNaN(d)) return iso;
+    const sec = Math.floor((Date.now() - d.getTime()) / 1000);
+    if (sec < 60) return "à l'instant";
+    if (sec < 3600) return `il y a ${Math.floor(sec / 60)} min`;
+    if (sec < 86400) return `il y a ${Math.floor(sec / 3600)} h`;
+    const j = Math.floor(sec / 86400);
+    return j === 1 ? 'hier' : `il y a ${j} jours`;
+  }
+
+  const dateHeureFR = iso => {
+    const d = new Date(iso);
+    if (isNaN(d)) return iso;
+    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
+  let journalCache = [];
+
+  async function renderJournal(recharger) {
+    const host = $('jBody');
+    if (!host) return;
+    const sub = $('jSub');
+
+    if (recharger !== false) {
+      try { journalCache = await D().journal(); }
+      catch (e) { journalCache = []; }
+    }
+
+    if ((window.MarloweAuth.CONFIG.MODE) !== 'discord') {
+      if (sub) sub.textContent = 'Le journal est tenu par le serveur — il ne fonctionne pas en mode test.';
+      host.innerHTML = `<div class="panel"><p class="empty-note" style="padding:26px 0;text-align:center;">
+        En mode test, aucune action n'est envoyée au serveur : il n'y a donc rien à journaliser.</p></div>`;
+      return;
+    }
+
+    if (!journalCache.length) {
+      if (sub) sub.textContent = 'Aucune action enregistrée pour le moment.';
+      host.innerHTML = `<div class="panel"><p class="empty-note" style="padding:26px 0;text-align:center;">
+        Le journal se remplit dès qu'une donnée est modifiée : ajout, suppression, clôture.</p></div>`;
+      return;
+    }
+
+    const auteurs = [...new Set(journalCache.map(e => e.by))].sort();
+    if (sub) sub.textContent = `${journalCache.length} action(s) · ${auteurs.length} auteur(s) · les 500 dernières sont conservées`;
+
+    host.innerHTML = `
+      <div class="panel">
+        <div class="toolbar" style="margin-bottom:14px;">
+          <div class="search"><span style="color:var(--muted);font-size:13px;">⌕</span>
+            <input type="text" id="jSearch" placeholder="Rechercher une action, un nom…"></div>
+          <select id="jWho"><option value="all">Tous les auteurs</option>
+            ${auteurs.map(a => `<option>${esc(a)}</option>`).join('')}</select>
+          <button class="btn" id="jReload">↻ Rafraîchir</button>
+        </div>
+        <div id="jList"></div>
+      </div>`;
+
+    $('jSearch').addEventListener('input', filtrerJournal);
+    $('jWho').addEventListener('change', filtrerJournal);
+    $('jReload').addEventListener('click', () => renderJournal(true));
+    filtrerJournal();
+  }
+
+  function filtrerJournal() {
+    const q = (val('jSearch') || '').toLowerCase();
+    const who = $('jWho') ? $('jWho').value : 'all';
+    const list = $('jList');
+    if (!list) return;
+
+    const vus = journalCache.filter(e =>
+      (who === 'all' || e.by === who) &&
+      (!q || (e.texte + ' ' + e.by).toLowerCase().includes(q)));
+
+    if (!vus.length) { list.innerHTML = '<p class="empty-note" style="padding:22px 0;text-align:center;">Aucune action ne correspond.</p>'; return; }
+
+    /* Regroupé par jour : on cherche presque toujours « ce qui s'est passé ce jour-là ». */
+    const jours = {};
+    vus.forEach(e => {
+      const d = new Date(e.at);
+      const k = isNaN(d) ? '—' : `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+      (jours[k] = jours[k] || []).push(e);
+    });
+
+    list.innerHTML = Object.entries(jours).map(([jour, entrees]) => `
+      <div class="j-jour">${esc(jour)}</div>
+      ${entrees.map(e => {
+        const ini = String(e.by).split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
+        return `<div class="j-row">
+          <span class="j-av">${esc(ini)}</span>
+          <span class="j-txt"><b>${esc(e.by)}</b> ${esc(e.texte)}</span>
+          <span class="j-time" title="${esc(dateHeureFR(e.at))}">${esc(tempsRelatif(e.at))}</span>
+        </div>`;
+      }).join('')}`).join('');
+  }
+
+  /* ========================================================================
      LOT A — AJUSTEMENTS D'AFFICHAGE
      ======================================================================== */
   function injectStyles() {
@@ -2814,6 +3081,39 @@
       .mv-vb-l{font-size:10.5px;color:var(--muted,#9C9384);min-width:38px;text-align:center;
         font-variant-numeric:tabular-nums;}
 
+      /* --- Lecture seule --- */
+      .mv-ro-bandeau{background:rgba(214,167,92,.10);border:1px solid rgba(214,167,92,.35);
+        border-radius:11px;padding:12px 16px;margin-bottom:18px;font-size:13px;
+        color:var(--amber,#D6A75C);line-height:1.6;}
+      .mv-ro .btn,.mv-ro .btn-primary,.mv-ro .icon-btn,.mv-ro .eq-icon,
+      .mv-ro .btn-depart,.mv-ro .btn-reset,.mv-ro .pbtn{
+        pointer-events:none;opacity:.35;filter:grayscale(.6);}
+      .mv-ro .mv-ro-bandeau{opacity:1;}
+
+      /* --- Quotas 3 semaines --- */
+      .q3-cell{display:inline-flex;flex-direction:column;align-items:flex-end;line-height:1.25;}
+      .q3-cell small{font-size:10px;color:var(--muted,#9C9384);font-weight:400;}
+      .q3-cell.q3-ok{color:var(--vine,#6E8B5D);}
+      .q3-cell.q3-mid{color:var(--amber,#D6A75C);}
+      .q3-cell.q3-bad{color:#E88A72;}
+      tr.q3-alerte{background:rgba(138,53,64,.10);}
+      .q3-flag{color:#E88A72;font-size:12px;}
+
+      /* --- Journal --- */
+      .j-jour{font-size:10px;letter-spacing:.16em;text-transform:uppercase;
+        color:var(--or-soft,#8E7C4E);margin:18px 0 8px;padding-bottom:6px;
+        border-bottom:1px solid var(--band,#3D372C);}
+      .j-jour:first-child{margin-top:0;}
+      .j-row{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;
+        padding:9px 2px;font-size:13px;border-bottom:1px solid rgba(61,55,44,.45);}
+      .j-row:last-child{border-bottom:none;}
+      .j-av{width:24px;height:24px;border-radius:50%;flex-shrink:0;font-size:9.5px;font-weight:600;
+        background:rgba(201,169,97,.14);border:1px solid var(--or-soft,#8E7C4E);color:var(--or,#C9A961);
+        display:flex;align-items:center;justify-content:center;}
+      .j-txt{color:var(--muted,#9C9384);line-height:1.5;}
+      .j-txt b{color:var(--parchment,#EDE3CF);font-weight:600;}
+      .j-time{font-size:11px;color:var(--or-soft,#8E7C4E);white-space:nowrap;}
+
       .table-wrap{overflow-x:auto;}
 
       .action-icons{white-space:nowrap;}
@@ -2918,6 +3218,13 @@
     on('annulerClotureBtn', undoClose);
 
     /* Entrée dans le champ de nom = ajouter l'employé. */
+    /* Le journal n'est chargé qu'à l'ouverture de sa page : inutile
+       d'aller le chercher pour quelqu'un qui n'y va jamais. */
+    document.addEventListener('click', ev => {
+      const n = ev.target.closest('.sidebar .nav-item[data-page="journal"]');
+      if (n) setTimeout(() => renderJournal(true), 120);
+    });
+
     const es = $('effSearch');
     if (es) es.addEventListener('input', () => { effFiltre.q = es.value.trim(); applyEffectifFilter(); });
     const eg = $('effGradeFilter');
@@ -2957,6 +3264,8 @@
     renderHistorique();
     renderCloture();
     refreshEffectifFilters();
+    renderQuotas3();
+    appliquerLectureSeule();
     D().redraw('rhRecruiters');
 
     /* Confort : version, présence, affichage. */
@@ -2995,6 +3304,7 @@
     renderHistorique, renderPrimesExc, addPrimeExceptionnelle,
     renderCloture, renderEffectifHead, refreshEffectifFilters, applyEffectifFilter,
     verifierVersion, battementPresence, setZoom, toggleFullscreen,
+    renderQuotas3, renderJournal, appliquerLectureSeule,
   };
 
   window.MarloweClotureSteps = clotureSteps;

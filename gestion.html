@@ -518,6 +518,8 @@
       <div class="nav-item" data-page="statsprimes">Primes</div>
       <div class="nav-section">Gestion</div>
       <div class="nav-item" data-page="cloture">Clôture du lundi</div>
+      <div class="nav-item" data-page="quotas3">Quotas 3 semaines</div>
+      <div class="nav-item" data-page="journal">Journal</div>
       <div class="nav-item" data-page="histo">Historique</div>
       <div class="nav-section">Personnel</div>
       <div class="nav-item" data-page="masemaine">Ma semaine</div>
@@ -1268,6 +1270,20 @@
       </div>
     </div>
 
+    <!-- ================= QUOTAS 3 SEMAINES ================= -->
+    <div class="page-content" id="page-quotas3">
+      <h1 class="page-title">Quotas sur trois semaines</h1>
+      <p class="page-sub" id="q3Sub">Évolution de chaque employé sur les dernières semaines clôturées.</p>
+      <div id="q3Body"></div>
+    </div>
+
+    <!-- ================= JOURNAL ================= -->
+    <div class="page-content" id="page-journal">
+      <h1 class="page-title">Journal des actions</h1>
+      <p class="page-sub" id="jSub">Qui a fait quoi, et quand.</p>
+      <div id="jBody"></div>
+    </div>
+
     <!-- ================= CLÔTURE DU LUNDI ================= -->
     <div class="page-content" id="page-cloture">
       <h1 class="page-title">Clôture du lundi</h1>
@@ -1685,7 +1701,8 @@ function primesRows(){
     const quota = baseQuota[e.rank] || 3000;
     const atteint = barils >= quota;
     const mult = multiplierFor[e.rank] || 2.5;
-    const prime = atteint ? Math.min(barils, PLAFOND) * mult : null;
+    const prime = atteint ? (window.mvCalculPrime ? window.mvCalculPrime(e.runs, e.rank, null)
+                                                  : Math.min(barils, PLAFOND) * mult) : null;
     const recrues = recruesData[e.name] || 0;
     const salaire = salaireData[e.name] || 0;
     const total = (prime || 0) + recrues * 4000 + salaire;

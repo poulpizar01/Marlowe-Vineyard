@@ -109,6 +109,8 @@
     { id: 'statsprimes',    label: 'Primes',          group: 'Stats & Quotas' },
 
     { id: 'cloture',        label: 'Clôture du lundi', group: 'Gestion' },
+    { id: 'quotas3',        label: 'Quotas 3 semaines', group: 'Gestion' },
+    { id: 'journal',        label: 'Journal',         group: 'Gestion' },
     { id: 'histo',          label: 'Historique',      group: 'Gestion' },
 
     { id: 'masemaine',      label: 'Ma semaine',      group: 'Personnel' },
@@ -128,7 +130,7 @@
   /* Répartition de départ — modifiable ensuite dans Paramètres.
      Le patron a tout, il n'a pas besoin d'être listé.                        */
   const PERSONNEL = ['masemaine', 'agenda', 'tombola'];
-  const GESTION   = ['histo', 'cloture'];
+  const GESTION   = ['histo', 'cloture', 'quotas3'];   /* le journal reste à la direction */
   const RH_PAGES  = ['rhemployes', 'rhrecrutement', 'blacklist'];
   const COMMERCE  = ['facturation', 'catalogue', 'bilan', 'facturesrecues'];
   const STATS     = ['eligibilite', 'statsvue', 'statsdash', 'statsgrades', 'statseffectif', 'statsprimes'];
@@ -440,6 +442,16 @@
   .mv-rowbtn{background:none;border:1px solid var(--band,#3D372C);border-radius:6px;color:var(--muted,#9C9384);
     font-size:10px;padding:3px 7px;cursor:pointer;margin-left:8px;font-family:inherit;}
   .mv-rowbtn:hover{color:var(--or,#C9A961);border-color:var(--or-soft,#8E7C4E);}
+  .mv-cell{width:26px;height:26px;border-radius:7px;cursor:pointer;font-size:12px;line-height:1;
+    border:1px solid var(--band,#3D372C);background:transparent;font-family:inherit;padding:0;
+    display:inline-flex;align-items:center;justify-content:center;transition:.12s;}
+  .mv-cell.mv-non{color:rgba(156,147,132,.5);}
+  .mv-cell.mv-oui{color:#1C1B18;background:var(--or,#C9A961);border-color:var(--or,#C9A961);font-weight:700;}
+  .mv-cell.mv-ro{color:var(--amber,#D6A75C);border-color:rgba(214,167,92,.6);background:rgba(214,167,92,.12);}
+  .mv-cell:hover{transform:scale(1.12);}
+  .mv-legende{font-size:11.5px;color:var(--muted,#9C9384);line-height:2.1;margin-top:14px;max-width:820px;}
+  .mv-legende .mv-cell{vertical-align:middle;margin:0 2px;cursor:default;}
+  .mv-legende .mv-cell:hover{transform:none;}
   .mv-patron-col{color:var(--or,#C9A961) !important;}
   .mv-always{color:var(--or,#C9A961);font-size:13px;}
   .mv-saved{color:var(--vine,#6E8B5D);font-size:12.5px;margin-left:14px;opacity:0;transition:.2s;}
@@ -653,10 +665,15 @@
         rows += `<tr data-page="${esc(p.id)}">
           <th>${esc(p.label)}<button class="mv-rowbtn" data-toggle-row="${esc(p.id)}">tout</button></th>
           <td class="mv-always" title="Le patron a toujours accès à tout">✓</td>
-          ${otherRoles.map(r => `<td>
-            <input type="checkbox" data-page="${esc(p.id)}" data-role="${esc(r)}"
-              ${(perms[p.id] || []).includes(r) ? 'checked' : ''}>
-          </td>`).join('')}
+          ${otherRoles.map(r => {
+            const vu = (perms[p.id] || []).includes(r);
+            const ro = ((settings.permsRO || {})[p.id] || []).includes(r);
+            const etat = !vu ? 'non' : (ro ? 'ro' : 'oui');
+            return `<td><button type="button" class="mv-cell mv-${etat}"
+              data-cell="${esc(p.id)}|${esc(r)}" data-etat="${etat}"
+              title="${etat === 'non' ? 'Aucun accès' : etat === 'ro' ? 'Lecture seule' : 'Accès complet'} — cliquez pour changer"
+              >${etat === 'non' ? '·' : etat === 'ro' ? '👁' : '✓'}</button></td>`;
+          }).join('')}
         </tr>`;
       });
     });
@@ -705,6 +722,13 @@
         </table>
       </div>
 
+      <p class="mv-legende">
+        <span class="mv-cell mv-non">·</span> aucun accès ·
+        <span class="mv-cell mv-oui">✓</span> accès complet ·
+        <span class="mv-cell mv-ro">👁</span> lecture seule — la page est visible mais rien n'y est modifiable.
+        Cliquez sur une case pour faire tourner les trois états.
+      </p>
+
       <div class="btn-row" style="margin-top:18px;align-items:center;">
         <button class="btn primary" id="mvSave">Enregistrer</button>
         <button class="btn" id="mvReset">Réinitialiser</button>
@@ -740,22 +764,45 @@
     });
 
     /* --- cocher / décocher une ligne entière --- */
+    /* Un clic sur une cellule fait tourner les trois états. */
     page.addEventListener('click', e => {
+      const cell = e.target.closest('[data-cell]');
+      if (cell) {
+        const suite = { non: 'oui', oui: 'ro', ro: 'non' };
+        const etat = suite[cell.dataset.etat] || 'oui';
+        cell.dataset.etat = etat;
+        cell.className = 'mv-cell mv-' + etat;
+        cell.textContent = etat === 'non' ? '·' : etat === 'ro' ? '👁' : '✓';
+        cell.title = (etat === 'non' ? 'Aucun accès' : etat === 'ro' ? 'Lecture seule' : 'Accès complet')
+                   + ' — cliquez pour changer';
+        return;
+      }
+
       const btn = e.target.closest('[data-toggle-row]');
       if (!btn) return;
-      const boxes = page.querySelectorAll(`input[data-page="${btn.dataset.toggleRow}"]`);
-      const allOn = [...boxes].every(b => b.checked);
-      boxes.forEach(b => { b.checked = !allOn; });
+      const cells = page.querySelectorAll(`[data-cell^="${btn.dataset.toggleRow}|"]`);
+      const tout = [...cells].every(c => c.dataset.etat !== 'non');
+      cells.forEach(c => {
+        c.dataset.etat = tout ? 'non' : 'oui';
+        c.className = 'mv-cell mv-' + c.dataset.etat;
+        c.textContent = tout ? '·' : '✓';
+      });
     });
 
     /* --- enregistrer --- */
     page.querySelector('#mvSave').addEventListener('click', async () => {
-      const next = {};
-      PAGES.forEach(p => { next[p.id] = []; });
-      page.querySelectorAll('input[type=checkbox]:checked').forEach(b => {
-        next[b.dataset.page].push(b.dataset.role);
+      const next = {}, nextRO = {};
+      PAGES.forEach(p => { next[p.id] = []; nextRO[p.id] = []; });
+
+      page.querySelectorAll('[data-cell]').forEach(c => {
+        const [pid, role] = c.dataset.cell.split('|');
+        if (c.dataset.etat === 'non') return;
+        next[pid].push(role);
+        if (c.dataset.etat === 'ro') nextRO[pid].push(role);
       });
+
       try {
+        await Store.setSettings(Object.assign({}, settings, { permsRO: nextRO }));
         await Store.setPermissions(next);
         const tag = page.querySelector('#mvSaved');
         tag.classList.add('on');
@@ -768,9 +815,14 @@
     /* --- réinitialiser --- */
     page.querySelector('#mvReset').addEventListener('click', async () => {
       const def = defaultPermissions();
-      page.querySelectorAll('input[type=checkbox]').forEach(b => {
-        b.checked = (def[b.dataset.page] || []).includes(b.dataset.role);
+      page.querySelectorAll('[data-cell]').forEach(c => {
+        const [pid, role] = c.dataset.cell.split('|');
+        const on = (def[pid] || []).includes(role);
+        c.dataset.etat = on ? 'oui' : 'non';
+        c.className = 'mv-cell mv-' + c.dataset.etat;
+        c.textContent = on ? '✓' : '·';
       });
+      await Store.setSettings(Object.assign({}, settings, { permsRO: {} }));
       await Store.setPermissions(def);
     });
 
@@ -806,18 +858,28 @@
 
     /* Mis à disposition du panel : sert notamment à signer les saisies
        (« enregistré par … ») sans redemander le nom à chaque fois. */
+    const perms = await Store.getPermissions();
+    const settings0 = await Store.getSettings();
+
+    /* Pages que ce membre peut voir sans pouvoir les modifier. Le patron
+       n'est jamais en lecture seule. */
+    const ro = settings0.permsRO || {};
+    const readOnly = session.isPatron ? [] : PAGES
+      .map(p => p.id)
+      .filter(id => (ro[id] || []).some(r => session.roles.includes(r)));
+
     window.MarloweSession = {
       id: session.user.id,
       name: session.user.name,
       roles: session.roles.slice(),
       isPatron: session.isPatron,
       isOwner: session.isOwner,
+      readOnly,
     };
 
-    const perms = await Store.getPermissions();
     applyNavFilter(allowedPages(session, perms));
     addUserBadge(session);
-    if (session.isPatron) buildSettings(roles, perms, await Store.getSettings());
+    if (session.isPatron) buildSettings(roles, perms, settings0);
     document.documentElement.classList.add('mv-ready');
 
     /* La session est établie : le panel peut aller chercher ses données. */

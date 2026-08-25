@@ -1,4 +1,4 @@
 {
-  "v": "1.0.0",
-  "note": "Connexion Discord, mémoire partagée, clôture du lundi en 7 étapes, historique et statistiques, facture au modèle du domaine"
+  "v": "1.1.0",
+  "note": "journal des actions, lecture seule, quotas sur 3 semaines, synchronisation entre membres"
 }

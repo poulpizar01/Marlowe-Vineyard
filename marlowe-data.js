@@ -90,7 +90,8 @@ window.MarloweData = (function () {
       ref: () => window.MarloweClotures,
       render: [() => { const a = window.MarloweActions;
                        if (a) { a.renderEligibilite(); a.refreshWeekHeaders();
-                                a.renderWeekHistory(); a.renderHistorique(); } }],
+                                a.renderWeekHistory(); a.renderHistorique();
+                                a.renderQuotas3(); } }],
     },
   };
 
@@ -198,6 +199,7 @@ window.MarloweData = (function () {
   const pending = new Set();
   let timer = null;
   let inFlight = false;
+  let noteEnAttente = '';        /* description de l'action, pour le journal */
 
   function flush() {
     if (inFlight || !pending.size) return;
@@ -208,11 +210,18 @@ window.MarloweData = (function () {
     keys.forEach(k => { const r = ref(k); if (r) payload[k] = r; });
     if (!Object.keys(payload).length) return;
 
+    if (noteEnAttente) { payload._log = noteEnAttente; noteEnAttente = ''; }
+
     inFlight = true;
     setStatus('saving');
     pushKeys(payload)
       .then(() => setStatus('saved'))
       .catch(err => {
+        /* Un refus de droits ne se répare pas en réessayant : on arrête. */
+        if (String(err.message).includes('403')) {
+          setStatus('error', 'écriture refusée — vous êtes en lecture seule sur cette page');
+          return;
+        }
         setStatus('error', err.message);
         /* On remet les clés en file : la prochaine tentative les reprendra. */
         keys.forEach(k => pending.add(k));
@@ -377,6 +386,23 @@ window.MarloweData = (function () {
     redraw,
     redrawAll,
     ref,
+    /* Décrit l'action en cours ; le texte accompagne la prochaine écriture
+       et alimente le journal. À appeler AVANT save(). */
+    note(texte) { noteEnAttente = String(texte || '').slice(0, 300); },
+
+    async journal() {
+      const c = cfg();
+      if (c.MODE !== 'discord') return [];
+      let tok = null;
+      try { tok = JSON.parse(localStorage.getItem('mv.token') || 'null'); } catch (e) {}
+      if (!tok) return [];
+      const res = await fetch(c.API_BASE + '/api/journal', {
+        headers: { 'Authorization': 'Bearer ' + tok },
+      });
+      if (!res.ok) return [];
+      return res.json();
+    },
+
     startSync,
     syncNow: syncTick,
     onRemoteChange(fn) { onRemote = fn; },

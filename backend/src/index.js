@@ -309,6 +309,84 @@ async function handlePermissions(request, env) {
   return json(env, { error: 'method_not_allowed' }, 405);
 }
 
+/* ---------------------------------------------------------------------------
+   Droits d'écriture
+   ---------------------------------------------------------------------------
+   Chaque collection appartient à une ou plusieurs pages. Écrire dedans exige
+   d'avoir accès à l'une d'elles ET de ne pas y être en lecture seule.
+
+   Sans ce contrôle, n'importe quel membre du Discord pourrait modifier
+   n'importe quoi en appelant l'API directement — le menu masqué dans le
+   navigateur n'arrête personne.
+   --------------------------------------------------------------------------- */
+const COLLECTION_PAGES = {
+  rhRoster:        ['rhemployes'],
+  rhDeparts:       ['rhemployes', 'rhrecrutement'],
+  rhRecruiters:    ['rhrecrutement'],
+  rhAbsences:      ['rhrecrutement'],
+  blacklist:       ['blacklist'],
+  historique:      ['facturation'],
+  clients:         ['facturation'],
+  articles:        ['facturation'],
+  catalogueSlides: ['catalogue'],
+  facturesRecues:  ['facturesrecues'],
+  depenses:        ['bilan'],
+  retraits:        ['bilan'],
+  bilanConfig:     ['bilan'],
+  effectif:        ['eligibilite', 'statseffectif'],
+  dash:            ['statsdash'],
+  clotures:        ['statsprimes', 'cloture'],
+  clotureSteps:    ['cloture'],
+  primesExc:       ['statsprimes'],
+  agenda:          ['agenda'],
+  serviceHistory:  ['masemaine'],
+  tombola:         ['tombola'],
+};
+
+function canWrite(session, collection, perms, ro) {
+  if (session.isPatron) return true;
+
+  const pages = COLLECTION_PAGES[collection];
+  if (!pages) return false;            /* collection inconnue : on refuse */
+
+  return pages.some(page => {
+    const autorise = (perms[page] || []).some(r => session.roles.includes(r));
+    if (!autorise) return false;
+    const lectureSeule = (ro[page] || []).some(r => session.roles.includes(r));
+    return !lectureSeule;
+  });
+}
+
+/* ---------------------------------------------------------------------------
+   Journal des actions
+   ---------------------------------------------------------------------------
+   Qui a fait quoi, et quand. Sur un outil où chacun peut supprimer une ligne,
+   c'est la seule façon de savoir ce qui s'est passé. Gardé en une seule liste
+   plafonnée : au-delà, les plus anciennes entrées tombent.
+   --------------------------------------------------------------------------- */
+const JOURNAL_MAX = 500;
+
+async function appendJournal(env, session, texte, keys) {
+  const list = await env.MARLOWE.get('journal', 'json') || [];
+  list.unshift({
+    at: new Date().toISOString(),
+    by: session.user.name,
+    id: session.user.id,
+    texte,
+    keys,
+  });
+  if (list.length > JOURNAL_MAX) list.length = JOURNAL_MAX;
+  await env.MARLOWE.put('journal', JSON.stringify(list));
+}
+
+/* GET /api/journal */
+async function handleJournal(request, env) {
+  const s = await currentSession(request, env);
+  if (!s) return json(env, { error: 'unauthorized' }, 401);
+  const list = await env.MARLOWE.get('journal', 'json') || [];
+  return json(env, list);
+}
+
 /* GET | POST /api/presence
    Qui d'autre est en train de travailler sur le panel. Chaque navigateur
    signale sa présence toutes les 45 secondes ; une entrée non renouvelée
@@ -364,6 +442,17 @@ async function handleSettings(request, env) {
         .slice(0, 300);
     }
 
+    /* Lecture seule : rôles qui voient une page sans pouvoir la modifier. */
+    if (body.permsRO && typeof body.permsRO === 'object' && !Array.isArray(body.permsRO)) {
+      const ro = {};
+      for (const [page, roles] of Object.entries(body.permsRO)) {
+        if (!Array.isArray(roles)) continue;
+        ro[String(page).slice(0, 64)] = roles
+          .filter(r => typeof r === 'string').map(r => r.slice(0, 100)).slice(0, 200);
+      }
+      clean.permsRO = ro;
+    }
+
     await env.MARLOWE.put('settings', JSON.stringify(clean));
     return json(env, clean);
   }
@@ -409,6 +498,24 @@ async function handleData(request, env) {
       return json(env, { error: 'bad_shape' }, 400);
     }
 
+    /* Description de l'action, pour le journal. Ce n'est pas une donnée. */
+    const note = typeof body._log === 'string' ? body._log.slice(0, 300) : '';
+    delete body._log;
+
+    /* Contrôle d'écriture collection par collection. Le filtrage fait dans
+       le navigateur n'est qu'un confort : c'est ICI que ça se décide. */
+    const perms = await env.MARLOWE.get('permissions', 'json') || {};
+    const settings = await env.MARLOWE.get('settings', 'json') || {};
+    const ro = settings.permsRO || {};
+    const refuses = [];
+
+    for (const k of Object.keys(body)) {
+      if (!canWrite(s, k, perms, ro)) refuses.push(k);
+    }
+    if (refuses.length) {
+      return json(env, { error: 'forbidden', collections: refuses }, 403);
+    }
+
     /* Fusion : on ne remplace que les collections envoyées, les autres
        restent intactes. Deux personnes qui travaillent sur des pages
        différentes ne s'écrasent donc pas mutuellement. */
@@ -432,6 +539,7 @@ async function handleData(request, env) {
       keys: Object.keys(body),
     };
     await env.MARLOWE.put('datameta', JSON.stringify(meta));
+    if (note) await appendJournal(env, s, note, Object.keys(body));
 
     return json(env, { ok: true, saved: Object.keys(body), rev: meta.rev });
   }
@@ -477,6 +585,7 @@ export default {
         case '/api/settings':    return handleSettings(request, env);
         case '/api/data':        return handleData(request, env);
         case '/api/presence':    return handlePresence(request, env);
+        case '/api/journal':     return handleJournal(request, env);
         case '/api/logout':      return handleLogout(request, env);
         default:                 return json(env, { error: 'not_found' }, 404);
       }
