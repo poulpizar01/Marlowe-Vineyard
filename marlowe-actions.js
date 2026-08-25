@@ -2457,6 +2457,220 @@
   }
 
   /* ========================================================================
+     BANDEAU DE MISE À JOUR
+     ------------------------------------------------------------------------
+     Sur un outil partagé, quelqu'un peut travailler des jours sur une
+     version mise en cache par son navigateur. On relit version.json de
+     temps en temps ; si le numéro a changé depuis le chargement de la
+     page, on propose de recharger. Jamais de rechargement imposé —
+     une saisie en cours serait perdue.
+     ======================================================================== */
+  const VERSION_MS = 5 * 60 * 1000;
+  let versionChargee = null;
+
+  async function lireVersion() {
+    try {
+      /* Paramètre anti-cache : sans lui, le navigateur renverrait
+         éternellement la version qu'il a en mémoire. */
+      const res = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (e) { return null; }
+  }
+
+  async function verifierVersion() {
+    const v = await lireVersion();
+    if (!v || !v.v) return;
+    if (versionChargee === null) { versionChargee = v.v; return; }
+    if (v.v !== versionChargee) afficherBandeauVersion(v);
+  }
+
+  function afficherBandeauVersion(v) {
+    if ($('mvUpdate')) return;
+    const bar = document.createElement('div');
+    bar.id = 'mvUpdate';
+    bar.className = 'mv-update';
+    bar.innerHTML = `
+      <span>Une nouvelle version du panel est disponible${v.note ? ' — ' + esc(v.note) : ''}.</span>
+      <button class="btn primary" id="mvUpdateGo">Recharger</button>
+      <button class="mv-update-x" id="mvUpdateX" title="Plus tard">×</button>`;
+    document.body.appendChild(bar);
+    $('mvUpdateGo').addEventListener('click', () => location.reload());
+    $('mvUpdateX').addEventListener('click', () => bar.remove());
+  }
+
+  /* ========================================================================
+     PRÉSENCE — qui d'autre travaille en ce moment
+     ======================================================================== */
+  const PRESENCE_MS = 45000;
+  let presenceTimer = null;
+
+  function pageCourante() {
+    const a = document.querySelector('.page-content.active');
+    return a ? a.id.replace(/^page-/, '') : '';
+  }
+
+  async function battementPresence() {
+    const cfg = (window.MarloweAuth && window.MarloweAuth.CONFIG) || {};
+    if (cfg.MODE !== 'discord') return;
+    let tok = null;
+    try { tok = JSON.parse(localStorage.getItem('mv.token') || 'null'); } catch (e) {}
+    if (!tok) return;
+
+    try {
+      const res = await fetch(cfg.API_BASE + '/api/presence', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tok },
+        body: JSON.stringify({ page: pageCourante() }),
+      });
+      if (!res.ok) return;
+      renderPresence(await res.json());
+    } catch (e) { /* réseau capricieux : on retentera au prochain battement */ }
+  }
+
+  const LABEL_PAGE = {};
+  function labelPage(id) {
+    if (!Object.keys(LABEL_PAGE).length) {
+      /* Deux entrées peuvent viser la même page (Facturation et Clients) :
+         on garde la première, qui est l'intitulé principal. */
+      document.querySelectorAll('.sidebar .nav-item[data-page]').forEach(n => {
+        if (!LABEL_PAGE[n.dataset.page]) LABEL_PAGE[n.dataset.page] = n.textContent.trim();
+      });
+    }
+    return LABEL_PAGE[id] || '';
+  }
+
+  function renderPresence(data) {
+    const sidebar = document.querySelector('.sidebar .mv-user');
+    if (!sidebar) return;
+
+    let box = $('mvPresence');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'mvPresence';
+      box.className = 'mv-presence';
+      sidebar.parentNode.insertBefore(box, sidebar);
+    }
+
+    const autres = (data.membres || []).filter(m => m.id !== data.moi);
+    if (!autres.length) {
+      box.innerHTML = `<div class="mv-pres-head"><span class="mv-pres-dot solo"></span>Vous êtes seul sur le panel</div>`;
+      return;
+    }
+
+    box.innerHTML = `
+      <div class="mv-pres-head"><span class="mv-pres-dot"></span>${autres.length} autre(s) en ligne</div>
+      <div class="mv-pres-list">${autres.map(m => {
+        const p = labelPage(m.page);
+        const ini = m.name.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
+        return `<div class="mv-pres-row" title="${esc(m.name)}${p ? ' — ' + esc(p) : ''}">
+          <span class="mv-pres-av">${m.avatar ? `<img src="${esc(m.avatar)}" alt="">` : esc(ini)}</span>
+          <span class="mv-pres-n">${esc(m.name)}</span>
+          ${p ? `<span class="mv-pres-p">${esc(p)}</span>` : ''}
+        </div>`;
+      }).join('')}</div>`;
+  }
+
+  function startPresence() {
+    const cfg = (window.MarloweAuth && window.MarloweAuth.CONFIG) || {};
+    if (cfg.MODE !== 'discord' || presenceTimer) return;
+    battementPresence();
+    presenceTimer = setInterval(battementPresence, PRESENCE_MS);
+    /* Un changement de page se signale tout de suite. */
+    document.addEventListener('click', e => {
+      if (e.target.closest('.sidebar .nav-item')) setTimeout(battementPresence, 300);
+    });
+  }
+
+  /* ========================================================================
+     AFFICHAGE — plein écran et zoom
+     ------------------------------------------------------------------------
+     Les tableaux du panel sont larges. Le plein écran récupère la hauteur
+     de la barre du navigateur, le zoom permet de faire entrer une colonne
+     de plus. Le niveau choisi est retenu d'une visite à l'autre.
+     ======================================================================== */
+  const ZOOMS = [80, 90, 100, 110, 125];
+  let zoomIdx = 2;
+
+  function appliquerZoom() {
+    const z = ZOOMS[zoomIdx];
+    document.documentElement.style.setProperty('--mv-zoom', z + '%');
+    document.querySelector('.app-shell').style.zoom = z + '%';
+    const l = $('mvZoomLabel');
+    if (l) l.textContent = z + ' %';
+    try { localStorage.setItem('mv.zoom', String(zoomIdx)); } catch (e) {}
+  }
+
+  function setZoom(delta) {
+    zoomIdx = Math.max(0, Math.min(ZOOMS.length - 1, zoomIdx + delta));
+    appliquerZoom();
+  }
+
+  function toggleFullscreen() {
+    const d = document;
+    if (!d.fullscreenElement) {
+      (d.documentElement.requestFullscreen || (() => {})).call(d.documentElement)
+        .catch(() => toast("Le navigateur a refusé le plein écran."));
+    } else {
+      (d.exitFullscreen || (() => {})).call(d);
+    }
+  }
+
+  function buildAffichageBar() {
+    if ($('mvViewBar')) return;
+    const sidebar = document.querySelector('.sidebar .mv-user');
+    if (!sidebar) return;
+
+    try {
+      const z = parseInt(localStorage.getItem('mv.zoom'), 10);
+      if (!isNaN(z)) zoomIdx = Math.max(0, Math.min(ZOOMS.length - 1, z));
+    } catch (e) {}
+
+    const bar = document.createElement('div');
+    bar.id = 'mvViewBar';
+    bar.className = 'mv-viewbar';
+    bar.innerHTML = `
+      <button class="mv-vb" id="mvZoomOut" title="Réduire l'affichage">−</button>
+      <span class="mv-vb-l" id="mvZoomLabel">100 %</span>
+      <button class="mv-vb" id="mvZoomIn" title="Agrandir l'affichage">+</button>
+      <button class="mv-vb wide" id="mvFull" title="Plein écran">⛶</button>`;
+    sidebar.parentNode.insertBefore(bar, sidebar);
+
+    $('mvZoomOut').addEventListener('click', () => setZoom(-1));
+    $('mvZoomIn').addEventListener('click', () => setZoom(1));
+    $('mvFull').addEventListener('click', toggleFullscreen);
+
+    document.addEventListener('fullscreenchange', () => {
+      const b = $('mvFull');
+      if (b) { b.textContent = document.fullscreenElement ? '⛚' : '⛶'; b.title = document.fullscreenElement ? 'Quitter le plein écran' : 'Plein écran'; }
+    });
+
+    /* Raccourcis : Ctrl + / − / 0 restent utiles même sans la barre. */
+    document.addEventListener('keydown', e => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      if (e.key === '+' || e.key === '=') { e.preventDefault(); setZoom(1); }
+      else if (e.key === '-') { e.preventDefault(); setZoom(-1); }
+      else if (e.key === '0') { e.preventDefault(); zoomIdx = 2; appliquerZoom(); }
+    });
+
+    appliquerZoom();
+  }
+
+  /* Quelqu'un d'autre a enregistré : on le signale sans interrompre. */
+  function signalerChangementDistant(qui, cles) {
+    const noms = {
+      rhRoster: 'les employés', rhDeparts: 'les départs', rhAbsences: 'les absences',
+      blacklist: 'la blacklist', clients: 'les clients', articles: 'les articles',
+      historique: 'les factures', facturesRecues: 'les factures reçues',
+      effectif: 'la production', dash: 'le tableau de bord', agenda: 'l\'agenda',
+      clotures: 'la clôture', primesExc: 'les primes exceptionnelles',
+    };
+    const quoi = (cles || []).map(k => noms[k]).filter(Boolean);
+    const detail = quoi.length ? ' — ' + [...new Set(quoi)].slice(0, 3).join(', ') : '';
+    toast(`${qui ? qui + ' a' : 'Quelqu\'un a'} mis à jour le panel${detail}.`);
+  }
+
+  /* ========================================================================
      LOT A — AJUSTEMENTS D'AFFICHAGE
      ======================================================================== */
   function injectStyles() {
@@ -2557,6 +2771,48 @@
       .mv-undo.off{opacity:.6;}
       .mv-undo p{font-size:13px;line-height:1.7;color:var(--muted,#9C9384);margin:8px 0 16px;max-width:760px;}
       .mv-undo button[disabled]{opacity:.45;cursor:not-allowed;}
+
+      /* --- Bandeau de mise à jour --- */
+      .mv-update{position:fixed;left:50%;transform:translateX(-50%);top:16px;z-index:9995;
+        display:flex;align-items:center;gap:14px;background:#26231E;
+        border:1px solid var(--or-soft,#8E7C4E);border-radius:999px;padding:10px 12px 10px 22px;
+        box-shadow:0 12px 34px rgba(0,0,0,.5);font-size:13px;color:var(--parchment,#EDE3CF);
+        max-width:min(760px,92vw);}
+      .mv-update span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+      .mv-update .btn{padding:7px 16px;font-size:12.5px;white-space:nowrap;}
+      .mv-update-x{background:none;border:none;color:var(--muted,#9C9384);font-size:18px;
+        cursor:pointer;line-height:1;padding:0 4px;}
+      .mv-update-x:hover{color:var(--parchment,#EDE3CF);}
+
+      /* --- Présence --- */
+      .mv-presence{margin:0 -16px;padding:12px 16px;border-top:1px solid var(--band,#3D372C);
+        font-size:11.5px;}
+      .mv-pres-head{display:flex;align-items:center;gap:7px;color:var(--muted,#9C9384);
+        font-size:10.5px;letter-spacing:.05em;margin-bottom:8px;}
+      .mv-pres-dot{width:7px;height:7px;border-radius:50%;background:var(--vine,#6E8B5D);
+        box-shadow:0 0 0 3px rgba(110,139,93,.18);flex-shrink:0;}
+      .mv-pres-dot.solo{background:var(--band,#3D372C);box-shadow:none;}
+      .mv-pres-list{display:flex;flex-direction:column;gap:6px;max-height:150px;overflow-y:auto;}
+      .mv-pres-row{display:flex;align-items:center;gap:8px;min-width:0;}
+      .mv-pres-av{width:20px;height:20px;border-radius:50%;flex-shrink:0;overflow:hidden;
+        background:rgba(201,169,97,.15);border:1px solid var(--or-soft,#8E7C4E);
+        display:flex;align-items:center;justify-content:center;font-size:8.5px;font-weight:600;
+        color:var(--or,#C9A961);}
+      .mv-pres-av img{width:100%;height:100%;object-fit:cover;}
+      .mv-pres-n{color:var(--parchment,#EDE3CF);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+      .mv-pres-p{margin-left:auto;color:var(--or-soft,#8E7C4E);font-size:10px;flex-shrink:0;
+        max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+      /* --- Barre d'affichage --- */
+      .mv-viewbar{margin:0 -16px;padding:10px 16px;border-top:1px solid var(--band,#3D372C);
+        display:flex;align-items:center;gap:6px;}
+      .mv-vb{width:26px;height:26px;border-radius:7px;border:1px solid var(--band,#3D372C);
+        background:transparent;color:var(--muted,#9C9384);cursor:pointer;font-size:13px;
+        line-height:1;display:flex;align-items:center;justify-content:center;transition:.15s;}
+      .mv-vb:hover{color:var(--or,#C9A961);border-color:var(--or-soft,#8E7C4E);}
+      .mv-vb.wide{margin-left:auto;}
+      .mv-vb-l{font-size:10.5px;color:var(--muted,#9C9384);min-width:38px;text-align:center;
+        font-variant-numeric:tabular-nums;}
 
       .table-wrap{overflow-x:auto;}
 
@@ -2702,6 +2958,14 @@
     renderCloture();
     refreshEffectifFilters();
     D().redraw('rhRecruiters');
+
+    /* Confort : version, présence, affichage. */
+    verifierVersion();
+    setInterval(verifierVersion, VERSION_MS);
+    buildAffichageBar();
+    startPresence();
+    D().onRemoteChange(signalerChangementDistant);
+    D().startSync();
   }
 
   /* Les données arrivent après la connexion : on attend qu'elles soient là
@@ -2730,6 +2994,7 @@
     renderBilan, renderWeekHistory, copyDetailGDoc, copyDepensesGDoc,
     renderHistorique, renderPrimesExc, addPrimeExceptionnelle,
     renderCloture, renderEffectifHead, refreshEffectifFilters, applyEffectifFilter,
+    verifierVersion, battementPresence, setZoom, toggleFullscreen,
   };
 
   window.MarloweClotureSteps = clotureSteps;

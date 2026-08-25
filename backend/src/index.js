@@ -29,7 +29,7 @@ function corsHeaders(env) {
   return {
     'Access-Control-Allow-Origin': allowedOrigin(env),
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Methods': 'GET, PUT, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin',
   };
@@ -309,6 +309,35 @@ async function handlePermissions(request, env) {
   return json(env, { error: 'method_not_allowed' }, 405);
 }
 
+/* GET | POST /api/presence
+   Qui d'autre est en train de travailler sur le panel. Chaque navigateur
+   signale sa présence toutes les 45 secondes ; une entrée non renouvelée
+   disparaît d'elle-même au bout de 100 secondes. */
+const PRESENCE_TTL = 100;
+
+async function handlePresence(request, env) {
+  const s = await currentSession(request, env);
+  if (!s) return json(env, { error: 'unauthorized' }, 401);
+
+  if (request.method === 'POST') {
+    let page = '';
+    try { page = String((await request.json()).page || '').slice(0, 40); } catch (e) {}
+    await env.MARLOWE.put('pres:' + s.user.id, JSON.stringify({
+      id: s.user.id, name: s.user.name, avatar: s.user.avatar,
+      page, at: Date.now(),
+    }), { expirationTtl: PRESENCE_TTL });
+  }
+
+  const list = await env.MARLOWE.list({ prefix: 'pres:' });
+  const membres = [];
+  for (const k of list.keys) {
+    const v = await env.MARLOWE.get(k.name, 'json');
+    if (v) membres.push(v);
+  }
+  membres.sort((a, b) => a.name.localeCompare(b.name));
+  return json(env, { membres, moi: s.user.id });
+}
+
 /* GET | PUT /api/settings
    Réglages du panel. Aujourd'hui : la liste des rôles retenus comme rôles
    du domaine (les autres — partenaires, décoratifs — sont écartés). */
@@ -355,9 +384,18 @@ async function handleData(request, env) {
   const s = await currentSession(request, env);
   if (!s) return json(env, { error: 'unauthorized' }, 401);
 
+  /* ?meta=1 → juste le numéro de révision. C'est ce que les navigateurs
+     interrogent en boucle : quelques octets au lieu de tout le contenu. */
+  const url = new URL(request.url);
+  if (request.method === 'GET' && url.searchParams.get('meta') === '1') {
+    const m = await env.MARLOWE.get('datameta', 'json');
+    return json(env, m || { rev: 0 });
+  }
+
   if (request.method === 'GET') {
     const d = await env.MARLOWE.get('data', 'json');
-    return json(env, d || {});
+    const m = await env.MARLOWE.get('datameta', 'json');
+    return json(env, Object.assign({}, d || {}, { _meta: m || { rev: 0 } }));
   }
 
   if (request.method === 'PUT') {
@@ -379,11 +417,23 @@ async function handleData(request, env) {
       current[String(k).slice(0, 64)] = v;
     }
 
+    delete current._meta;
     const out = JSON.stringify(current);
     if (out.length > DATA_MAX) return json(env, { error: 'too_large' }, 413);
     await env.MARLOWE.put('data', out);
 
-    return json(env, { ok: true, saved: Object.keys(body) });
+    /* La révision s'incrémente à chaque écriture : c'est elle qui prévient
+       les autres navigateurs qu'ils travaillent sur une version périmée. */
+    const prev = await env.MARLOWE.get('datameta', 'json');
+    const meta = {
+      rev: ((prev && prev.rev) || 0) + 1,
+      by: s.user.name,
+      at: new Date().toISOString(),
+      keys: Object.keys(body),
+    };
+    await env.MARLOWE.put('datameta', JSON.stringify(meta));
+
+    return json(env, { ok: true, saved: Object.keys(body), rev: meta.rev });
   }
 
   return json(env, { error: 'method_not_allowed' }, 405);
@@ -426,6 +476,7 @@ export default {
         case '/api/permissions': return handlePermissions(request, env);
         case '/api/settings':    return handleSettings(request, env);
         case '/api/data':        return handleData(request, env);
+        case '/api/presence':    return handlePresence(request, env);
         case '/api/logout':      return handleLogout(request, env);
         default:                 return json(env, { error: 'not_found' }, 404);
       }

@@ -187,6 +187,9 @@ window.MarloweData = (function () {
       body: JSON.stringify(payload),
     });
     if (!res.ok) throw new Error('écriture ' + res.status);
+    /* On retient notre propre révision : inutile de se resynchroniser
+       sur une modification que l'on vient de faire soi-même. */
+    try { const j = await res.json(); if (j && j.rev) myRev = j.rev; } catch (e) {}
   }
 
   /* ------------------------------------------------------------------------
@@ -270,7 +273,65 @@ window.MarloweData = (function () {
   }
 
   /* ------------------------------------------------------------------------
-     6. API PUBLIQUE
+     6. SYNCHRONISATION ENTRE MEMBRES
+     ------------------------------------------------------------------------
+     Le panel est un outil d'équipe : ce que le DRH saisit doit apparaître
+     chez le patron sans qu'il ait à recharger.
+
+     Le serveur ne sait pas nous appeler, alors c'est nous qui demandons —
+     mais seulement le NUMÉRO DE RÉVISION, quelques octets. Le contenu
+     complet n'est retéléchargé que lorsque ce numéro a bougé.
+
+     Deux garde-fous : on ne récupère rien tant qu'une sauvegarde locale
+     est en attente (elle serait écrasée), et on ignore la révision que
+     l'on vient soi-même de produire.
+     ------------------------------------------------------------------------ */
+  const SYNC_MS = 25000;
+  let myRev = 0;
+  let syncTimer = null;
+  let onRemote = null;      /* prévenu quand des données arrivent d'ailleurs */
+
+  async function fetchMeta() {
+    const c = cfg();
+    if (c.MODE !== 'discord') return null;
+    let tok = null;
+    try { tok = JSON.parse(localStorage.getItem('mv.token') || 'null'); } catch (e) {}
+    if (!tok) return null;
+    const res = await fetch(c.API_BASE + '/api/data?meta=1', {
+      headers: { 'Authorization': 'Bearer ' + tok },
+    });
+    if (!res.ok) return null;
+    return res.json();
+  }
+
+  async function syncTick() {
+    if (pending.size || inFlight) return;        /* on a du travail non enregistré */
+    if (document.hidden) return;                 /* onglet en arrière-plan */
+
+    let meta;
+    try { meta = await fetchMeta(); } catch (e) { return; }
+    if (!meta || !meta.rev || meta.rev === myRev) return;
+
+    /* Quelqu'un d'autre a écrit : on recharge et on redessine. */
+    const before = myRev;
+    myRev = meta.rev;
+    const ok = await api.load();
+    if (ok && before) {
+      const qui = meta.by && meta.by !== (window.MarloweSession || {}).name ? meta.by : null;
+      if (onRemote) onRemote(qui, meta.keys || []);
+    }
+  }
+
+  function startSync() {
+    if (syncTimer || cfg().MODE !== 'discord') return;
+    syncTimer = setInterval(syncTick, SYNC_MS);
+    /* Au retour sur l'onglet, on vérifie tout de suite plutôt que d'attendre. */
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) syncTick(); });
+    window.addEventListener('focus', syncTick);
+  }
+
+  /* ------------------------------------------------------------------------
+     7. API PUBLIQUE
      ------------------------------------------------------------------------ */
   const api = {
     /* Charge tout depuis le serveur et redessine. Appelé au démarrage. */
@@ -282,6 +343,8 @@ window.MarloweData = (function () {
         loaded = true;
         return false;
       }
+
+      if (stored && stored._meta && stored._meta.rev) myRev = stored._meta.rev;
 
       let n = 0;
       Object.keys(COLLECTIONS).forEach(key => {
@@ -314,6 +377,10 @@ window.MarloweData = (function () {
     redraw,
     redrawAll,
     ref,
+    startSync,
+    syncNow: syncTick,
+    onRemoteChange(fn) { onRemote = fn; },
+    rev: () => myRev,
     isLoaded: () => loaded,
     collections: () => Object.keys(COLLECTIONS),
 
