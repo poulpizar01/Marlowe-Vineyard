@@ -3503,6 +3503,11 @@
 
   function cfgAuth() { return (window.MarloweAuth && window.MarloweAuth.CONFIG) || {}; }
 
+  /* Seule cette adresse est acceptée par le serveur : c'est la valeur de
+     SITE_URL côté Worker. Ouvrir le panel ailleurs fait échouer tous les
+     appels réseau, pas seulement l'envoi Discord. */
+  const SITE_ATTENDU = 'https://poulpizar01.github.io';
+
   function jeton() {
     try { return JSON.parse(localStorage.getItem('mv.token') || 'null'); } catch (e) { return null; }
   }
@@ -4763,7 +4768,25 @@
       }
       toast(data.detail || `Discord a refusé l'envoi (${res.status}).`);
     } catch (e) {
-      toast("Discord injoignable — la demande reste dans le fil.");
+      /* Un fetch qui LÈVE (au lieu de renvoyer un code d'erreur) veut dire que
+         la requête n'est jamais partie. Neuf fois sur dix c'est le navigateur
+         qui l'a bloquée : le serveur n'autorise que l'adresse publique du site,
+         et le panel a été ouvert depuis un fichier local. Le dire évite de
+         chercher du côté de Discord, qui n'y est pour rien. */
+      const attendu = (() => { try { return new URL(cfg.API_BASE).origin && SITE_ATTENDU; }
+                               catch (err) { return SITE_ATTENDU; } })();
+      const ici = location.origin;
+      console.warn('[Marlowe] envoi Discord bloqué :', e);
+
+      if (ici !== attendu) {
+        alert("La demande est bien inscrite dans le fil, mais elle n'a pas pu partir sur Discord.\n\n"
+            + `Ce panel est ouvert depuis :  ${ici || 'un fichier local'}\n`
+            + `Le serveur n'accepte que :    ${attendu}\n\n`
+            + "Le navigateur bloque donc l'appel avant qu'il ne parte. Testez depuis le site en ligne "
+            + "(poussez vos fichiers sur GitHub), pas depuis le fichier ouvert sur votre ordinateur.");
+        return;
+      }
+      toast("Serveur injoignable — la demande reste dans le fil.");
     }
   }
 
