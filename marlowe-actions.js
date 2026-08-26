@@ -3480,6 +3480,22 @@
     entTitre: '', entDesc: '', entPdf: '', entEmbed: '', entPages: [],
   };
   const NOUV_MAX = 5;
+
+  /* Un lien copié depuis le bouton « Partager » de Canva ne s'affiche PAS dans
+     une page : Canva l'interdit, et le cadre reste blanc. Seule la forme
+     « …/view?embed » est intégrable. On remet donc le lien en forme dès la
+     saisie, pour que ça marche tout de suite dans le panel — le serveur refait
+     la même chose de son côté, par sécurité. */
+  function lienCanva(brut) {
+    const t = String(brut || '').trim();
+    if (!t) return '';
+    let u;
+    try { u = new URL(t); } catch (e) { return null; }
+    if (u.hostname !== 'www.canva.com' && u.hostname !== 'canva.com') return null;
+    const m = u.pathname.match(/^\/design\/([A-Za-z0-9_-]+)\/([A-Za-z0-9_-]+)/);
+    if (!m) return null;
+    return `https://www.canva.com/design/${m[1]}/${m[2]}/view?embed`;
+  }
   const CAT_MAX  = 40;
 
   function cfgAuth() { return (window.MarloweAuth && window.MarloweAuth.CONFIG) || {}; }
@@ -3709,10 +3725,27 @@
     if (e.target.closest('#mvVitSave')) {
       vitrine.catTitre = (document.getElementById('mvCatTitre') || {}).value || '';
       vitrine.catDesc  = (document.getElementById('mvCatDesc')  || {}).value || '';
-      vitrine.catEmbed = (document.getElementById('mvCatEmbed') || {}).value || '';
       vitrine.entTitre = (document.getElementById('mvEntTitre') || {}).value || '';
       vitrine.entDesc  = (document.getElementById('mvEntDesc')  || {}).value || '';
-      vitrine.entEmbed = (document.getElementById('mvEntEmbed') || {}).value || '';
+
+      /* Un lien non reconnu est signalé plutôt qu'enregistré en silence :
+         sinon le catalogue reste vide sans qu'on sache pourquoi. */
+      const mauvais = [];
+      [['mvCatEmbed', 'catEmbed', 'citoyens'], ['mvEntEmbed', 'entEmbed', 'entreprise']]
+        .forEach(([id, cle, quoi]) => {
+          const brut = (document.getElementById(id) || {}).value || '';
+          const propre = lienCanva(brut);
+          if (propre === null) { mauvais.push(quoi); return; }
+          vitrine[cle] = propre;
+        });
+
+      if (mauvais.length) {
+        alert("Le lien du catalogue " + mauvais.join(' et ')
+          + " n'est pas une adresse Canva valide.\n\n"
+          + "Attendu : une adresse qui commence par https://www.canva.com/design/…\n"
+          + "Ouvrez le design, Partager, copiez le lien, et collez-le tel quel.");
+        return;
+      }
       sauverVitrine('Vitrine publiée');
       const ok = document.getElementById('mvVitSaved');
       if (ok) { ok.classList.add('on'); setTimeout(() => ok.classList.remove('on'), 1800); }
@@ -4172,6 +4205,49 @@
     imgs.forEach((im, k) => { im.hidden = k !== i; if (k === i) im.removeAttribute('loading'); });
     const n = $('n-' + b.dataset.cible);
     if (n) n.textContent = `${i + 1} / ${imgs.length}`;
+  });
+
+
+  /* Une ligne saisie à la main, pour quelqu'un que la tablette n'a pas
+     remonté — un service hors ligne, un oubli, une correction. Elle rejoint
+     `dash` comme les autres et suit donc la clôture. */
+  async function ajouterLigneDash() {
+    if (typeof dash === 'undefined') return;
+    const grades = (typeof multiplierFor === 'object')
+      ? Object.keys(multiplierFor) : ['Saisonnier'];
+
+    const r = await askForm('Ajouter une ligne au tableau de bord', [
+      { key: 'name',     label: 'Employé', value: '' },
+      { key: 'rank',     label: 'Rang', value: grades[0], options: grades },
+      { key: 'factures', label: 'Factures ($)', value: '0', type: 'number' },
+      { key: 'runs',     label: 'Runs ($)', value: '0', type: 'number' },
+      { key: 'ventes',   label: 'Ventes (nombre)', value: '0', type: 'number' },
+      { key: 'heures',   label: 'Heures', value: '0', type: 'number' },
+    ], "À utiliser quand la tablette de la semaine n'a pas remonté quelqu'un. Le quota et la prime se recalculent tout seuls à partir des runs.");
+    if (!r) return;
+
+    const nom = (r.name || '').trim();
+    if (!nom) { toast('Il faut au moins un nom.'); return; }
+    if (dash.some(d => d.name === nom)) {
+      toast(`${nom} est déjà dans le tableau — retirez la ligne existante d'abord.`);
+      return;
+    }
+
+    const n = v => Math.max(0, Math.round(Number(v) || 0));
+    const factures = n(r.factures), runs = n(r.runs);
+
+    dash.push({
+      name: nom, rank: r.rank,
+      factures, runs, ventes: n(r.ventes),
+      part: factures + runs, tickets: 0, heures: n(r.heures),
+    });
+    D().note(`a ajouté ${nom} au tableau de bord (ligne manuelle)`);
+    D().save('dash');
+    toast(`${nom} ajouté au tableau de bord.`);
+  }
+
+  document.addEventListener('click', e => {
+    if (e.target.closest('#mvDashManuel')) ajouterLigneDash();
   });
 
   window.MarloweActions = {
