@@ -350,26 +350,33 @@
 
 
 
-  /* ===== FOND ANIMÉ (photos du domaine) =====
-     Une scène fixe derrière toute la page : les photos se fondent l'une dans
-     l'autre et l'angle de vue suit la souris. Le voile au-dessus garantit que
-     le texte reste lisible quelle que soit la photo affichée. */
-  .bg-scene{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;}
+  /* ===== FOND DU DOMAINE — lever du jour et poussière d'or =====
+     Tout est dessiné : ciel en dégradé, crêtes en SVG, grains d'or sur un
+     canvas. Aucune image n'est chargée, ce qui vaut à la page 800 Ko de moins
+     que les photos qu'elle remplace, et un rendu net sur n'importe quel écran.
+     La scène vit d'elle-même ET suit la souris. */
+  .bg-scene{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;
+    background:linear-gradient(180deg,#2A1E3C 0%,#5E3A4C 22%,#8E5350 42%,
+      #C9834F 64%,#EBBB72 84%,#F4DBA0 100%);}
   .bg-move{position:absolute;inset:-7%;will-change:transform;
     transition:transform .5s cubic-bezier(.22,.61,.36,1);}
-  .bg-shot{position:absolute;inset:0;background-size:cover;background-position:center;
-    opacity:0;transition:opacity 2.4s ease;transform:scale(1.02);}
-  .bg-shot.on{opacity:1;}
 
-  /* Ken Burns : la photo affichée dérive lentement. C'est ce mouvement continu,
-     plus que la parallaxe, qui donne l'impression d'un plan de cinéma. */
-  .bg-shot.on{animation:kenburns 13s ease-out forwards;}
-  @keyframes kenburns{
-    from{transform:scale(1.02) translate3d(0,0,0);}
-    to  {transform:scale(1.11) translate3d(-1.1%,-1.4%,0);}
-  }
+  /* Placé de façon à ce que le disque affleure entre le texte et l'encart
+     des nouveautés : plus à droite il disparaissait entièrement derrière. */
+  .bg-sun{position:absolute;left:50%;bottom:22%;width:min(32vw,360px);aspect-ratio:1;border-radius:50%;
+    background:radial-gradient(circle,#FFF6D6 0%,#FFD97A 42%,rgba(255,200,90,.35) 62%,rgba(255,190,80,0) 74%);
+    animation:souffle 18s ease-in-out infinite alternate;}
+  @keyframes souffle{from{transform:translateY(2.4%) scale(.95);opacity:.9;}
+                     to  {transform:translateY(-1.6%) scale(1.05);opacity:1;}}
 
-  /* Le voile s'épaissit au fil du défilement : la photo est presque nue en haut
+  .bg-ridge{position:absolute;left:0;right:0;bottom:0;height:52%;}
+  .bg-ridge svg{width:100%;height:100%;display:block;}
+
+  /* Les grains sont dessinés sur un canvas : une centaine de petits éléments
+     HTML animés ferait ramer la page, un canvas les trace en un passage. */
+  .bg-grain{position:absolute;inset:0;width:100%;height:100%;}
+
+  /* Le voile s'épaissit au fil du défilement : la scène est presque nue en haut
      de page, et entièrement calmée dès qu'on entre dans le contenu. */
   .bg-veil{position:absolute;inset:0;background:var(--veil);opacity:var(--veil-o,1);}
   .bg-vignette{position:absolute;inset:0;background:var(--vignette);}
@@ -380,7 +387,7 @@
 
   @media(prefers-reduced-motion:reduce){
     .bg-move{transition:none;}
-    .bg-shot{transition:none;animation:none;transform:none;}
+    .bg-sun{animation:none;}
     .bg-scene{transition:none;}
     .bg-veil{opacity:1 !important;}
   }
@@ -393,11 +400,21 @@
   .bg-topfade{position:absolute;top:0;left:0;right:0;height:200px;
     background:linear-gradient(180deg, color-mix(in srgb, var(--page-solid) 90%, transparent) 0%,
       color-mix(in srgb, var(--page-solid) 66%, transparent) 55%, transparent 100%);}
+  /* Sur téléphone le dégradé latéral n'a pas de sens : le texte occupe toute
+     la largeur. On le remplace par un voile vertical — assez léger pour que le
+     lever du jour se voie quand même, puisque c'est là qu'il joue son rôle. */
   @media(max-width:980px){
     .bg-scrim{background:linear-gradient(180deg,
-      color-mix(in srgb, var(--page-solid) 70%, transparent) 0%,
-      color-mix(in srgb, var(--page-solid) 84%, transparent) 60%,
-      color-mix(in srgb, var(--page-solid) 88%, transparent) 100%);}
+      color-mix(in srgb, var(--page-solid) 46%, transparent) 0%,
+      color-mix(in srgb, var(--page-solid) 62%, transparent) 55%,
+      color-mix(in srgb, var(--page-solid) 72%, transparent) 100%);}
+  }
+  /* En thème clair le texte est sombre : il lui faut plus de couverture. */
+  @media(max-width:980px){
+    :root[data-theme="light"] .bg-scrim{background:linear-gradient(180deg,
+      color-mix(in srgb, var(--page-solid) 66%, transparent) 0%,
+      color-mix(in srgb, var(--page-solid) 78%, transparent) 55%,
+      color-mix(in srgb, var(--page-solid) 84%, transparent) 100%);}
   }
 
   /* ===== LOCATION DU DOMAINE ===== */
@@ -561,11 +578,16 @@
 
 <div class="bg-scene" id="bgScene" aria-hidden="true">
   <div class="bg-move" id="bgMove">
-    <div class="bg-shot" data-shot="img/bg1.jpg"></div>
-    <div class="bg-shot" data-shot="img/bg2.jpg"></div>
-    <div class="bg-shot" data-shot="img/bg3.jpg"></div>
-    <div class="bg-shot" data-shot="img/bg4.jpg"></div>
+    <div class="bg-sun"></div>
+    <div class="bg-ridge">
+      <svg viewBox="0 0 1200 220" preserveAspectRatio="none">
+        <path d="M0,118 C180,72 320,138 500,110 C680,82 820,38 1000,78 C1100,100 1150,94 1200,102 L1200,220 L0,220 Z" fill="#7A4A38" opacity=".85"/>
+        <path d="M0,162 C200,130 380,184 580,162 C780,140 960,108 1200,146 L1200,220 L0,220 Z" fill="#412C2A"/>
+        <path d="M0,198 C240,180 480,210 760,194 C960,182 1080,174 1200,186 L1200,220 L0,220 Z" fill="#20171A"/>
+      </svg>
+    </div>
   </div>
+  <canvas class="bg-grain" id="bgGrain"></canvas>
   <div class="bg-veil"></div>
   <div class="bg-scrim"></div>
   <div class="bg-topfade"></div>
@@ -1306,27 +1328,35 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
 })();
 
 /* ==================================================================
-   FOND ANIMÉ — fondu entre les photos + angle de vue qui suit la souris
+   FOND DU DOMAINE — lever du jour + poussière d'or
+   La scène vit d'elle-même (soleil qui respire, grains qui montent) et
+   suit la souris quand il y en a une. Sur téléphone il n'y a pas de
+   souris : c'est justement pour ça que la vie propre est indispensable,
+   sinon la moitié des visiteurs verraient une image fixe.
    ================================================================== */
 (function(){
-  const move  = document.getElementById('bgMove');
-  const shots = move ? [...move.querySelectorAll('.bg-shot')] : [];
-  if(!shots.length) return;
-
-  const calme = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const scene = document.getElementById('bgScene');
+  const move  = document.getElementById('bgMove');
+  const cv    = document.getElementById('bgGrain');
+  if(!scene || !cv) return;
 
-  /* Le voile suit le défilement : quasi transparent en haut de page pour que la
-     photo frappe, opaque dès qu'on entre dans le contenu pour qu'il reste net.
-     Lu dans un rAF — un handler de scroll qui touche au style à chaque pixel
-     fait ramer la page. */
+  const ctx   = cv.getContext('2d');
+  const calme = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const survolable = matchMedia('(hover: hover)').matches;
+
+  scene.classList.add('pret');
+
+  /* --- Le voile suit le défilement -------------------------------------
+     Quasi transparent en haut de page pour que la scène frappe, opaque dès
+     qu'on entre dans le contenu pour qu'il reste net. Lu dans un rAF : un
+     handler de scroll qui touche au style à chaque pixel fait ramer. */
   const veilMin = parseFloat(getComputedStyle(document.documentElement)
     .getPropertyValue('--veil-min')) || .5;
   let attend = false;
   function voile(){
     attend = false;
-    const h = Math.max(window.innerHeight * .85, 1);
-    const t = Math.min(Math.max(window.scrollY / h, 0), 1);
+    const h = Math.max(innerHeight * .85, 1);
+    const t = Math.min(Math.max(scrollY / h, 0), 1);
     const r = document.documentElement.style;
     r.setProperty('--veil-o',  (veilMin + (1 - veilMin) * t).toFixed(3));
     r.setProperty('--scrim-o', (1 - t).toFixed(3));
@@ -1337,66 +1367,78 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
     addEventListener('resize', voile, { passive:true });
   }
 
-  /* La première photo se charge tout de suite, les autres seulement une fois
-     la page affichée : le premier rendu n'attend jamais 800 Ko d'images. */
-  function charger(i){
-    const el = shots[i];
-    if(!el || el.dataset.pret) return;
-    el.dataset.pret = '1';
-    el.style.backgroundImage = `url("${el.dataset.shot}")`;
-  }
-  charger(0);
-
-  /* On attend que la première photo soit réellement décodée avant d'ouvrir la
-     scène : sinon le fondu d'entrée joue sur un rectangle vide. */
-  const first = new Image();
-  first.onload = first.onerror = () => {
-    shots[0].classList.add('on');
-    if(scene) scene.classList.add('pret');
-  };
-  first.src = shots[0].dataset.shot;
-  setTimeout(() => { shots[0].classList.add('on'); if(scene) scene.classList.add('pret'); }, 2500);
-
-  const reste = () => shots.forEach((_, i) => i && charger(i));
-  if(document.readyState === 'complete') reste();
-  else window.addEventListener('load', reste, { once:true });
-
-  /* Fondu enchaîné. À l'arrêt si l'onglet est en arrière-plan : inutile de
-     faire tourner une animation que personne ne regarde. */
-  if(!calme && shots.length > 1){
-    let i = 0;
-    setInterval(() => {
-      if(document.hidden) return;
-      shots[i].classList.remove('on');
-      i = (i + 1) % shots.length;
-      charger(i);
-      /* Retirer puis remettre la classe relance le Ken Burns depuis le début.
-         Le reflow forcé au milieu n'est pas décoratif : sans lui le navigateur
-         regroupe les deux changements et l'animation ne repart jamais. */
-      void shots[i].offsetWidth;
-      shots[i].classList.add('on');
-    }, 11000);
-  }
-
-  /* Parallaxe. Le pointeur donne une cible, un lissage l'y amène :
-     sans ça le fond sautille à chaque pixel de souris. */
-  if(!calme && matchMedia('(hover: hover)').matches){
-    let cx = 0, cy = 0, x = 0, y = 0, anime = false;
-
-    function boucle(){
-      x += (cx - x) * .06;
-      y += (cy - y) * .06;
-      move.style.transform = `translate3d(${x.toFixed(2)}%, ${y.toFixed(2)}%, 0)`;
-      if(Math.abs(cx - x) > .01 || Math.abs(cy - y) > .01) requestAnimationFrame(boucle);
-      else anime = false;
-    }
-
-    window.addEventListener('pointermove', e => {
-      cx = ((e.clientX / window.innerWidth)  - .5) * -4.2;
-      cy = ((e.clientY / window.innerHeight) - .5) * -4.2;
-      if(!anime){ anime = true; requestAnimationFrame(boucle); }
+  /* --- Parallaxe --------------------------------------------------------
+     Le pointeur donne une cible, un lissage l'y amène : sans ça le fond
+     sautille à chaque pixel de souris. */
+  let cx = 0, cy = 0, x = 0, y = 0;
+  if(!calme && survolable){
+    addEventListener('pointermove', e => {
+      cx = ((e.clientX / innerWidth)  - .5) * -2;
+      cy = ((e.clientY / innerHeight) - .5) * -2;
     }, { passive:true });
   }
+
+  /* --- Les grains d'or --------------------------------------------------- */
+  let pts = [], dpr = 1;
+
+  function semer(){
+    const n = Math.min(150, Math.round(cv.width * cv.height / 34000));
+    pts = Array.from({ length: n }, () => ({
+      x: Math.random() * cv.width,
+      y: Math.random() * cv.height,
+      r: 0.7 + Math.random() * 2.2,
+      v: 4 + Math.random() * 16,        /* vitesse de montée, px/s */
+      a: .3 + Math.random() * .5,
+      ph: Math.random() * Math.PI * 2,  /* déphasage du balancement */
+    }));
+  }
+
+  function dimensionner(){
+    dpr = Math.min(devicePixelRatio || 1, 2);
+    cv.width  = Math.max(1, Math.round(innerWidth  * dpr));
+    cv.height = Math.max(1, Math.round(innerHeight * dpr));
+    semer();
+  }
+  dimensionner();
+  addEventListener('resize', dimensionner, { passive:true });
+
+  let dernier = 0;
+  function boucle(t){
+    requestAnimationFrame(boucle);
+
+    /* Onglet en arrière-plan : rien à dessiner, personne ne regarde. */
+    if(document.hidden){ dernier = t; return; }
+
+    const dt = Math.min((t - dernier) / 1000 || 0, .05);
+    dernier = t;
+
+    if(!calme && survolable){
+      x += (cx - x) * .06;
+      y += (cy - y) * .06;
+      move.style.transform = `translate3d(${(x * 2.4).toFixed(2)}%, ${(y * 1.6).toFixed(2)}%, 0)`;
+    }
+
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    for(const p of pts){
+      if(!calme){
+        p.y -= p.v * dt * dpr;
+        p.ph += dt * .8;
+        if(p.y < -6){ p.y = cv.height + 6; p.x = Math.random() * cv.width; }
+      }
+      /* Le balancement suit la souris : les grains s'écartent devant le
+         curseur au lieu de monter tout droit. */
+      const derive = Math.sin(p.ph) * 6 * dpr + x * 26 * dpr;
+
+      ctx.beginPath();
+      ctx.arc(p.x + derive, p.y, p.r * dpr, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(233,199,120,${p.a})`;
+      ctx.shadowBlur = 7 * dpr;
+      ctx.shadowColor = 'rgba(233,199,120,.75)';
+      ctx.fill();
+    }
+    ctx.shadowBlur = 0;
+  }
+  requestAnimationFrame(boucle);
 })();
 
 /* ==================================================================

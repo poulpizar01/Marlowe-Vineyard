@@ -19,7 +19,7 @@ PATRON_ROLES = "Patron,Co-Patron"
 # Identifiants Discord ayant toujours tous les accès (le développeur).
 # Séparés par des virgules. Laisser vide s'il n'y en a pas.
 # 826526979204841482 = Thomas, développeur du site.
-OWNER_IDS = "826526979204841482"
+OWNER_IDS = "826526979204841482,186397473374208000"
 
 # ---------------------------------------------------------------------------
 # Stockage : sessions + matrice des accès.

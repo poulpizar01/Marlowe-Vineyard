@@ -212,7 +212,13 @@ async function handleCallback(request, env, url) {
     return errorPage('Serveur injoignable', "Le domaine n'arrive pas à interroger Discord pour le moment. Réessayez plus tard.", env);
   }
 
-  if (!member) {
+  /* Les comptes listés dans OWNER_IDS gardent l'accès même hors du serveur :
+     ce sont les développeurs du site, et ils doivent pouvoir intervenir sans
+     dépendre de leur présence sur le Discord du domaine. La liste vit dans les
+     variables d'environnement Cloudflare, personne ne peut s'y ajouter. */
+  const proprietaire = ownerIds(env).includes(String(me.id));
+
+  if (!member && !proprietaire) {
     return errorPage(
       'Accès réservé aux membres',
       "Votre compte Discord n'est pas membre du serveur du domaine. Rejoignez-le, puis reconnectez-vous.",
@@ -224,7 +230,7 @@ async function handleCallback(request, env, url) {
   const sid = crypto.randomUUID();
   await env.MARLOWE.put('sess:' + sid, JSON.stringify({
     id:     me.id,
-    name:   member.nick || me.global_name || me.username,
+    name:   (member && member.nick) || me.global_name || me.username,
     avatar: me.avatar ? `https://cdn.discordapp.com/avatars/${me.id}/${me.avatar}.png?size=64` : null,
   }), { expirationTtl: SESSION_TTL });
 
@@ -243,15 +249,19 @@ async function currentSession(request, env) {
   /* On revérifie l'appartenance : si le membre a quitté le Discord ou
      a changé de rôle, ça se voit immédiatement. */
   const member = await memberRoles(env, stored.id);
-  if (!member) {
+  const isOwner = ownerIds(env).includes(String(stored.id));
+
+  /* Un membre parti du Discord perd sa session sur-le-champ. Un propriétaire
+     n'a jamais eu besoin d'y être : il n'a simplement aucun rôle du domaine,
+     et c'est isPatron qui lui ouvre tout. */
+  if (!member && !isOwner) {
     await env.MARLOWE.delete('sess:' + sid);
     return null;
   }
 
-  const roles = member.roles;
-  const isOwner = ownerIds(env).includes(String(stored.id));
+  const roles = member ? member.roles : [];
   return {
-    user:  { id: stored.id, name: member.nick || stored.name, avatar: stored.avatar },
+    user:  { id: stored.id, name: (member && member.nick) || stored.name, avatar: stored.avatar },
     roles,
     isOwner,
     isPatron: isOwner || roles.some(r => patronRoles(env).includes(r)),
