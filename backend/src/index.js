@@ -95,6 +95,113 @@ function memSet(cle, val, ttlSecondes) {
   memoire.set(cle, { val, exp: Date.now() + ttlSecondes * 1000 });
 }
 
+/* ---------------------------------------------------------------------------
+   La base — D1 (SQLite) derrière la façade de toujours
+   ---------------------------------------------------------------------------
+   Tout le fichier continue d'écrire base(env).get / .put / .delete / .list,
+   mot pour mot comme avant. Seules ces quelques lignes savent qu'il y a du SQL
+   derrière : si le stockage change encore un jour, il n'y aura qu'ici à
+   toucher, et pas dans les vingt routes du dessus.
+
+   Pourquoi ce déménagement : KV comptait 1 000 écritures par jour sur le plan
+   gratuit — de quoi tenir une demi-journée de travail à une personne. D1 en
+   compte 100 000, gratuitement lui aussi, et lit tout aussi vite.
+
+   Les images, elles, restent dans KV (env.IMAGES) : elles s'écrivent trois
+   fois par mois et pèsent lourd. C'est exactement ce pour quoi KV est bon, et
+   D1 plafonne à 2 Mo par ligne. */
+
+/* Le préfixe d'un listing est comparé avec LIKE, où % et _ sont des
+   caractères spéciaux. Aucune de nos clés n'en contient, mais une échappe
+   coûte trois lignes et évite une surprise le jour où l'une en contiendra. */
+function echapperLike(x) {
+  return String(x).replace(/[\\%_]/g, c => '\\' + c);
+}
+
+function base(env) {
+  if (!env.DB) throw new Error('La base D1 n\'est pas reliée (binding DB manquant dans wrangler.toml).');
+
+  return {
+    async get(cle, type) {
+      const r = await env.DB
+        .prepare('SELECT val FROM kv WHERE cle = ? AND (exp IS NULL OR exp > ?)')
+        .bind(cle, Date.now()).first();
+      if (!r) return repriseKV(env, cle, type);
+      if (type !== 'json') return r.val;
+      try { return JSON.parse(r.val); } catch (e) { return null; }
+    },
+
+    async put(cle, val, opts) {
+      const exp = (opts && opts.expirationTtl)
+        ? Date.now() + opts.expirationTtl * 1000
+        : null;
+      const texte = typeof val === 'string' ? val : JSON.stringify(val);
+      await env.DB.prepare(
+        'INSERT INTO kv (cle, val, exp) VALUES (?, ?, ?) ' +
+        'ON CONFLICT(cle) DO UPDATE SET val = excluded.val, exp = excluded.exp'
+      ).bind(cle, texte, exp).run();
+    },
+
+    async delete(cle) {
+      await env.DB.prepare('DELETE FROM kv WHERE cle = ?').bind(cle).run();
+    },
+
+    async list(opts) {
+      const prefixe = (opts && opts.prefix) || '';
+      const r = await env.DB.prepare(
+        "SELECT cle FROM kv WHERE cle LIKE ? ESCAPE '\\' AND (exp IS NULL OR exp > ?) ORDER BY cle"
+      ).bind(echapperLike(prefixe) + '%', Date.now()).all();
+      return { keys: (r.results || []).map(x => ({ name: x.cle })) };
+    },
+  };
+}
+
+/* La reprise de l'ancienne base — sans commande, sans intervention
+   ---------------------------------------------------------------------------
+   Le jour du déménagement, D1 est vide et KV contient tout : les fiches RH,
+   les réglages, la matrice des accès. Plutôt qu'un script de migration à jouer
+   au bon moment — avec le risque de l'oublier, ou de le jouer deux fois — le
+   premier qui réclame un document absent de D1 le fait remonter de KV, et il y
+   est rangé au passage. La migration se fait donc toute seule, à la première
+   ouverture du panel, sans que personne ne s'en aperçoive.
+
+   Une fois le document dans D1, KV n'est plus jamais consulté pour lui. Ce
+   détour ne concerne que les six documents durables : hors de question d'aller
+   fouiller l'ancienne base pour une session ou une présence, qui n'ont aucune
+   raison d'y être. */
+const CLES_REPRISE = new Set(['data', 'datameta', 'settings', 'permissions', 'journal', 'invites']);
+
+async function repriseKV(env, cle, type) {
+  if (!CLES_REPRISE.has(cle) || !env.IMAGES) return null;
+
+  /* Un document absent des deux bases ne doit pas relancer une lecture KV à
+     chaque appel : on note l'échec pour une heure. */
+  if (memGet('reprise:' + cle)) return null;
+
+  let v = null;
+  try { v = await env.IMAGES.get(cle); } catch (e) { return null; }
+  if (v === null || v === undefined) { memSet('reprise:' + cle, 1, 3600); return null; }
+
+  try { await base(env).put(cle, v); } catch (e) { /* on rendra la valeur quand même */ }
+
+  if (type !== 'json') return v;
+  try { return JSON.parse(v); } catch (e) { return null; }
+}
+
+/* KV effaçait tout seul les clés périmées ; SQLite non. Les lectures les
+   ignorent déjà (la condition sur exp), mais il faut bien qu'elles finissent
+   par quitter la table. Un passage toutes les dix minutes par isolat suffit,
+   et quand il n'y a rien à effacer la requête n'écrit aucune ligne — donc ne
+   coûte rien au quota. */
+async function menage(env) {
+  if (memGet('menage')) return;
+  memSet('menage', 1, 600);
+  try {
+    await env.DB.prepare('DELETE FROM kv WHERE exp IS NOT NULL AND exp <= ?')
+      .bind(Date.now()).run();
+  } catch (e) { /* le ménage n'est jamais urgent */ }
+}
+
 function bearer(request) {
   const h = request.headers.get('Authorization') || '';
   return h.startsWith('Bearer ') ? h.slice(7) : null;
@@ -306,7 +413,7 @@ async function handleCallback(request, env, url) {
 
   /* 4. session */
   const sid = crypto.randomUUID();
-  await env.MARLOWE.put('sess:' + sid, JSON.stringify({
+  await base(env).put('sess:' + sid, JSON.stringify({
     id:     me.id,
     name:   (member && member.nick) || me.global_name || me.username,
     avatar: me.avatar ? `https://cdn.discordapp.com/avatars/${me.id}/${me.avatar}.png?size=64` : null,
@@ -328,7 +435,7 @@ async function currentSession(request, env, jetonExplicite) {
   const sid = bearer(request) || jetonExplicite || null;
   if (!sid) return null;
 
-  const stored = await env.MARLOWE.get('sess:' + sid, 'json');
+  const stored = await base(env).get('sess:' + sid, 'json');
   if (!stored) return null;
 
   /* Session d'un accès extérieur : pas de Discord, donc pas de rôles. Les
@@ -338,7 +445,7 @@ async function currentSession(request, env, jetonExplicite) {
     const invites = await lireInvites(env);
     const inv = invites.find(x => x.code === stored.code);
     if (!inv || inv.actif === false) {
-      await env.MARLOWE.delete('sess:' + sid);
+      await base(env).delete('sess:' + sid);
       return null;
     }
     return {
@@ -359,7 +466,7 @@ async function currentSession(request, env, jetonExplicite) {
      n'a jamais eu besoin d'y être : il n'a simplement aucun rôle du domaine,
      et c'est isPatron qui lui ouvre tout. */
   if (!member && !isOwner) {
-    await env.MARLOWE.delete('sess:' + sid);
+    await base(env).delete('sess:' + sid);
     return null;
   }
 
@@ -392,7 +499,7 @@ async function handleRoles(request, env) {
 /* GET | PUT /api/permissions */
 async function handlePermissions(request, env) {
   if (request.method === 'GET') {
-    const perms = await env.MARLOWE.get('permissions', 'json');
+    const perms = await base(env).get('permissions', 'json');
     return json(env, perms || {});
   }
 
@@ -418,7 +525,7 @@ async function handlePermissions(request, env) {
         .slice(0, 200);
     }
 
-    await env.MARLOWE.put('permissions', JSON.stringify(clean));
+    await base(env).put('permissions', JSON.stringify(clean));
     return json(env, clean);
   }
 
@@ -501,7 +608,7 @@ function canWrite(session, collection, perms, ro) {
 const JOURNAL_MAX = 500;
 
 async function appendJournal(env, session, texte, keys) {
-  const list = await env.MARLOWE.get('journal', 'json') || [];
+  const list = await base(env).get('journal', 'json') || [];
   list.unshift({
     at: new Date().toISOString(),
     by: session.user.name,
@@ -510,14 +617,14 @@ async function appendJournal(env, session, texte, keys) {
     keys,
   });
   if (list.length > JOURNAL_MAX) list.length = JOURNAL_MAX;
-  await env.MARLOWE.put('journal', JSON.stringify(list));
+  await base(env).put('journal', JSON.stringify(list));
 }
 
 /* GET /api/journal */
 async function handleJournal(request, env) {
   const s = await currentSession(request, env);
   if (!s) return json(env, { error: 'unauthorized' }, 401);
-  const list = await env.MARLOWE.get('journal', 'json') || [];
+  const list = await base(env).get('journal', 'json') || [];
   return json(env, list);
 }
 
@@ -542,21 +649,21 @@ async function handlePresence(request, env) {
        ou si sa fiche approche de la péremption. Une personne qui reste sur le
        tableau de bord toute la journée coûte donc 288 écritures, pas 1 920. */
     const cle = 'pres:' + s.user.id;
-    const avant = await env.MARLOWE.get(cle, 'json');
+    const avant = await base(env).get(cle, 'json');
     const vieille = !avant || (Date.now() - (avant.at || 0)) > PRESENCE_REAFFIRME * 1000;
 
     if (vieille || avant.page !== page || avant.name !== s.user.name) {
-      await env.MARLOWE.put(cle, JSON.stringify({
+      await base(env).put(cle, JSON.stringify({
         id: s.user.id, name: s.user.name, avatar: s.user.avatar,
         page, at: Date.now(),
       }), { expirationTtl: PRESENCE_TTL });
     }
   }
 
-  const list = await env.MARLOWE.list({ prefix: 'pres:' });
+  const list = await base(env).list({ prefix: 'pres:' });
   const membres = [];
   for (const k of list.keys) {
-    const v = await env.MARLOWE.get(k.name, 'json');
+    const v = await base(env).get(k.name, 'json');
     if (v) membres.push(v);
   }
   membres.sort((a, b) => a.name.localeCompare(b.name));
@@ -574,7 +681,7 @@ async function handlePresence(request, env) {
 async function handleOrga(request, env) {
   if (request.method !== 'GET') return json(env, { error: 'method' }, 405);
 
-  const d = await env.MARLOWE.get('data', 'json') || {};
+  const d = await base(env).get('data', 'json') || {};
   const roster = Array.isArray(d.rhRoster) ? d.rhRoster : [];
 
   const membres = roster.slice(0, 400).map(e => ({
@@ -583,7 +690,7 @@ async function handleOrga(request, env) {
     absent: (e && e.status) ? e.status !== 'actif' : false,
   })).filter(m => m.nom && m.poste);
 
-  const m = await env.MARLOWE.get('datameta', 'json');
+  const m = await base(env).get('datameta', 'json');
   return json(env, { membres, rev: (m && m.rev) || 0 });
 }
 
@@ -611,7 +718,7 @@ async function handleImage(request, env, id) {
   if (request.method !== 'GET') return json(env, { error: 'method' }, 405);
   if (!/^[a-z0-9]{6,40}$/.test(id)) return json(env, { error: 'not_found' }, 404);
 
-  const bin = await env.MARLOWE.getWithMetadata('img:' + id, { type: 'arrayBuffer' });
+  const bin = await env.IMAGES.getWithMetadata('img:' + id, { type: 'arrayBuffer' });
   if (!bin || !bin.value) return json(env, { error: 'not_found' }, 404);
 
   const type = (bin.metadata && bin.metadata.type) || 'application/octet-stream';
@@ -645,7 +752,7 @@ async function handleUpload(request, env) {
   const id = [...crypto.getRandomValues(new Uint8Array(10))]
     .map(b => b.toString(36).padStart(2, '0')).join('').slice(0, 20);
 
-  await env.MARLOWE.put('img:' + id, buf, { metadata: { type, taille: buf.byteLength } });
+  await env.IMAGES.put('img:' + id, buf, { metadata: { type, taille: buf.byteLength } });
   return json(env, { id, url: '/api/img/' + id, type, taille: buf.byteLength });
 }
 
@@ -655,7 +762,7 @@ async function handleUpload(request, env) {
 async function handleVitrine(request, env) {
   if (request.method !== 'GET') return json(env, { error: 'method' }, 405);
 
-  const d = await env.MARLOWE.get('data', 'json') || {};
+  const d = await base(env).get('data', 'json') || {};
   const v = (d.vitrine && typeof d.vitrine === 'object') ? d.vitrine : {};
 
   const texte = (x, n) => String(x == null ? '' : x).slice(0, n);
@@ -672,7 +779,7 @@ async function handleVitrine(request, env) {
     pages: (Array.isArray(v.catPages) ? v.catPages : []).slice(0, 40).map(x => texte(x, 400)).filter(Boolean),
   };
 
-  const m = await env.MARLOWE.get('datameta', 'json');
+  const m = await base(env).get('datameta', 'json');
   return json(env, { nouveautes, catalogue, rev: (m && m.rev) || 0 });
 }
 
@@ -731,7 +838,7 @@ async function handleDiscord(request, env) {
 
   /* Garde-fou anti-spam : sans lui, un clic répété inonderait le salon. */
   const cle = 'retrait:' + s.user.id;
-  const dernier = await env.MARLOWE.get(cle);
+  const dernier = await base(env).get(cle);
   if (dernier) {
     return json(env, { error: 'trop_vite',
       detail: 'Patientez une trentaine de secondes entre deux demandes.' }, 429);
@@ -740,7 +847,7 @@ async function handleDiscord(request, env) {
      s'inscrire, la demande part quand même. Mieux vaut un doublon possible
      qu'un retrait bloqué. */
   try {
-    await env.MARLOWE.put(cle, '1', { expirationTtl: Math.ceil(RETRAIT_MIN_MS / 1000) });
+    await base(env).put(cle, '1', { expirationTtl: Math.ceil(RETRAIT_MIN_MS / 1000) });
   } catch (e) { /* sans effet */ }
 
   const role = (env.DISCORD_RUNNER_ROLE || '').trim();
@@ -807,7 +914,7 @@ function memeSecret(a, b) {
 }
 
 async function lireInvites(env) {
-  return await env.MARLOWE.get('invites', 'json') || [];
+  return await base(env).get('invites', 'json') || [];
 }
 
 /* GET | PUT /api/invites  —  patron uniquement
@@ -858,7 +965,7 @@ async function handleInvites(request, env) {
       cree: new Date().toISOString().slice(0, 10),
       actif: true,
     });
-    await env.MARLOWE.put('invites', JSON.stringify(invites));
+    await base(env).put('invites', JSON.stringify(invites));
     return json(env, { ok: true, code });
   }
 
@@ -868,20 +975,20 @@ async function handleInvites(request, env) {
 
   if (action === 'supprimer') {
     invites.splice(i, 1);
-    await env.MARLOWE.put('invites', JSON.stringify(invites));
+    await base(env).put('invites', JSON.stringify(invites));
     return json(env, { ok: true });
   }
 
   if (action === 'basculer') {
     invites[i].actif = invites[i].actif === false;
-    await env.MARLOWE.put('invites', JSON.stringify(invites));
+    await base(env).put('invites', JSON.stringify(invites));
     return json(env, { ok: true, actif: invites[i].actif });
   }
 
   if (action === 'pages') {
     invites[i].pages = Array.isArray(body.pages) ? body.pages.filter(p => typeof p === 'string').slice(0, 60) : [];
     invites[i].ro    = Array.isArray(body.ro)    ? body.ro.filter(p => typeof p === 'string').slice(0, 60)    : [];
-    await env.MARLOWE.put('invites', JSON.stringify(invites));
+    await base(env).put('invites', JSON.stringify(invites));
     return json(env, { ok: true });
   }
 
@@ -890,7 +997,7 @@ async function handleInvites(request, env) {
     if (mdp.length < 8) return json(env, { error: 'mdp_court', detail: '8 caractères minimum.' }, 400);
     invites[i].sel = b64(crypto.getRandomValues(new Uint8Array(16)));
     invites[i].hash = await empreinte(mdp, invites[i].sel);
-    await env.MARLOWE.put('invites', JSON.stringify(invites));
+    await base(env).put('invites', JSON.stringify(invites));
     return json(env, { ok: true });
   }
 
@@ -911,7 +1018,7 @@ async function handleInviteLogin(request, env) {
   /* Freinage par code : sans lui, on pourrait essayer les mots de passe en
      boucle jusqu'à tomber juste. */
   const cleEssais = 'essais:' + code;
-  const essais = Number(await env.MARLOWE.get(cleEssais) || 0);
+  const essais = Number(await base(env).get(cleEssais) || 0);
   if (essais >= 8) {
     return json(env, { error: 'bloque',
       detail: 'Trop de tentatives. Réessayez dans un quart d\'heure.' }, 429);
@@ -921,23 +1028,23 @@ async function handleInviteLogin(request, env) {
   const inv = invites.find(x => x.code === code);
 
   if (!inv || inv.actif === false) {
-    await env.MARLOWE.put(cleEssais, String(essais + 1), { expirationTtl: 900 });
+    await base(env).put(cleEssais, String(essais + 1), { expirationTtl: 900 });
     return json(env, { error: 'refuse' }, 401);
   }
 
   const test = await empreinte(mdp, inv.sel);
   if (!memeSecret(test, inv.hash)) {
-    await env.MARLOWE.put(cleEssais, String(essais + 1), { expirationTtl: 900 });
+    await base(env).put(cleEssais, String(essais + 1), { expirationTtl: 900 });
     return json(env, { error: 'refuse' }, 401);
   }
 
-  await env.MARLOWE.delete(cleEssais);
+  await base(env).delete(cleEssais);
 
   inv.dernier = new Date().toISOString().slice(0, 16).replace('T', ' ');
-  await env.MARLOWE.put('invites', JSON.stringify(invites));
+  await base(env).put('invites', JSON.stringify(invites));
 
   const sid = crypto.randomUUID();
-  await env.MARLOWE.put('sess:' + sid, JSON.stringify({
+  await base(env).put('sess:' + sid, JSON.stringify({
     invite: true, code: inv.code, id: 'inv:' + inv.code, name: inv.nom, avatar: null,
   }), { expirationTtl: SESSION_TTL });
 
@@ -949,7 +1056,7 @@ async function handleInviteLogin(request, env) {
    du domaine (les autres — partenaires, décoratifs — sont écartés). */
 async function handleSettings(request, env) {
   if (request.method === 'GET') {
-    const s = await env.MARLOWE.get('settings', 'json');
+    const s = await base(env).get('settings', 'json');
     return json(env, s || {});
   }
 
@@ -981,7 +1088,7 @@ async function handleSettings(request, env) {
       clean.permsRO = ro;
     }
 
-    await env.MARLOWE.put('settings', JSON.stringify(clean));
+    await base(env).put('settings', JSON.stringify(clean));
     return json(env, clean);
   }
 
@@ -995,7 +1102,9 @@ async function handleSettings(request, env) {
 
    Lecture et écriture sont ouvertes à tout membre connecté : c'est un outil
    d'équipe. L'appartenance au serveur Discord est revérifiée à chaque appel.  */
-const DATA_MAX = 2 * 1024 * 1024;   // 2 Mo, large devant l'usage réel
+/* D1 refuse une ligne de plus de 2 Mo. On s'arrête bien avant, pour que la
+   limite se manifeste par un message clair et pas par une erreur SQL. */
+const DATA_MAX = 1500 * 1024;   // 1,5 Mo, très large devant l'usage réel
 
 async function handleData(request, env) {
   const s = await currentSession(request, env);
@@ -1005,13 +1114,13 @@ async function handleData(request, env) {
      interrogent en boucle : quelques octets au lieu de tout le contenu. */
   const url = new URL(request.url);
   if (request.method === 'GET' && url.searchParams.get('meta') === '1') {
-    const m = await env.MARLOWE.get('datameta', 'json');
+    const m = await base(env).get('datameta', 'json');
     return json(env, m || { rev: 0 });
   }
 
   if (request.method === 'GET') {
-    const d = await env.MARLOWE.get('data', 'json');
-    const m = await env.MARLOWE.get('datameta', 'json');
+    const d = await base(env).get('data', 'json');
+    const m = await base(env).get('datameta', 'json');
     return json(env, Object.assign({}, d || {}, { _meta: m || { rev: 0 } }));
   }
 
@@ -1032,8 +1141,8 @@ async function handleData(request, env) {
 
     /* Contrôle d'écriture collection par collection. Le filtrage fait dans
        le navigateur n'est qu'un confort : c'est ICI que ça se décide. */
-    const perms = await env.MARLOWE.get('permissions', 'json') || {};
-    const settings = await env.MARLOWE.get('settings', 'json') || {};
+    const perms = await base(env).get('permissions', 'json') || {};
+    const settings = await base(env).get('settings', 'json') || {};
     const ro = settings.permsRO || {};
     const refuses = [];
 
@@ -1047,7 +1156,7 @@ async function handleData(request, env) {
     /* Fusion : on ne remplace que les collections envoyées, les autres
        restent intactes. Deux personnes qui travaillent sur des pages
        différentes ne s'écrasent donc pas mutuellement. */
-    const current = await env.MARLOWE.get('data', 'json') || {};
+    const current = await base(env).get('data', 'json') || {};
     for (const [k, v] of Object.entries(body)) {
       current[String(k).slice(0, 64)] = v;
     }
@@ -1055,18 +1164,18 @@ async function handleData(request, env) {
     delete current._meta;
     const out = JSON.stringify(current);
     if (out.length > DATA_MAX) return json(env, { error: 'too_large' }, 413);
-    await env.MARLOWE.put('data', out);
+    await base(env).put('data', out);
 
     /* La révision s'incrémente à chaque écriture : c'est elle qui prévient
        les autres navigateurs qu'ils travaillent sur une version périmée. */
-    const prev = await env.MARLOWE.get('datameta', 'json');
+    const prev = await base(env).get('datameta', 'json');
     const meta = {
       rev: ((prev && prev.rev) || 0) + 1,
       by: s.user.name,
       at: new Date().toISOString(),
       keys: Object.keys(body),
     };
-    await env.MARLOWE.put('datameta', JSON.stringify(meta));
+    await base(env).put('datameta', JSON.stringify(meta));
     if (note) await appendJournal(env, s, note, Object.keys(body));
 
     return json(env, { ok: true, saved: Object.keys(body), rev: meta.rev });
@@ -1078,7 +1187,7 @@ async function handleData(request, env) {
 /* GET /api/logout */
 async function handleLogout(request, env) {
   const sid = bearer(request);
-  if (sid) await env.MARLOWE.delete('sess:' + sid);
+  if (sid) await base(env).delete('sess:' + sid);
   return json(env, { ok: true });
 }
 
@@ -1087,7 +1196,7 @@ async function handleLogout(request, env) {
    --------------------------------------------------------------------------- */
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
     if (request.method === 'OPTIONS') {
@@ -1102,6 +1211,14 @@ export default {
         return json(env, { error: 'config', missing: key }, 500);
       }
     }
+    if (!env.DB) {
+      return json(env, { error: 'config', missing: 'DB', detail:
+        "La base D1 n'est pas reliée. Créez-la avec « npx wrangler d1 create marlowe », "
+        + "recopiez son database_id dans wrangler.toml, appliquez schema.sql, puis redéployez." }, 500);
+    }
+
+    /* Les lignes périmées ne s'effacent pas toutes seules dans SQLite. */
+    ctx.waitUntil(menage(env));
 
     try {
       /* /api/img/{id} porte l'identifiant dans le chemin : le switch ne sait

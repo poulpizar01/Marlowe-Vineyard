@@ -58,14 +58,45 @@ npm install -g wrangler
 npx wrangler login
 ```
 
-Créez le stockage :
+Créez les deux stockages.
+
+**La base de données** — tout ce que le panel enregistre : fiches RH, bilans,
+stock, réglages, sessions.
 
 ```bash
-npx wrangler kv namespace create MARLOWE
+npx wrangler d1 create marlowe
 ```
 
-La commande affiche un `id`. **Recopiez-le dans `wrangler.toml`**, à la place de
-`METTRE_ICI_ID_DU_NAMESPACE_KV`.
+La commande affiche un `database_id`. **Recopiez-le dans `wrangler.toml`**, dans
+le bloc `[[d1_databases]]`. Puis créez la table :
+
+```bash
+npx wrangler d1 execute marlowe --remote --file=schema.sql
+```
+
+Le drapeau `--remote` vise la vraie base ; sans lui, wrangler ne toucherait
+qu'une copie locale de test.
+
+**Le stockage des images** — les visuels des nouveautés et les PDF du
+catalogue, qui sont trop lourds pour une base de données :
+
+```bash
+npx wrangler kv namespace create IMAGES
+```
+
+Recopiez l'`id` renvoyé dans le bloc `[[kv_namespaces]]` de `wrangler.toml`.
+
+> **Pourquoi deux stockages.** D1 autorise 100 000 écritures par jour sur le
+> plan gratuit, KV seulement 1 000 — d'où la base de données pour tout ce qui
+> s'écrit souvent. Mais D1 refuse une ligne de plus de 2 Mo, là où KV avale un
+> PDF sans broncher et le sert directement depuis le réseau Cloudflare. Chacun
+> son métier.
+
+> **Si vous migrez depuis une version antérieure à 1.11**, ne créez pas de
+> nouvel espace KV : gardez l'identifiant que vous aviez déjà, et changez
+> seulement le nom du raccordement de `MARLOWE` à `IMAGES`. Vos anciennes
+> données remonteront toutes seules dans D1 à la première ouverture du panel —
+> il n'y a aucun script de migration à jouer.
 
 ---
 

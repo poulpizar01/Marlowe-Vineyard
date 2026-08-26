@@ -1,4 +1,4 @@
 {
-  "v": "1.10.0",
-  "note": "quota KV : caches sortis de la base, connexion sans ecriture, presence regroupee. Handlers awaites pour ne plus perdre les erreurs en 1101."
+  "v": "1.11.0",
+  "note": "stockage principal migre de KV vers D1 : 100 000 ecritures par jour au lieu de 1 000. Les images restent dans KV. Reprise automatique des anciennes donnees."
 }

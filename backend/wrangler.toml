@@ -26,12 +26,39 @@ OWNER_IDS = "826526979204841482,186397473374208000"
 DISCORD_RUNNER_ROLE = "1541579306134933505"
 
 # ---------------------------------------------------------------------------
-# Stockage : sessions + matrice des accès.
-# Créer avec :  npx wrangler kv namespace create MARLOWE
-# puis recopier l'id renvoyé ci-dessous.
+# Stockage principal : D1 (base SQLite).
+#
+# Tout ce que le panel enregistre vit ici — fiches RH, bilans, stock, réglages,
+# sessions, présence. D1 autorise 100 000 écritures par jour sur le plan
+# gratuit, contre 1 000 pour KV : c'est la raison de ce déménagement.
+#
+# À faire une seule fois, depuis ce dossier :
+#   1.  npx wrangler d1 create marlowe
+#   2.  recopier le database_id renvoyé ci-dessous
+#   3.  npx wrangler d1 execute marlowe --remote --file=schema.sql
+#   4.  npx wrangler deploy
+#
+# Les anciennes données remontent toutes seules de KV à la première ouverture
+# du panel : il n'y a aucun script de migration à jouer.
+# ---------------------------------------------------------------------------
+[[d1_databases]]
+binding = "DB"
+database_name = "marlowe"
+database_id = "ab8f440c-bb1e-440d-b09b-b08c29cd4a6a"
+
+# ---------------------------------------------------------------------------
+# Stockage des images et des PDF : KV, et rien d'autre.
+#
+# Une image s'écrit trois fois par mois et pèse plusieurs centaines de kilos :
+# le quota d'écritures ne la gêne pas, et D1 plafonne à 2 Mo par ligne. Elle
+# reste donc ici, servie directement depuis le réseau Cloudflare.
+#
+# C'est le MÊME espace qu'avant — l'identifiant n'a pas changé, seul le nom du
+# raccordement passe de MARLOWE à IMAGES. Les anciennes données y sont encore,
+# et c'est de là que le Worker les récupère au premier démarrage.
 # ---------------------------------------------------------------------------
 [[kv_namespaces]]
-binding = "MARLOWE"
+binding = "IMAGES"
 id = "96dc213dcafc411d8417448b46fc9274"
 
 # ---------------------------------------------------------------------------
