@@ -4761,21 +4761,23 @@
     let tok = null;
     try { tok = JSON.parse(localStorage.getItem('mv.token') || 'null'); } catch (e) {}
 
-    const arts = (typeof articlesData !== 'undefined' ? articlesData : []);
     const maintenant = new Date();
     const p = n => String(n).padStart(2, '0');
 
+    /* Le domaine ne sort qu'une chose de sa cave : du vin. Détailler les
+       cuvées dans une demande de retrait n'apporterait rien au runner, qui
+       charge un volume, pas un catalogue. Le produit est donc fixe, et il ne
+       reste à saisir que ce qui varie vraiment : combien, et pour quand. */
+    const PRODUIT = 'Vin';
+
     const r = await askForm('Demander un retrait', [
-      { key: 'produit',  label: 'Produit', value: arts.length ? arts[0].desc : '',
-        options: arts.length ? arts.map(a => a.desc).slice(0, 200) : undefined },
       { key: 'quantite', label: 'Quantité', value: '1', type: 'number' },
       { key: 'heure',    label: 'Départ souhaité', value: `${p(maintenant.getHours())}:${p(maintenant.getMinutes())}` },
-    ], `Vous demandez au nom de ${moiSession()}. Le message part dans le salon Discord des runners et mentionne le rôle.`);
+    ], `Vous demandez ${PRODUIT.toLowerCase()} au nom de ${moiSession()}. Le message part dans le salon Discord des runners et mentionne le rôle.`);
     if (!r) return;
 
-    const produit = (r.produit || '').trim();
+    const produit = PRODUIT;
     const quantite = Math.max(1, Math.round(Number(r.quantite) || 0));
-    if (!produit) { toast('Il faut préciser un produit.'); return; }
 
     /* Le message rejoint le fil dans tous les cas : même si Discord est
        injoignable, l'équipe voit la demande dans le panel. */

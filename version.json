@@ -1,4 +1,4 @@
 {
-  "v": "1.11.2",
-  "note": "les messages du relais distinguent secret absent et secret au contenu invalide."
+  "v": "1.11.3",
+  "note": "demande de retrait : le produit est toujours du vin, plus de liste a choisir."
 }
