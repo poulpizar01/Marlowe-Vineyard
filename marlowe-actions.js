@@ -5168,6 +5168,14 @@
           dire('', "La voie normale est bloquée mais le repli prend le relais");
           dire('', "automatiquement : rien à faire, les demandes partiront.");
         }
+      } else if (r.status === 503 && d.error === 'webhook_invalide') {
+        dire('', '');
+        dire('Conclusion', "le secret existe, mais son contenu n'est pas une");
+        dire('', "adresse de webhook. Réenregistrez-le :");
+        dire('', '    cd backend');
+        dire('', '    npx wrangler secret put DISCORD_WEBHOOK');
+        dire('', "Au prompt, RIEN ne s'affiche pendant que vous collez —");
+        dire('', "c'est normal, la saisie est masquée. Collez, Entrée.");
       } else if (r.status === 503) {
         dire('', '');
         dire('Conclusion', "le webhook n'est pas enregistré côté serveur.");
