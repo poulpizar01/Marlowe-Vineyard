@@ -1400,16 +1400,9 @@
       weekDays.push({ label: DAY_LABELS[i], date: frDate(d) });
     }
 
-    let idx = weekDays.findIndex(d => d.date === today);
-    if (idx < 0) idx = 0;
-
-    const tabs = $('dayviewTabs');
-    if (tabs) {
-      tabs.innerHTML = weekDays.map((d, i) => `
-        <div class="dayview-tab ${i === idx ? 'active' : ''}" data-idx="${i}">${d.label}<br>${d.date.slice(0, 5)}</div>
-      `).join('');
-    }
-    if (typeof renderDayGrid === 'function') renderDayGrid(weekDays[idx]);
+    /* Le planning s'affiche à la semaine : plus d'onglet de jour à activer,
+       la colonne du jour courant est simplement mise en valeur. */
+    if (typeof renderWeekGrid === 'function') renderWeekGrid();
   }
 
   /* ========================================================================
@@ -1649,7 +1642,9 @@
       .reduce((s, p) => s + p.montant, 0);
 
     const salaires = detail.reduce((s, e) => s + e.salairePlafonne, 0);
-    const primes = detail.reduce((s, e) => s + e.prime, 0) + excHorsTableau;
+    /* La prime de recrutement ne dépend pas de la production hebdomadaire :
+       elle s'ajoute au total, sinon la masse salariale serait sous-évaluée. */
+    const primes = detail.reduce((s, e) => s + e.prime, 0) + excHorsTableau + totalPrimeRecrutement();
     const depenses = salaires + autres;
 
     const beneficeImposable = caTotal - depenses;
@@ -3476,7 +3471,14 @@
    reste net sur un grand écran.
    ========================================================================== */
 
-  const vitrine = { nouveautes: [], catTitre: '', catDesc: '', catPdf: '', catEmbed: '', catPages: [] };
+  const vitrine = {
+    nouveautes: [],
+    /* Catalogue citoyen : publié sur le site vitrine. */
+    catTitre: '', catDesc: '', catPdf: '', catEmbed: '', catPages: [],
+    /* Catalogue entreprise : il ne passe PAS par la route publique, il reste
+       dans les données du panel et n'est visible que connecté. */
+    entTitre: '', entDesc: '', entPdf: '', entEmbed: '', entPages: [],
+  };
   const NOUV_MAX = 5;
   const CAT_MAX  = 40;
 
@@ -3604,6 +3606,39 @@
           dans l'ordre. Le PDF est facultatif : il sert uniquement au bouton de téléchargement.</p>
       </div>
 
+      <div class="mv-vit-sec">
+        <div class="mv-vit-head">
+          <h4>Catalogue entreprise <span class="mv-cpt">${vitrine.entPages.length} page${vitrine.entPages.length > 1 ? 's' : ''}</span></h4>
+          <div>
+            <input type="file" id="mvEntFiles" accept="image/*" multiple hidden>
+            <input type="file" id="mvEntPdf" accept="application/pdf" hidden>
+            <button class="btn primary" id="mvEntAdd">+ Déposer des pages</button>
+            <button class="btn" id="mvEntPdfBtn">${vitrine.entPdf ? 'Remplacer le PDF' : 'Joindre le PDF'}</button>
+          </div>
+        </div>
+        <div class="mv-vit-champs">
+          <input type="text" id="mvEntTitre" placeholder="Titre du catalogue entreprise" value="${esc(vitrine.entTitre || '')}">
+          <input type="text" id="mvEntDesc" placeholder="Une ligne de présentation" value="${esc(vitrine.entDesc || '')}">
+        </div>
+        <input type="text" id="mvEntEmbed" class="mv-large"
+               placeholder="Lien Canva entreprise (facultatif)"
+               value="${esc(vitrine.entEmbed || '')}">
+        <p class="mv-hint">Celui-ci <b>ne part pas sur le site public</b> : il n'apparaît que dans
+          Commerce ▸ Catalogue ▸ Catalogue Entreprise, pour les membres connectés.</p>
+        ${vitrine.entPdf ? `<p class="mv-pdf-ok">PDF joint.
+            <button class="btn" id="mvEntPdfDel">Retirer</button></p>` : ''}
+        <ul class="mv-page-list">${vitrine.entPages.length
+          ? vitrine.entPages.map((u, i) => `
+            <li class="mv-page" data-i="${i}">
+              <span class="mv-page-n">${i + 1}</span>
+              <div class="mv-page-vis" style="background-image:url('${String(u).replace(/'/g, "%27")}')"></div>
+              <button class="btn" data-ent="up"   data-i="${i}" ${i === 0 ? 'disabled' : ''}>↑</button>
+              <button class="btn" data-ent="down" data-i="${i}" ${i === vitrine.entPages.length - 1 ? 'disabled' : ''}>↓</button>
+              <button class="btn" data-ent="del"  data-i="${i}">✕</button>
+            </li>`).join('')
+          : `<li class="mv-vide-note">Aucune page déposée pour les entreprises.</li>`}</ul>
+      </div>
+
       <div class="btn-row" style="margin-top:6px;align-items:center;">
         <button class="btn primary" id="mvVitSave">Publier sur le site</button>
         <span class="mv-saved" id="mvVitSaved">Publié ✓</span>
@@ -3616,6 +3651,7 @@
     D.note(note || 'Vitrine du site mise à jour');
     D.save('vitrine', false);
     renderVitrine();
+    renderCatalogues();
   }
 
   function occupe(btn, actif, texte) {
@@ -3634,8 +3670,21 @@
     if (e.target.closest('#mvNouvAdd'))   { document.getElementById('mvNouvFile').click(); return; }
     if (e.target.closest('#mvCatAdd'))    { document.getElementById('mvCatFiles').click(); return; }
     if (e.target.closest('#mvCatPdfBtn')) { document.getElementById('mvCatPdf').click();   return; }
+    if (e.target.closest('#mvEntAdd'))    { document.getElementById('mvEntFiles').click(); return; }
+    if (e.target.closest('#mvEntPdfBtn')) { document.getElementById('mvEntPdf').click();   return; }
 
     if (e.target.closest('#mvCatPdfDel')) { vitrine.catPdf = ''; sauverVitrine('PDF du catalogue retiré'); return; }
+    if (e.target.closest('#mvEntPdfDel')) { vitrine.entPdf = ''; sauverVitrine('PDF entreprise retiré'); return; }
+
+    const en = e.target.closest('[data-ent]');
+    if (en) {
+      const i = +en.dataset.i, l = vitrine.entPages;
+      if (en.dataset.ent === 'del')  l.splice(i, 1);
+      if (en.dataset.ent === 'up'   && i > 0)            [l[i - 1], l[i]] = [l[i], l[i - 1]];
+      if (en.dataset.ent === 'down' && i < l.length - 1) [l[i + 1], l[i]] = [l[i], l[i + 1]];
+      sauverVitrine('Catalogue entreprise réorganisé');
+      return;
+    }
 
     const b = e.target.closest('[data-mv]');
     if (b) {
@@ -3661,6 +3710,9 @@
       vitrine.catTitre = (document.getElementById('mvCatTitre') || {}).value || '';
       vitrine.catDesc  = (document.getElementById('mvCatDesc')  || {}).value || '';
       vitrine.catEmbed = (document.getElementById('mvCatEmbed') || {}).value || '';
+      vitrine.entTitre = (document.getElementById('mvEntTitre') || {}).value || '';
+      vitrine.entDesc  = (document.getElementById('mvEntDesc')  || {}).value || '';
+      vitrine.entEmbed = (document.getElementById('mvEntEmbed') || {}).value || '';
       sauverVitrine('Vitrine publiée');
       const ok = document.getElementById('mvVitSaved');
       if (ok) { ok.classList.add('on'); setTimeout(() => ok.classList.remove('on'), 1800); }
@@ -3683,7 +3735,10 @@
     if (!files.length) return;
 
     const btn = document.getElementById(
-      input.id === 'mvNouvFile' ? 'mvNouvAdd' : input.id === 'mvCatPdf' ? 'mvCatPdfBtn' : 'mvCatAdd');
+      input.id === 'mvNouvFile' ? 'mvNouvAdd'
+      : input.id === 'mvCatPdf' ? 'mvCatPdfBtn'
+      : input.id === 'mvEntPdf' ? 'mvEntPdfBtn'
+      : input.id === 'mvEntFiles' ? 'mvEntAdd' : 'mvCatAdd');
 
     try {
       occupe(btn, true);
@@ -3695,6 +3750,19 @@
       } else if (input.id === 'mvCatPdf') {
         vitrine.catPdf = await envoyerFichier(files[0]);
         sauverVitrine('PDF du catalogue joint');
+
+      } else if (input.id === 'mvEntPdf') {
+        vitrine.entPdf = await envoyerFichier(files[0]);
+        sauverVitrine('PDF entreprise joint');
+
+      } else if (input.id === 'mvEntFiles') {
+        const place = CAT_MAX - vitrine.entPages.length;
+        if (place <= 0) throw new Error(CAT_MAX + ' pages au maximum');
+        for (const f of files.slice(0, place)) {
+          vitrine.entPages.push(await envoyerFichier(f));
+          renderVitrine();
+        }
+        sauverVitrine('Pages entreprise ajoutées');
 
       } else {
         const place = CAT_MAX - vitrine.catPages.length;
@@ -3716,7 +3784,11 @@
     }
   });
 
-  document.addEventListener('mv:parametres-pret', renderVitrine);
+  document.addEventListener('mv:parametres-pret', () => {
+    renderVitrine();
+    renderCatalogues();
+    if (typeof renderReglages === 'function') renderReglages();
+  });
 
   window.MarloweVitrine = vitrine;
 
@@ -3840,6 +3912,268 @@
 
   window.MarloweAvertissements = avertissements;
 
+
+/* ==========================================================================
+   RÈGLES DU DOMAINE — quota de service et prime de recrutement
+   --------------------------------------------------------------------------
+   Deux règles que le patron fixe une fois et qui s'appliquent ensuite toutes
+   seules. Elles vivent ensemble : ce sont des réglages, pas des données de
+   semaine, et elles survivent donc aux clôtures.
+   ========================================================================== */
+
+  const reglages = {
+    quotaServiceH: 0,       /* heures de service attendues par semaine, 0 = pas de quota */
+    primeRecrutMontant: 0,  /* prime versée à une recrue de fin de semaine */
+    primeRecrutQuota: 0,    /* bouteilles minimum pour y avoir droit */
+  };
+
+  const h2m = h => Math.round((Number(h) || 0) * 60);
+  const m2h = m => `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}`;
+
+  /* Minutes de service faites cette semaine, depuis les pointages de
+     « Ma semaine ». Un service en cours ne compte pas : il n'est pas fini. */
+  function minutesServiceSemaine() {
+    if (typeof serviceHistory === 'undefined') return 0;
+    return serviceHistory
+      .filter(s => s && s.end)
+      .reduce((t, s) => t + (typeof durationMinutes === 'function' ? durationMinutes(s.start, s.end) : 0), 0);
+  }
+
+  function renderQuotaService() {
+    const panel = $('servicePanel');
+    if (!panel) return;
+
+    let box = $('mvQuotaService');
+    const attendu = h2m(reglages.quotaServiceH);
+
+    if (!attendu) { if (box) box.remove(); return; }
+
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'mvQuotaService';
+      box.className = 'mv-qs';
+      panel.appendChild(box);
+    }
+
+    const fait = minutesServiceSemaine();
+    const pct = Math.min(100, Math.round(fait / attendu * 100));
+    const ok = fait >= attendu;
+
+    box.innerHTML = `
+      <div class="mv-qs-top">
+        <span class="mv-qs-l">Quota de service</span>
+        <span class="mv-qs-v ${ok ? 'ok' : ''}">${m2h(fait)} / ${m2h(attendu)}</span>
+      </div>
+      <div class="mv-qs-bar"><i style="width:${pct}%" class="${ok ? 'ok' : ''}"></i></div>
+      <p class="mv-qs-note">${ok
+        ? 'Quota atteint pour cette semaine.'
+        : `Il reste ${m2h(attendu - fait)} de service à faire d'ici la clôture.`}</p>`;
+  }
+
+  /* --- Prime de recrutement -------------------------------------------------
+     Elle récompense les arrivées de fin de semaine : quelqu'un recruté le
+     jeudi n'a que quatre jours pour produire, il serait injuste de le juger
+     sur la même barre qu'un employé présent depuis lundi. */
+  function recruesEligibles() {
+    if (typeof rhRosterData === 'undefined' || !reglages.primeRecrutMontant) return [];
+    if (typeof mondayOf !== 'function') return [];
+
+    const lundi = mondayOf(new Date());
+    const jeudi = new Date(lundi); jeudi.setDate(jeudi.getDate() + 3);
+    const lundiSuivant = new Date(lundi); lundiSuivant.setDate(lundiSuivant.getDate() + 7);
+    jeudi.setHours(0, 0, 0, 0);
+
+    const effectif = (typeof effectifData !== 'undefined') ? effectifData : [];
+    const seuil = Number(reglages.primeRecrutQuota) || 0;
+
+    return rhRosterData.map(e => {
+      const d = parseFR(e.date);
+      if (!d || d < jeudi || d >= lundiSuivant) return null;
+
+      const fiche = effectif.find(x => x.name === e.name);
+      const produit = fiche ? (fiche.barils || 0) : 0;
+      return { nom: e.name, poste: e.poste, arrivee: e.date, produit, atteint: produit >= seuil };
+    }).filter(Boolean);
+  }
+
+  function totalPrimeRecrutement() {
+    return recruesEligibles().filter(r => r.atteint).length * (Number(reglages.primeRecrutMontant) || 0);
+  }
+
+  function renderPrimeRecrutement() {
+    const head = document.querySelector('#page-statsprimes .primes-head');
+    if (!head) return;
+
+    let box = $('mvPrimeRecrut');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'mvPrimeRecrut';
+      box.className = 'panel';
+      box.style.marginTop = '18px';
+      head.parentNode.insertBefore(box, head.nextSibling);
+    }
+
+    const recrues = recruesEligibles();
+    if (!reglages.primeRecrutMontant || !recrues.length) { box.style.display = 'none'; return; }
+    box.style.display = '';
+
+    const montant = Number(reglages.primeRecrutMontant) || 0;
+    const seuil = Number(reglages.primeRecrutQuota) || 0;
+    const gagnants = recrues.filter(r => r.atteint).length;
+
+    box.innerHTML = `
+      <h3>Prime de recrutement
+        <span class="mv-unit">${gagnants} sur ${recrues.length} · ${(gagnants * montant).toLocaleString('fr-FR')} $</span></h3>
+      <p class="mv-sub" style="margin:6px 0 14px;">Arrivées entre jeudi et dimanche de la semaine en cours.
+        ${seuil ? `Il faut ${seuil.toLocaleString('fr-FR')} bouteilles pour y avoir droit.` : 'Aucun quota exigé.'}</p>
+      <table class="gtable">
+        <thead><tr><th>Employé</th><th>Poste</th><th>Arrivée</th><th class="num">Production</th><th class="num">Prime</th></tr></thead>
+        <tbody>${recrues.map(r => `
+          <tr>
+            <td><b>${esc(r.nom)}</b></td>
+            <td class="dim">${esc(r.poste || '—')}</td>
+            <td class="mono">${esc(r.arrivee)}</td>
+            <td class="num${r.atteint ? '' : ' dim'}">${r.produit.toLocaleString('fr-FR')}</td>
+            <td class="num">${r.atteint
+              ? `<b style="color:var(--prime,#D4763D);">${montant.toLocaleString('fr-FR')} $</b>`
+              : `<span class="dim">pas encore</span>`}</td>
+          </tr>`).join('')}</tbody>
+      </table>`;
+  }
+
+  /* --- Le panneau de réglage, dans Paramètres --- */
+  function renderReglages() {
+    const box = $('mvReglages');
+    if (!box) return;
+
+    box.innerHTML = `
+      <h3>Règles du domaine</h3>
+      <p class="mv-sub">Deux règles que vous fixez une fois. Elles s'appliquent ensuite toutes seules,
+        semaine après semaine, et survivent aux clôtures.</p>
+
+      <div class="mv-vit-sec">
+        <h4>Quota de prise de service</h4>
+        <p class="mv-hint" style="margin:0 0 12px;">Pour les postes qui pointent — boutique et commerce —
+          et qui ne sont donc pas jugés sur les bouteilles produites. Le compte se fait à partir des
+          prises de service enregistrées dans « Ma semaine ». Laissez à 0 pour n'imposer aucun quota.</p>
+        <div class="mv-vit-champs">
+          <label class="mv-lab">Heures par semaine
+            <input type="number" id="mvRegQuotaS" min="0" max="60" step="0.5" value="${reglages.quotaServiceH}">
+          </label>
+        </div>
+      </div>
+
+      <div class="mv-vit-sec">
+        <h4>Prime de recrutement</h4>
+        <p class="mv-hint" style="margin:0 0 12px;">Versée aux employés arrivés <b>entre le jeudi et le dimanche</b>
+          de la semaine en cours, à condition d'avoir atteint le nombre de bouteilles indiqué. Ils n'ont que
+          quelques jours pour produire : c'est la raison d'être de cette barre plus basse. Montant à 0 = prime désactivée.</p>
+        <div class="mv-vit-champs">
+          <label class="mv-lab">Montant de la prime ($)
+            <input type="number" id="mvRegPrime" min="0" step="500" value="${reglages.primeRecrutMontant}">
+          </label>
+          <label class="mv-lab">Bouteilles minimum
+            <input type="number" id="mvRegSeuil" min="0" step="100" value="${reglages.primeRecrutQuota}">
+          </label>
+        </div>
+      </div>
+
+      <div class="btn-row" style="margin-top:6px;align-items:center;">
+        <button class="btn primary" id="mvRegSave">Enregistrer les règles</button>
+        <span class="mv-saved" id="mvRegSaved">Enregistré ✓</span>
+      </div>`;
+  }
+
+  document.addEventListener('click', e => {
+    if (!e.target.closest('#mvRegSave')) return;
+    const n = id => { const el = $(id); return el ? Math.max(0, Number(el.value) || 0) : 0; };
+    reglages.quotaServiceH      = n('mvRegQuotaS');
+    reglages.primeRecrutMontant = Math.round(n('mvRegPrime'));
+    reglages.primeRecrutQuota   = Math.round(n('mvRegSeuil'));
+    D().note('a modifié les règles du domaine');
+    D().save('reglages');
+    const ok = $('mvRegSaved');
+    if (ok) { ok.classList.add('on'); setTimeout(() => ok.classList.remove('on'), 1800); }
+    toast('Règles enregistrées.');
+  });
+
+  function renderRegles() {
+    renderReglages();
+    renderQuotaService();
+    renderPrimeRecrutement();
+  }
+
+  window.MarloweReglages = reglages;
+
+
+  /* --- Les deux catalogues, côté panel -------------------------------------
+     Le citoyen est celui du site vitrine, montré ici en lecture pour vérifier
+     ce que voient les visiteurs. L'entreprise ne sort jamais du panel. */
+  function vueCatalogue(cible, cfg, publique) {
+    const box = $(cible);
+    if (!box) return;
+
+    const pages = cfg.pages || [];
+    const ou = publique
+      ? "Publié sur le site vitrine, visible par tout le monde."
+      : "Réservé au panel : ce catalogue ne part jamais sur le site public.";
+    const regle = "Se règle dans <b>Paramètres ▸ Vitrine du site</b>.";
+
+    if (!cfg.embed && !pages.length && !cfg.pdf) {
+      box.innerHTML = `
+        <h3>${esc(cfg.titre || (publique ? 'Catalogue citoyens' : 'Catalogue entreprise'))}</h3>
+        <p class="mv-sub">${ou}</p>
+        <p class="empty-note" style="margin-top:16px;">Aucun catalogue déposé pour l'instant. ${regle}</p>`;
+      return;
+    }
+
+    const corps = cfg.embed
+      ? `<div class="mv-cat-vue is-embed"><iframe src="${esc(cfg.embed)}" allowfullscreen loading="lazy"
+            title="${esc(cfg.titre || 'Catalogue')}"></iframe></div>`
+      : `<div class="mv-cat-vue" data-cat-vue="${cible}">
+           ${pages.map((u, i) => `<img src="${esc(u)}" alt="Page ${i + 1}" ${i ? 'hidden loading="lazy"' : ''}>`).join('')}
+         </div>
+         ${pages.length > 1 ? `<div class="mv-cat-bar">
+           <button class="btn" data-cat-page="-1" data-cible="${cible}">‹</button>
+           <span class="mv-cat-n" id="n-${cible}">1 / ${pages.length}</span>
+           <button class="btn" data-cat-page="1" data-cible="${cible}">›</button>
+         </div>` : ''}`;
+
+    box.innerHTML = `
+      <h3>${esc(cfg.titre || (publique ? 'Catalogue citoyens' : 'Catalogue entreprise'))}</h3>
+      <p class="mv-sub">${cfg.desc ? esc(cfg.desc) + ' · ' : ''}${ou} ${regle}</p>
+      ${corps}
+      ${cfg.pdf ? `<div class="btn-row" style="margin-top:14px;">
+        <a class="btn" href="${esc(cfg.pdf)}" download target="_blank" rel="noopener">⬇ Télécharger le PDF</a>
+      </div>` : ''}`;
+  }
+
+  function renderCatalogues() {
+    vueCatalogue('catCitoyens', {
+      titre: vitrine.catTitre, desc: vitrine.catDesc,
+      embed: vitrine.catEmbed, pdf: vitrine.catPdf, pages: vitrine.catPages,
+    }, true);
+    vueCatalogue('catEntreprise', {
+      titre: vitrine.entTitre, desc: vitrine.entDesc,
+      embed: vitrine.entEmbed, pdf: vitrine.entPdf, pages: vitrine.entPages,
+    }, false);
+  }
+
+  /* Feuilletage des deux vues, en délégation : elles se redessinent à chaque
+     enregistrement, des écouteurs directs seraient perdus. */
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-cat-page]');
+    if (!b) return;
+    const vue = document.querySelector(`[data-cat-vue="${b.dataset.cible}"]`);
+    if (!vue) return;
+    const imgs = [...vue.querySelectorAll('img')];
+    let i = imgs.findIndex(im => !im.hidden);
+    i = Math.min(Math.max(i + Number(b.dataset.catPage), 0), imgs.length - 1);
+    imgs.forEach((im, k) => { im.hidden = k !== i; if (k === i) im.removeAttribute('loading'); });
+    const n = $('n-' + b.dataset.cible);
+    if (n) n.textContent = `${i + 1} / ${imgs.length}`;
+  });
+
   window.MarloweActions = {
     recomputeRecruiters, refreshEffectifCount, reprintInvoice,
     refreshWeekDays, refreshWeekHeaders, renderEligibilite, closeWeek, undoClose,
@@ -3848,8 +4182,9 @@
     renderCloture, renderEffectifHead, refreshEffectifFilters, applyEffectifFilter,
     verifierVersion, battementPresence, renderPresence, setZoom, toggleFullscreen,
     renderQuotas3, renderJournal, appliquerLectureSeule, remplirVides, repartirDeZero,
-    renderVitrine, appliquerAccesService, renderAvertissements, compteAvertissements,
-    openInvoiceDoc,
+    renderVitrine, renderCatalogues, appliquerAccesService, renderAvertissements, compteAvertissements,
+    openInvoiceDoc, renderRegles, renderQuotaService, renderPrimeRecrutement,
+    totalPrimeRecrutement,
   };
 
   window.MarloweClotureSteps = clotureSteps;

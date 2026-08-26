@@ -355,6 +355,8 @@ const COLLECTION_PAGES = {
   tombola:         ['tombola'],
   /* La vitrine ne se règle que depuis Paramètres, donc réservée au patron. */
   vitrine:         [],
+  /* Règles du domaine : réservées au patron, comme la vitrine. */
+  reglages:        [],
 };
 
 function canWrite(session, collection, perms, ro) {

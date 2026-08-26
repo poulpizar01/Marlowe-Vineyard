@@ -483,6 +483,40 @@
   .mv-pdf-ok{font-size:12.5px;color:var(--muted,#9C9384);margin:0 0 12px;display:flex;align-items:center;gap:12px;}
   .mv-hint{font-size:11.5px;color:var(--muted,#9C9384);margin:12px 0 0;line-height:1.65;}
 
+  /* --- Vue des catalogues dans le panel --- */
+  .mv-cat-vue{position:relative;border:1px solid var(--band,#3D372C);border-radius:10px;
+    background:rgba(0,0,0,.22);aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;
+    overflow:hidden;margin-top:14px;}
+  .mv-cat-vue img{max-width:100%;max-height:100%;width:auto;height:auto;display:block;}
+  .mv-cat-vue img[hidden]{display:none;}
+  .mv-cat-vue.is-embed{display:block;}
+  .mv-cat-vue iframe{position:absolute;inset:0;width:100%;height:100%;border:none;}
+  .mv-cat-bar{display:flex;align-items:center;gap:12px;margin-top:12px;}
+  .mv-cat-n{font-size:12.5px;color:var(--muted,#9C9384);font-variant-numeric:tabular-nums;min-width:60px;text-align:center;}
+  #catCitoyens .mv-sub,#catEntreprise .mv-sub{font-size:12.5px;color:var(--muted,#9C9384);margin:6px 0 0;line-height:1.65;}
+
+  /* --- Règles du domaine --- */
+  #mvReglages{margin-top:24px;}
+  #mvReglages .mv-sub{font-size:12.5px;color:var(--muted,#9C9384);margin:6px 0 20px;}
+  #mvReglages h4{margin:0 0 4px;font-size:14px;font-weight:600;}
+  .mv-lab{display:flex;flex-direction:column;gap:6px;font-size:11px;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--muted,#9C9384);}
+  .mv-lab input{background:rgba(0,0,0,.22);color:var(--parchment,#EDE3CF);
+    border:1px solid var(--band,#3D372C);border-radius:8px;padding:9px 12px;
+    font:inherit;font-size:13px;letter-spacing:0;text-transform:none;}
+
+  /* --- Quota de prise de service, dans Ma semaine --- */
+  .mv-qs{margin-top:18px;padding-top:16px;border-top:1px solid var(--band,#3D372C);}
+  .mv-qs-top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:8px;}
+  .mv-qs-l{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted,#9C9384);}
+  .mv-qs-v{font-family:'IBM Plex Mono',monospace;font-size:14px;color:var(--parchment,#EDE3CF);}
+  .mv-qs-v.ok{color:var(--vine,#6E8B5D);}
+  .mv-qs-bar{height:7px;border-radius:99px;background:rgba(0,0,0,.3);overflow:hidden;}
+  .mv-qs-bar i{display:block;height:100%;border-radius:99px;background:var(--or,#C9A961);
+    transition:width .4s ease;}
+  .mv-qs-bar i.ok{background:var(--vine,#6E8B5D);}
+  .mv-qs-note{font-size:11.5px;color:var(--muted,#9C9384);margin:8px 0 0;}
+
   .mv-danger{margin-top:24px;border-color:rgba(138,53,64,.45);background:rgba(138,53,64,.07);}
   .mv-danger h3{color:#E08A7A;}
   .mv-danger p{font-size:12.5px;line-height:1.7;color:var(--muted,#9C9384);margin:8px 0 16px;max-width:760px;}
@@ -773,6 +807,8 @@
       </div>
 
       <div class="panel" id="mvVitrine"></div>
+
+      <div class="panel" id="mvReglages"></div>
 
       <div class="panel mv-danger">
         <h3>Repartir de zéro</h3>

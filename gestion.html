@@ -226,25 +226,32 @@
   /* agenda day view */
   .agenda-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:20px;align-items:start;}
   @media(max-width:900px){.agenda-grid{grid-template-columns:1fr;}}
-  .dayview-panel{position:sticky;top:24px;}
-  .dayview-tabs{display:flex;gap:4px;margin-bottom:14px;flex-wrap:wrap;}
-  .dayview-tab{padding:7px 10px;border-radius:7px;font-size:11px;font-weight:500;cursor:pointer;border:1px solid var(--band);background:var(--stone);color:var(--muted);transition:.15s;text-align:center;}
-  .dayview-tab.active{border-color:var(--or);color:var(--or);background:rgba(201,169,97,.08);}
-  .dayview-wrap{background:var(--stone);border:1px solid var(--band);border-radius:10px;overflow:hidden;max-height:520px;overflow-y:auto;}
-  .dayview-headrow{display:grid;grid-template-columns:56px 1fr;background:var(--oak-2);border-bottom:1px solid var(--band);position:sticky;top:0;z-index:2;}
-  .dayview-headcell-time{padding:10px 8px;font-size:9.5px;text-transform:uppercase;color:var(--muted);letter-spacing:.06em;}
-  .dayview-headcell-day{padding:10px 8px;font-family:'Fraunces',serif;font-weight:600;font-size:13px;text-align:center;}
-  .dayview-headcell-day span{display:block;font-family:'Inter';font-weight:400;font-size:10.5px;color:var(--muted);margin-top:2px;}
-  .dayview-grid{position:relative;display:grid;grid-template-columns:56px 1fr;}
-  .dayview-hour-label{font-family:'IBM Plex Mono';font-size:10.5px;color:var(--muted);padding:4px 8px;border-bottom:1px solid var(--band);border-right:1px solid var(--band);display:flex;align-items:flex-start;}
-  .dayview-hour-cell{border-bottom:1px solid var(--band);position:relative;}
-  .dayview-events-layer{position:absolute;top:0;left:56px;right:0;bottom:0;}
-  .dayview-event{position:absolute;left:4px;right:4px;border-radius:7px;padding:5px 8px;font-size:10.5px;line-height:1.3;overflow:hidden;border-left:3px solid;}
-  .dayview-event .de-title{font-weight:600;display:block;}
-  .dayview-event .de-time{font-family:'IBM Plex Mono';font-size:9.5px;opacity:.85;}
-  .dayview-event.vis-public{background:rgba(110,139,93,.18);border-color:var(--vine);color:#CFE0C6;}
-  .dayview-event.vis-prive{background:rgba(156,147,132,.16);border-color:var(--muted);color:var(--parchment);}
-  .dayview-event.vis-direction{background:rgba(107,31,42,.2);border-color:var(--bordeaux-soft);color:#F0C9CE;}
+  /* --- Vue semaine de l'agenda ---
+     Sept colonnes de jours plus une colonne d'heures. La grille défile
+     horizontalement sur écran étroit plutôt que d'écraser les colonnes. */
+  .wv-range{font-family:'Inter';font-weight:400;font-size:12px;color:var(--muted);margin-left:10px;}
+  .weekview-wrap{background:var(--stone);border:1px solid var(--band);border-radius:10px;
+    overflow:auto;max-height:560px;}
+  .weekview-head,.weekview-body{display:grid;grid-template-columns:52px repeat(7,minmax(96px,1fr));min-width:740px;}
+  .weekview-head{background:var(--oak-2);border-bottom:1px solid var(--band);position:sticky;top:0;z-index:3;}
+  .wv-headtime{padding:9px 8px;font-size:9.5px;text-transform:uppercase;color:var(--muted);letter-spacing:.06em;}
+  .wv-headday{padding:9px 6px;font-family:'Fraunces',serif;font-weight:600;font-size:12.5px;text-align:center;
+    border-left:1px solid var(--band);}
+  .wv-headday span{display:block;font-family:'Inter';font-weight:400;font-size:10px;color:var(--muted);margin-top:2px;}
+  .wv-headday.auj{color:var(--or);background:rgba(201,169,97,.08);}
+  .wv-hours{display:flex;flex-direction:column;border-right:1px solid var(--band);}
+  .wv-hour{font-family:'IBM Plex Mono';font-size:10px;color:var(--muted);padding:2px 6px;
+    border-bottom:1px solid var(--band);display:flex;align-items:flex-start;}
+  .wv-day{position:relative;border-left:1px solid var(--band);}
+  .wv-day.auj{background:rgba(201,169,97,.035);}
+  .wv-cell{border-bottom:1px solid var(--band);}
+  .wv-event{position:absolute;border-radius:6px;padding:3px 6px;font-size:10px;line-height:1.25;
+    overflow:hidden;border-left:3px solid;cursor:default;}
+  .wv-event .de-title{font-weight:600;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .wv-event .de-time{font-family:'IBM Plex Mono';font-size:9px;opacity:.85;}
+  .wv-event.vis-public{background:rgba(110,139,93,.22);border-color:var(--vine);color:#CFE0C6;}
+  .wv-event.vis-prive{background:rgba(156,147,132,.2);border-color:var(--muted);color:var(--parchment);}
+  .wv-event.vis-direction{background:rgba(107,31,42,.26);border-color:var(--bordeaux-soft);color:#F0C9CE;}
 
   /* ---- ported from stats & quotas ---- */
   .week-range{font-size:13px;color:var(--muted);margin-top:6px;}
@@ -833,14 +840,8 @@
 
     <!-- ================= CATALOGUE (Entreprise / Citoyens) ================= -->
     <div class="page-content" id="page-catalogue">
-      <h1 class="page-title">Catalogue <span class="accent">public</span></h1>
-      <p class="page-sub">Diffusion des catalogues Canva sur le site vitrine, selon le rôle Discord du visiteur.</p>
-
-      <div class="toolbar" style="margin-bottom:20px;">
-        <div class="bilan-chip">Aperçu en tant que :</div>
-        <div class="chip active" data-role-preview="entreprise">Rôle Entreprise</div>
-        <div class="chip" data-role-preview="citoyens">Rôle Citoyens</div>
-      </div>
+      <h1 class="page-title">Catalogue</h1>
+      <p class="page-sub">Deux catalogues : celui des citoyens est publié sur le site, celui des entreprises ne quitte jamais le panel.</p>
 
       <div class="subtabs">
         <div class="subtab active" data-sub="cat-entreprise">Catalogue Entreprise</div>
@@ -848,27 +849,11 @@
       </div>
 
       <div class="subpage active" id="sub-cat-entreprise">
-        <div class="panel">
-          <h3>Visible par les rôles Discord : <span class="rank-pill" id="rolesEntreprise">Direction, Commercial, RH</span></h3>
-          <div class="canva-carousel" data-catalogue="entreprise"></div>
-          <div class="btn-row" style="margin-top:16px;">
-            <button class="btn primary" data-add-slide="entreprise">+ Ajouter un lien Canva</button>
-          </div>
-        </div>
+        <div class="panel" id="catEntreprise"></div>
       </div>
 
       <div class="subpage" id="sub-cat-citoyens">
-        <div class="panel">
-          <h3>Visible par les rôles Discord : <span class="rank-pill" id="rolesCitoyens">@everyone (membres vérifiés)</span></h3>
-          <div class="canva-carousel" data-catalogue="citoyens"></div>
-          <div class="btn-row" style="margin-top:16px;">
-            <button class="btn primary" data-add-slide="citoyens">+ Ajouter un lien Canva</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="panel" style="background:rgba(214,167,92,.07);border-color:rgba(214,167,92,.3);">
-        <p style="margin:0;font-size:12px;color:var(--amber);">⚠ La restriction par rôle Discord nécessite une authentification côté serveur (OAuth Discord) — non simulable dans ce mockup statique. Le sélecteur « Aperçu en tant que » ci-dessus sert uniquement à visualiser le rendu de chaque catalogue.</p>
+        <div class="panel" id="catCitoyens"></div>
       </div>
     </div>
 
@@ -1336,46 +1321,17 @@
       <h1 class="page-title">Agenda</h1>
       <p class="page-sub">Planning du domaine — publie un événement public, privé (visible uniquement par toi) ou réservé à la direction.</p>
 
-      <div class="agenda-grid">
-        <div>
-          <div class="panel">
-            <h3>+ Publier un événement</h3>
-            <div class="field-row">
-              <div class="field"><label>Titre</label><input type="text" placeholder="Vendanges, réunion, anniversaire…"></div>
-              <div class="field"><label>Visibilité</label>
-                <select id="agendaVisibility">
-                  <option value="public">Public — visible par tous</option>
-                  <option value="prive">Privé — visible seulement par moi</option>
-                  <option value="direction">Direction — visible par la direction</option>
-                </select>
-              </div>
-            </div>
-            <div class="field"><label>Date</label><input type="date" value="2026-08-24"></div>
-            <div class="field-row">
-              <div class="field"><label>Heure de début</label><input type="time" value="19:00"></div>
-              <div class="field"><label>Heure de fin</label><input type="time" value="21:00"></div>
-            </div>
-            <div class="field"><label>Description</label><textarea rows="2" placeholder="Détails de l'événement…"></textarea></div>
-            <div class="btn-row"><button class="btn primary">+ Publier l'événement</button></div>
-          </div>
-
-          <div class="panel">
-            <h3>Événements à venir</h3>
-            <div id="agendaList"></div>
-          </div>
+      <div class="panel">
+        <h3>La semaine <span id="weekRange" class="wv-range"></span></h3>
+        <div class="weekview-wrap">
+          <div class="weekview-head" id="weekHead"></div>
+          <div class="weekview-body" id="weekBody"></div>
         </div>
+      </div>
 
-        <div class="panel dayview-panel">
-          <h3>Vue de la journée</h3>
-          <div class="dayview-tabs" id="dayviewTabs"></div>
-          <div class="dayview-wrap">
-            <div class="dayview-headrow">
-              <div class="dayview-headcell-time">Heure</div>
-              <div class="dayview-headcell-day" id="dayviewDayLabel">Lun<span>17/08</span></div>
-            </div>
-            <div class="dayview-grid" id="dayviewGrid"></div>
-          </div>
-        </div>
+      <div class="panel">
+        <h3>Événements à venir</h3>
+        <div id="agendaList"></div>
       </div>
     </div>
 
@@ -2453,55 +2409,79 @@ const weekDays = [
 ];
 const DAY_START_HOUR = 6;
 const DAY_END_HOUR = 23;
-const HOUR_H = 40;
-
-document.getElementById('dayviewTabs').innerHTML = weekDays.map((d, i) => `
-  <div class="dayview-tab ${i === 0 ? 'active' : ''}" data-idx="${i}">${d.label}<br>${d.date.slice(0,5)}</div>
-`).join('');
+const HOUR_H = 34;
 
 function timeToMinutes(t){
-  const [h, m] = t.split(':').map(Number);
-  return h * 60 + m;
+  const [h, m] = String(t || '0:00').split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
 }
 
-function renderDayGrid(day){
-  document.getElementById('dayviewDayLabel').innerHTML = `${day.label}<span>${day.date.slice(0,5)}</span>`;
+/* La semaine entière d'un coup plutôt qu'un jour à la fois : c'est ce qu'on
+   vient chercher dans un planning — voir où sont les trous. */
+function renderWeekGrid(){
+  const head = document.getElementById('weekHead');
+  const body = document.getElementById('weekBody');
+  if(!head || !body) return;
+
+  const auj = (() => { const d = new Date();
+    const p = n => String(n).padStart(2,'0');
+    return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()}`; })();
 
   const hours = [];
   for(let h = DAY_START_HOUR; h <= DAY_END_HOUR; h++) hours.push(h);
+  const H = hours.length * HOUR_H;
 
-  let gridHTML = '';
-  hours.forEach(h => {
-    gridHTML += `<div class="dayview-hour-label">${String(h).padStart(2,'0')}:00</div><div class="dayview-hour-cell" style="height:${HOUR_H}px;"></div>`;
-  });
+  const bornes = document.getElementById('weekRange');
+  if(bornes && weekDays.length) {
+    bornes.textContent = `du ${weekDays[0].date} au ${weekDays[weekDays.length-1].date}`;
+  }
 
-  const dayEvents = agendaData.filter(a => a.date === day.date);
-  const totalHeight = hours.length * HOUR_H;
-  const eventsHTML = dayEvents.map(a => {
-    const startMin = timeToMinutes(a.heure);
-    const endMin = timeToMinutes(a.heure_fin);
-    const top = (startMin - DAY_START_HOUR * 60) / 60 * HOUR_H;
-    const height = Math.max(22, (endMin - startMin) / 60 * HOUR_H);
-    return `<div class="dayview-event vis-${a.vis}" style="top:${top}px;height:${height}px;" title="${a.title}">
-      <span class="de-title">${a.title}</span>
-      <span class="de-time">${a.heure} – ${a.heure_fin}</span>
-    </div>`;
+  head.innerHTML = '<div class="wv-headtime">Heure</div>' + weekDays.map(d =>
+    `<div class="wv-headday${d.date === auj ? ' auj' : ''}">${d.label}<span>${d.date.slice(0,5)}</span></div>`
+  ).join('');
+
+  const colonneHeures = `<div class="wv-hours">${hours.map(h =>
+    `<div class="wv-hour" style="height:${HOUR_H}px;">${String(h).padStart(2,'0')}:00</div>`).join('')}</div>`;
+
+  const jours = weekDays.map(d => {
+    /* Deux événements qui se chevauchent se partagent la largeur au lieu de
+       se recouvrir : sinon celui de dessous devient invisible. */
+    const evs = agendaData
+      .filter(a => a.date === d.date)
+      .map(a => ({ a, deb: timeToMinutes(a.heure), fin: Math.max(timeToMinutes(a.heure_fin), timeToMinutes(a.heure) + 30) }))
+      .sort((x, y) => x.deb - y.deb);
+
+    const finDeVoie = [];
+    evs.forEach(e => {
+      let v = finDeVoie.findIndex(f => f <= e.deb);
+      if(v < 0){ v = finDeVoie.length; finDeVoie.push(0); }
+      finDeVoie[v] = e.fin;
+      e.voie = v;
+    });
+    const voies = Math.max(1, finDeVoie.length);
+
+    const cellules = hours.map(() => `<div class="wv-cell" style="height:${HOUR_H}px;"></div>`).join('');
+    const blocs = evs.map(e => {
+      const top = (e.deb - DAY_START_HOUR * 60) / 60 * HOUR_H;
+      const haut = Math.max(20, (e.fin - e.deb) / 60 * HOUR_H - 2);
+      const l = (e.voie / voies) * 100, w = (1 / voies) * 100;
+      return `<div class="wv-event vis-${e.a.vis}"
+        style="top:${top}px;height:${haut}px;left:calc(${l}% + 3px);width:calc(${w}% - 6px);"
+        title="${(e.a.title || '').replace(/"/g,'&quot;')} · ${e.a.heure} – ${e.a.heure_fin}">
+        <span class="de-title">${e.a.title || ''}</span>
+        <span class="de-time">${e.a.heure} – ${e.a.heure_fin}</span>
+      </div>`;
+    }).join('');
+
+    return `<div class="wv-day${d.date === auj ? ' auj' : ''}" style="height:${H}px;">${cellules}${blocs}</div>`;
   }).join('');
 
-  document.getElementById('dayviewGrid').innerHTML = `
-    ${gridHTML}
-    <div class="dayview-events-layer" style="height:${totalHeight}px;">${eventsHTML}</div>
-  `;
+  body.innerHTML = colonneHeures + jours;
 }
-renderDayGrid(weekDays[0]);
+renderWeekGrid();
 
-document.getElementById('dayviewTabs').addEventListener('click', (e) => {
-  const tab = e.target.closest('.dayview-tab');
-  if(!tab) return;
-  document.querySelectorAll('.dayview-tab').forEach(t => t.classList.remove('active'));
-  tab.classList.add('active');
-  renderDayGrid(weekDays[parseInt(tab.dataset.idx)]);
-});
+/* Ancien nom, gardé le temps que tous les appels passent au nouveau. */
+function renderDayGrid(){ renderWeekGrid(); }
 
 /* ---------- Ma semaine (vue employé, ex-Productions) ---------- */
 const sealClassByGrade = {'Saisonnier':'seal-clay', 'Ouvrier Viticole':'seal-bronze', 'Chef de Culture':'seal-gold'};

@@ -52,7 +52,8 @@ window.MarloweData = (function () {
     rhRoster:        { ref: () => rhRosterData,
                        render: [() => renderRhRoster(rhRosterData),
                                 () => { const a = window.MarloweActions;
-                                        if (a) { a.appliquerAccesService(); a.renderAvertissements(); } }] },
+                                        if (a) { a.appliquerAccesService(); a.renderAvertissements();
+                                                 a.renderPrimeRecrutement(); } }] },
     avertissements:  { ref: () => window.MarloweAvertissements,
                        render: [() => { const a = window.MarloweActions; if (a) a.renderAvertissements(); }] },
     rhRecruiters:    { ref: () => rhRecruiters,        render: [call('renderRecruiters')] },
@@ -70,9 +71,11 @@ window.MarloweData = (function () {
     catalogueSlides: { ref: () => catalogueSlides,     render: [] },
     depenses:        { ref: () => depensesData,        render: [call('bcRenderDetail')] },
     retraits:        { ref: () => retraitsData,        render: [call('bcRenderDetail')] },
-    agenda:          { ref: () => agendaData,          render: [call('renderAgendaList'), () => renderDayGrid(weekDays[0])] },
+    agenda:          { ref: () => agendaData,          render: [call('renderAgendaList'), call('renderWeekGrid')] },
     tombola:         { ref: () => tombolaParticipants, render: [] },
-    serviceHistory:  { ref: () => serviceHistory,      render: [call('renderServiceHistory')] },
+    serviceHistory:  { ref: () => serviceHistory,
+                       render: [call('renderServiceHistory'),
+                                () => { const a = window.MarloweActions; if (a) a.renderQuotaService(); }] },
 
     /* Primes exceptionnelles de la semaine et réglage du palier :
        vivent dans marlowe-actions.js, d'où le passage par window. */
@@ -88,6 +91,14 @@ window.MarloweData = (function () {
       ref: () => window.MarloweBcManuels,
       render: [() => { const a = window.MarloweActions; if (a) a.renderBilan(); }],
     },
+
+    /* Règles du domaine : quota de service et prime de recrutement.
+       Ce sont des réglages, pas des données de semaine — la clôture n'y touche pas. */
+    reglages: {
+      ref: () => window.MarloweReglages,
+      render: [() => { const a = window.MarloweActions;
+                       if (a) { a.renderRegles(); a.renderBilan(); } }],
+    },
     clotureSteps: {
       ref: () => window.MarloweClotureSteps,
       render: [() => { const a = window.MarloweActions; if (a) a.renderCloture(); }],
@@ -98,7 +109,8 @@ window.MarloweData = (function () {
        traiter les deux. */
     vitrine: {
       ref: () => window.MarloweVitrine,
-      render: [() => { const a = window.MarloweActions; if (a) a.renderVitrine(); }],
+      render: [() => { const a = window.MarloweActions;
+                       if (a) { a.renderVitrine(); a.renderCatalogues(); } }],
     },
 
     /* Semaines clôturées + photo permettant d'annuler la dernière clôture.
