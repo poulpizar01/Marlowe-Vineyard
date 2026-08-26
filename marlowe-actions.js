@@ -3427,6 +3427,9 @@
     renderCloture();
     refreshEffectifFilters();
     renderQuotas3();
+    renderMagasin();
+    renderComRunner();
+    renderRegles();
     appliquerLectureSeule();
     remplirVides();
     D().redraw('rhRecruiters');
@@ -3821,6 +3824,7 @@
     renderVitrine();
     renderCatalogues();
     if (typeof renderReglages === 'function') renderReglages();
+    chargerInvites();
   });
 
   window.MarloweVitrine = vitrine;
@@ -4250,6 +4254,737 @@
     if (e.target.closest('#mvDashManuel')) ajouterLigneDash();
   });
 
+
+/* ==========================================================================
+   MAGASIN — bons de commande, stock, récap
+   --------------------------------------------------------------------------
+   Reprend ce que le magasin tenait dans un tableur : les commandes, l'état des
+   rayons et le compte de fin de semaine. Les produits ne sont pas ressaisis —
+   ils viennent du catalogue d'articles déjà utilisé par la facturation, sinon
+   deux listes de prix finiraient par diverger.
+   ========================================================================== */
+
+  const commandes = [];   /* {id, date, employe, grade, lignes, total, statut} */
+  const stockData = [];   /* {ref, nom, qte, seuil} */
+
+  const STATUTS = { attente: 'En attente', validee: 'Validée', annulee: 'Annulée' };
+  let magFiltre = 'tous';
+
+  function magProduits() {
+    return (typeof articlesData !== 'undefined' ? articlesData : []);
+  }
+
+  function magPrix(a) {
+    return window.mvPrixArticle ? window.mvPrixArticle(a, 'entreprise') : (a ? a.price : 0);
+  }
+
+  /* --- Bons de commande ---------------------------------------------------- */
+
+  async function nouveauBon() {
+    const arts = magProduits();
+    if (!arts.length) { toast("Le catalogue d'articles est vide."); return; }
+
+    const noms = (typeof rhRosterData !== 'undefined' ? rhRosterData : []).map(e => e.name);
+    const moi = (window.MarloweSession && window.MarloweSession.name) || '';
+
+    const r = await askForm('Nouveau bon de commande', [
+      { key: 'employe', label: 'Employé', value: noms.includes(moi) ? moi : (noms[0] || moi),
+        options: noms.length ? noms : undefined },
+      { key: 'produit', label: 'Produit', value: arts[0].desc, options: arts.map(a => a.desc).slice(0, 200) },
+      { key: 'qte',     label: 'Quantité', value: '1', type: 'number' },
+    ], "Un bon peut contenir plusieurs produits : créez-le avec le premier, puis ajoutez les suivants depuis la ligne du bon.");
+    if (!r) return;
+
+    const art = arts.find(a => a.desc === r.produit);
+    const qte = Math.max(1, Math.round(Number(r.qte) || 0));
+    const pu = magPrix(art);
+
+    const fiche = (typeof rhRosterData !== 'undefined' ? rhRosterData : []).find(e => e.name === r.employe);
+
+    commandes.unshift({
+      id: 'BC' + Date.now().toString(36).toUpperCase().slice(-6),
+      date: todayFR(),
+      employe: r.employe,
+      grade: fiche ? fiche.poste : '—',
+      lignes: [{ ref: art ? art.ref : '', nom: r.produit, pu, qte }],
+      statut: 'attente',
+    });
+    D().note(`a créé un bon de commande pour ${r.employe}`);
+    D().save('commandes');
+    toast('Bon créé.');
+  }
+
+  async function ajouterLigneBon(id) {
+    const bon = commandes.find(c => c.id === id);
+    if (!bon || bon.statut !== 'attente') return;
+    const arts = magProduits();
+
+    const r = await askForm('Ajouter un produit au bon', [
+      { key: 'produit', label: 'Produit', value: arts[0].desc, options: arts.map(a => a.desc).slice(0, 200) },
+      { key: 'qte',     label: 'Quantité', value: '1', type: 'number' },
+    ], `Bon ${id} — ${bon.employe}`);
+    if (!r) return;
+
+    const art = arts.find(a => a.desc === r.produit);
+    bon.lignes.push({ ref: art ? art.ref : '', nom: r.produit,
+                      pu: magPrix(art), qte: Math.max(1, Math.round(Number(r.qte) || 0)) });
+    D().note(`a complété le bon ${id}`);
+    D().save('commandes');
+  }
+
+  /* Valider un bon sort la marchandise du stock : c'est le seul moment où les
+     quantités bougent toutes seules, et ça n'arrive qu'une fois par bon. */
+  function statutBon(id, statut) {
+    const bon = commandes.find(c => c.id === id);
+    if (!bon || bon.statut === statut) return;
+
+    if (statut === 'validee' && bon.statut === 'attente') {
+      bon.lignes.forEach(l => {
+        const st = stockData.find(x => x.ref === l.ref || x.nom === l.nom);
+        if (st) st.qte = Math.max(0, (st.qte || 0) - l.qte);
+      });
+    }
+    /* Annuler un bon déjà validé rend la marchandise. */
+    if (statut === 'annulee' && bon.statut === 'validee') {
+      bon.lignes.forEach(l => {
+        const st = stockData.find(x => x.ref === l.ref || x.nom === l.nom);
+        if (st) st.qte = (st.qte || 0) + l.qte;
+      });
+    }
+
+    bon.statut = statut;
+    D().note(`a marqué le bon ${id} comme « ${STATUTS[statut].toLowerCase()} »`);
+    D().saveMany(['commandes', 'stock']);
+    toast(`Bon ${id} — ${STATUTS[statut].toLowerCase()}.`);
+  }
+
+  function totalBon(b) {
+    return b.lignes.reduce((s, l) => s + l.pu * l.qte, 0);
+  }
+
+  function bonsDeLaSemaine() {
+    if (typeof mondayOf !== 'function') return commandes;
+    const lundi = mondayOf(new Date()); lundi.setHours(0, 0, 0, 0);
+    return commandes.filter(b => { const d = parseFR(b.date); return d && d >= lundi; });
+  }
+
+  function renderCommandes() {
+    const box = $('magListe');
+    if (!box) return;
+
+    const q = ($('magSearch') && $('magSearch').value || '').toLowerCase().trim();
+    const semaine = bonsDeLaSemaine();
+    const validees = semaine.filter(b => b.statut === 'validee');
+
+    const set = (id, v) => { const e = $(id); if (e) e.textContent = v; };
+    set('magAttente', commandes.filter(b => b.statut === 'attente').length);
+    set('magValidees', validees.length);
+    set('magCA', validees.reduce((s, b) => s + totalBon(b), 0).toLocaleString('fr-FR') + ' $');
+
+    const liste = commandes.filter(b => {
+      if (magFiltre !== 'tous' && b.statut !== magFiltre) return false;
+      if (!q) return true;
+      return (b.employe + b.id + b.lignes.map(l => l.nom).join(' ')).toLowerCase().includes(q);
+    });
+
+    if (!liste.length) {
+      box.innerHTML = `<div class="panel"><p class="empty-note" style="text-align:center;padding:22px;">
+        ${commandes.length ? 'Aucun bon ne correspond à ce filtre.' : 'Aucun bon de commande — créez le premier avec « + Nouveau bon ».'}
+      </p></div>`;
+      return;
+    }
+
+    box.innerHTML = liste.map(b => `
+      <div class="panel mag-bon mag-${b.statut}">
+        <div class="mag-bon-head">
+          <div>
+            <div class="mag-bon-qui"><b>${esc(b.employe)}</b>
+              <span class="rank-pill">${esc(b.grade || '—')}</span></div>
+            <div class="mag-bon-meta">${esc(b.id)} · ${esc(b.date)}</div>
+          </div>
+          <div class="mag-bon-droite">
+            <span class="mag-statut mag-s-${b.statut}">${STATUTS[b.statut]}</span>
+            <span class="mag-total">${totalBon(b).toLocaleString('fr-FR')} $</span>
+          </div>
+        </div>
+        <table class="gtable mag-lignes">
+          <thead><tr><th>Produit</th><th class="num">Prix unitaire</th><th class="num">Quantité</th><th class="num">Total</th><th></th></tr></thead>
+          <tbody>${b.lignes.map((l, i) => `
+            <tr>
+              <td><b>${esc(l.nom)}</b></td>
+              <td class="num dim">${l.pu.toLocaleString('fr-FR')} $</td>
+              <td class="num">${l.qte}</td>
+              <td class="num">${(l.pu * l.qte).toLocaleString('fr-FR')} $</td>
+              <td style="text-align:right;">${b.statut === 'attente'
+                ? `<button class="icon-btn danger" data-bon-ligne-del="${b.id}|${i}" title="Retirer">×</button>` : ''}</td>
+            </tr>`).join('')}</tbody>
+        </table>
+        <div class="btn-row" style="margin-top:12px;">
+          ${b.statut === 'attente' ? `
+            <button class="btn" data-bon-ligne="${b.id}">+ Produit</button>
+            <button class="btn primary" data-bon-statut="${b.id}|validee">✓ Valider</button>
+            <button class="btn" data-bon-statut="${b.id}|annulee">Annuler la commande</button>` : `
+            <button class="btn" data-bon-statut="${b.id}|attente">Remettre en attente</button>
+            <button class="icon-btn danger" data-bon-del="${b.id}" title="Supprimer le bon">×</button>`}
+        </div>
+      </div>`).join('');
+  }
+
+  /* --- Stock ---------------------------------------------------------------- */
+
+  async function referencerProduit() {
+    const arts = magProduits().filter(a => !stockData.some(s => s.ref === a.ref));
+    if (!arts.length) { toast('Tous les articles du catalogue sont déjà suivis.'); return; }
+
+    const r = await askForm('Référencer un produit au stock', [
+      { key: 'produit', label: 'Produit', value: arts[0].desc, options: arts.map(a => a.desc).slice(0, 200) },
+      { key: 'qte',   label: 'Quantité en stock', value: '0', type: 'number' },
+      { key: 'seuil', label: "Seuil d'alerte", value: '200', type: 'number' },
+    ], "En dessous du seuil, le produit remonte en haut de page dans « À commander ».");
+    if (!r) return;
+
+    const art = arts.find(a => a.desc === r.produit);
+    stockData.push({
+      ref: art ? art.ref : '', nom: r.produit,
+      qte: Math.max(0, Math.round(Number(r.qte) || 0)),
+      seuil: Math.max(0, Math.round(Number(r.seuil) || 0)),
+    });
+    D().note(`a référencé ${r.produit} au stock`);
+    D().save('stock');
+    toast('Produit référencé.');
+  }
+
+  function renderStock() {
+    const body = $('magStockBody');
+    if (!body) return;
+
+    const q = ($('magStockSearch') && $('magStockSearch').value || '').toLowerCase().trim();
+    const sous = stockData.filter(s => s.seuil > 0 && s.qte <= s.seuil);
+
+    const alertes = $('magAlertes');
+    if (alertes) {
+      if (!sous.length) {
+        alertes.style.display = stockData.length ? '' : 'none';
+        alertes.innerHTML = `<h3>À commander</h3>
+          <p class="empty-note" style="margin-top:10px;">Aucun produit sous son seuil — les rayons tiennent.</p>`;
+      } else {
+        alertes.style.display = '';
+        alertes.innerHTML = `<h3>À commander <span class="mv-unit">${sous.length} produit${sous.length > 1 ? 's' : ''}</span></h3>
+          <div class="mag-alertes">${sous
+            .sort((a, b) => (a.qte / (a.seuil || 1)) - (b.qte / (b.seuil || 1)))
+            .map(s => `<span class="mag-alerte"><b>${esc(s.nom)}</b> ${s.qte.toLocaleString('fr-FR')} / ${s.seuil.toLocaleString('fr-FR')}</span>`).join('')}</div>`;
+      }
+    }
+
+    const liste = stockData.filter(s => !q || s.nom.toLowerCase().includes(q));
+    if (!liste.length) {
+      body.innerHTML = `<tr><td colspan="5" class="empty-note" style="text-align:center;padding:18px;">
+        ${stockData.length ? 'Aucun produit ne correspond.' : "Aucun produit suivi — référencez-en un pour commencer."}</td></tr>`;
+      return;
+    }
+
+    body.innerHTML = liste.map(s => {
+      const i = stockData.indexOf(s);
+      const bas = s.seuil > 0 && s.qte <= s.seuil;
+      const vide = s.qte === 0;
+      return `
+      <tr class="${bas ? 'mag-bas' : ''}">
+        <td><b>${esc(s.nom)}</b></td>
+        <td class="num"><input class="mag-inp" type="number" min="0" value="${s.qte}" data-stock-qte="${i}"></td>
+        <td class="num"><input class="mag-inp" type="number" min="0" value="${s.seuil}" data-stock-seuil="${i}"></td>
+        <td>${vide ? '<span class="mag-statut mag-s-annulee">Rupture</span>'
+              : bas ? '<span class="mag-statut mag-s-attente">À commander</span>'
+                    : '<span class="mag-statut mag-s-validee">Suffisant</span>'}</td>
+        <td style="text-align:right;"><button class="icon-btn danger" data-stock-del="${i}" title="Ne plus suivre">×</button></td>
+      </tr>`;
+    }).join('');
+  }
+
+  /* --- Récap ---------------------------------------------------------------- */
+
+  function renderMagRecap() {
+    const box = $('magRecap');
+    const top = $('magTopProduits');
+    if (!box) return;
+
+    const semaine = bonsDeLaSemaine().filter(b => b.statut === 'validee');
+
+    if (!semaine.length) {
+      box.innerHTML = `<h3>Cette semaine</h3>
+        <p class="empty-note" style="margin-top:10px;">Aucun bon validé cette semaine.</p>`;
+      if (top) top.style.display = 'none';
+      return;
+    }
+
+    const parEmp = new Map();
+    const parProduit = new Map();
+    semaine.forEach(b => {
+      const e = parEmp.get(b.employe) || { nom: b.employe, grade: b.grade, bons: 0, ca: 0, articles: 0 };
+      e.bons++; e.ca += totalBon(b);
+      e.articles += b.lignes.reduce((s, l) => s + l.qte, 0);
+      parEmp.set(b.employe, e);
+
+      b.lignes.forEach(l => {
+        const p = parProduit.get(l.nom) || { nom: l.nom, qte: 0, ca: 0 };
+        p.qte += l.qte; p.ca += l.pu * l.qte;
+        parProduit.set(l.nom, p);
+      });
+    });
+
+    const emps = [...parEmp.values()].sort((a, b) => b.ca - a.ca);
+    const total = emps.reduce((s, e) => s + e.ca, 0);
+
+    box.innerHTML = `
+      <h3>Cette semaine <span class="mv-unit">${semaine.length} bon${semaine.length > 1 ? 's' : ''} · ${total.toLocaleString('fr-FR')} $</span></h3>
+      <table class="gtable" style="margin-top:12px;">
+        <thead><tr><th>Employé</th><th>Poste</th><th class="num">Bons</th><th class="num">Articles</th><th class="num">Chiffre</th><th class="num">Part</th></tr></thead>
+        <tbody>${emps.map(e => `
+          <tr>
+            <td><b>${esc(e.nom)}</b></td>
+            <td class="dim">${esc(e.grade || '—')}</td>
+            <td class="num">${e.bons}</td>
+            <td class="num dim">${e.articles}</td>
+            <td class="num" style="color:var(--prime,#D4763D);">${e.ca.toLocaleString('fr-FR')} $</td>
+            <td class="num dim">${total ? Math.round(e.ca / total * 100) : 0} %</td>
+          </tr>`).join('')}</tbody>
+      </table>`;
+
+    if (top) {
+      const prods = [...parProduit.values()].sort((a, b) => b.qte - a.qte).slice(0, 10);
+      top.style.display = '';
+      top.innerHTML = `
+        <h3>Ce qui part le plus</h3>
+        <table class="gtable" style="margin-top:12px;">
+          <thead><tr><th>Produit</th><th class="num">Quantité</th><th class="num">Chiffre</th></tr></thead>
+          <tbody>${prods.map(p => `
+            <tr><td><b>${esc(p.nom)}</b></td>
+              <td class="num">${p.qte.toLocaleString('fr-FR')}</td>
+              <td class="num dim">${p.ca.toLocaleString('fr-FR')} $</td></tr>`).join('')}</tbody>
+        </table>`;
+    }
+  }
+
+  function renderMagasin() { renderCommandes(); renderStock(); renderMagRecap(); }
+
+  /* --- Interactions, toutes en délégation ---------------------------------- */
+  document.addEventListener('click', e => {
+    if (e.target.closest('#magNouvelle'))  { nouveauBon(); return; }
+    if (e.target.closest('#magStockAdd'))  { referencerProduit(); return; }
+
+    const f = e.target.closest('[data-mag-filtre]');
+    if (f) {
+      magFiltre = f.dataset.magFiltre;
+      document.querySelectorAll('[data-mag-filtre]').forEach(c => c.classList.toggle('active', c === f));
+      renderCommandes();
+      return;
+    }
+
+    const st = e.target.closest('[data-bon-statut]');
+    if (st) { const [id, v] = st.dataset.bonStatut.split('|'); statutBon(id, v); return; }
+
+    const li = e.target.closest('[data-bon-ligne]');
+    if (li) { ajouterLigneBon(li.dataset.bonLigne); return; }
+
+    const ld = e.target.closest('[data-bon-ligne-del]');
+    if (ld) {
+      const [id, i] = ld.dataset.bonLigneDel.split('|');
+      const bon = commandes.find(c => c.id === id);
+      if (bon && bon.lignes.length > 1) { bon.lignes.splice(+i, 1); D().save('commandes'); }
+      else toast('Un bon garde au moins une ligne — supprimez le bon entier.');
+      return;
+    }
+
+    const bd = e.target.closest('[data-bon-del]');
+    if (bd) {
+      const i = commandes.findIndex(c => c.id === bd.dataset.bonDel);
+      if (i >= 0) { D().note(`a supprimé le bon ${commandes[i].id}`); commandes.splice(i, 1); D().save('commandes'); }
+      return;
+    }
+
+    const sd = e.target.closest('[data-stock-del]');
+    if (sd) {
+      const i = +sd.dataset.stockDel;
+      if (stockData[i]) { D().note(`a retiré ${stockData[i].nom} du suivi de stock`); stockData.splice(i, 1); D().save('stock'); }
+    }
+  });
+
+  /* Les quantités se corrigent directement dans le tableau. On enregistre à la
+     sortie du champ et non à chaque frappe : sinon chaque chiffre tapé
+     déclencherait une écriture réseau. */
+  document.addEventListener('change', e => {
+    const q = e.target.closest('[data-stock-qte]');
+    const s = e.target.closest('[data-stock-seuil]');
+    const cible = q || s;
+    if (!cible) return;
+    const i = +(q ? q.dataset.stockQte : s.dataset.stockSeuil);
+    if (!stockData[i]) return;
+    const v = Math.max(0, Math.round(Number(cible.value) || 0));
+    if (q) stockData[i].qte = v; else stockData[i].seuil = v;
+    D().note(`a ajusté le stock de ${stockData[i].nom}`);
+    D().save('stock');
+  });
+
+  document.addEventListener('input', e => {
+    if (e.target.id === 'magSearch') renderCommandes();
+    if (e.target.id === 'magStockSearch') renderStock();
+  });
+
+  window.MarloweCommandes = commandes;
+  window.MarloweStock = stockData;
+
+
+/* ==========================================================================
+   COM RUNNER — le fil de l'équipe et la demande de retrait
+   --------------------------------------------------------------------------
+   Le fil n'est pas une messagerie instantanée : il passe par le même
+   enregistrement que le reste du panel, et la synchronisation le rafraîchit
+   toutes les quelques secondes. C'est suffisant pour se coordonner, et ça
+   évite d'ouvrir une connexion permanente pour trois messages par jour.
+   ========================================================================== */
+
+  const comRunner = [];   /* {id, auteur, texte, quand, type} */
+  const CR_MAX = 200;
+
+  function moiSession() {
+    const s = window.MarloweSession;
+    return (s && s.name) || 'Anonyme';
+  }
+
+  function quandFR(d) {
+    const p = n => String(n).padStart(2, '0');
+    return `${p(d.getDate())}/${p(d.getMonth() + 1)} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  }
+
+  function renderComRunner() {
+    const fil = $('crFil');
+    if (!fil) return;
+
+    if (!comRunner.length) {
+      fil.innerHTML = `<div class="panel"><p class="empty-note" style="text-align:center;padding:24px;">
+        Rien pour l'instant. Le premier message lance le fil.</p></div>`;
+      return;
+    }
+
+    const moi = moiSession();
+    const patron = !!(window.MarloweSession && window.MarloweSession.isPatron);
+
+    fil.innerHTML = `<div class="panel"><div class="cr-fil">${comRunner.map(m => `
+      <div class="cr-msg${m.type === 'retrait' ? ' cr-retrait' : ''}${m.auteur === moi ? ' cr-moi' : ''}">
+        <div class="cr-tete">
+          <span class="cr-av">${esc(m.auteur.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase())}</span>
+          <span class="cr-nom">${esc(m.auteur)}</span>
+          <span class="cr-quand">${esc(m.quand)}</span>
+          ${(m.auteur === moi || patron)
+            ? `<button class="icon-btn danger cr-x" data-cr-del="${esc(m.id)}" title="Retirer">×</button>` : ''}
+        </div>
+        <div class="cr-texte">${esc(m.texte).replace(/\n/g, '<br>')}</div>
+      </div>`).join('')}</div></div>`;
+  }
+
+  function envoyerMessage() {
+    const champ = $('crTexte');
+    if (!champ) return;
+    const texte = champ.value.trim();
+    if (!texte) return;
+
+    comRunner.unshift({
+      id: 'M' + Date.now().toString(36),
+      auteur: moiSession(), texte: texte.slice(0, 800),
+      quand: quandFR(new Date()), type: 'msg',
+    });
+    /* Le fil est plafonné : sans ça il grossirait indéfiniment et finirait
+       par dépasser la taille maximale d'enregistrement. */
+    if (comRunner.length > CR_MAX) comRunner.length = CR_MAX;
+
+    champ.value = '';
+    D().note('a écrit dans le Com Runner');
+    D().save('comRunner');
+  }
+
+  /* --- La demande de retrait ------------------------------------------------
+     Le nom n'est pas demandé : il vient de la session Discord. Le serveur
+     recompose le message à partir de cette même identité, donc personne ne
+     peut demander un retrait au nom d'un autre. */
+  async function demanderRetrait() {
+    const cfg = (window.MarloweAuth && window.MarloweAuth.CONFIG) || {};
+    let tok = null;
+    try { tok = JSON.parse(localStorage.getItem('mv.token') || 'null'); } catch (e) {}
+
+    const arts = (typeof articlesData !== 'undefined' ? articlesData : []);
+    const maintenant = new Date();
+    const p = n => String(n).padStart(2, '0');
+
+    const r = await askForm('Demander un retrait', [
+      { key: 'produit',  label: 'Produit', value: arts.length ? arts[0].desc : '',
+        options: arts.length ? arts.map(a => a.desc).slice(0, 200) : undefined },
+      { key: 'quantite', label: 'Quantité', value: '1', type: 'number' },
+      { key: 'heure',    label: 'Départ souhaité', value: `${p(maintenant.getHours())}:${p(maintenant.getMinutes())}` },
+    ], `Vous demandez au nom de ${moiSession()}. Le message part dans le salon Discord des runners et mentionne le rôle.`);
+    if (!r) return;
+
+    const produit = (r.produit || '').trim();
+    const quantite = Math.max(1, Math.round(Number(r.quantite) || 0));
+    if (!produit) { toast('Il faut préciser un produit.'); return; }
+
+    /* Le message rejoint le fil dans tous les cas : même si Discord est
+       injoignable, l'équipe voit la demande dans le panel. */
+    comRunner.unshift({
+      id: 'R' + Date.now().toString(36),
+      auteur: moiSession(),
+      texte: `Demande de retrait — ${produit} ×${quantite}, départ vers ${r.heure}`,
+      quand: quandFR(new Date()), type: 'retrait',
+    });
+    if (comRunner.length > CR_MAX) comRunner.length = CR_MAX;
+    D().note(`a demandé un retrait (${produit} ×${quantite})`);
+    D().save('comRunner');
+
+    if (cfg.MODE !== 'discord' || !tok) {
+      toast('Demande inscrite au fil. Discord non relié en mode test.');
+      return;
+    }
+
+    try {
+      const res = await fetch(cfg.API_BASE + '/api/discord', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tok },
+        body: JSON.stringify({ produit, quantite, heure: r.heure }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) { toast('Demande envoyée sur Discord.'); return; }
+
+      if (res.status === 503) {
+        alert("Le salon Discord n'est pas encore relié.\n\n"
+            + "Le patron doit créer un webhook dans le salon des runners "
+            + "(Modifier le salon ▸ Intégrations ▸ Webhooks ▸ Nouveau webhook), "
+            + "puis l'enregistrer côté serveur avec :\n\n"
+            + "    npx wrangler secret put DISCORD_WEBHOOK\n\n"
+            + "La demande reste visible dans le fil ci-dessous.");
+        return;
+      }
+      toast(data.detail || `Discord a refusé l'envoi (${res.status}).`);
+    } catch (e) {
+      toast("Discord injoignable — la demande reste dans le fil.");
+    }
+  }
+
+  document.addEventListener('click', e => {
+    if (e.target.closest('#crEnvoyer')) { envoyerMessage(); return; }
+    if (e.target.closest('#crRetrait')) { demanderRetrait(); return; }
+
+    const d = e.target.closest('[data-cr-del]');
+    if (d) {
+      const i = comRunner.findIndex(m => m.id === d.dataset.crDel);
+      if (i >= 0) { comRunner.splice(i, 1); D().note('a retiré un message du Com Runner'); D().save('comRunner'); }
+    }
+  });
+
+  /* Entrée envoie, Maj+Entrée passe à la ligne : le réflexe d'une messagerie. */
+  document.addEventListener('keydown', e => {
+    if (e.target.id !== 'crTexte') return;
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); envoyerMessage(); }
+  });
+
+  window.MarloweComRunner = comRunner;
+
+
+/* ==========================================================================
+   ACCÈS EXTÉRIEURS — codes remis à des gens hors Discord
+   --------------------------------------------------------------------------
+   Le mot de passe n'est jamais renvoyé par le serveur : il n'y est même pas
+   stocké, seule une empreinte l'est. Le patron le voit une fois, au moment de
+   la création ; ensuite il ne peut que le réinitialiser.
+   ========================================================================== */
+
+  let invites = [];
+
+  async function apiInvites(methode, corps) {
+    const cfg = cfgAuth();
+    const tok = jeton();
+    if (!cfg.API_BASE || !tok) throw new Error('connectez-vous au panel');
+    const res = await fetch(cfg.API_BASE + '/api/invites', {
+      method: methode,
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tok },
+      body: corps ? JSON.stringify(corps) : undefined,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || data.error || ('erreur ' + res.status));
+    return data;
+  }
+
+  function pagesDuPanel() {
+    const A = window.MarloweAuth;
+    return (A && A.PAGES) ? A.PAGES.filter(p => p.id !== 'parametres') : [];
+  }
+
+  function renderInvites() {
+    const box = $('mvInvites');
+    if (!box) return;
+
+    const cfg = cfgAuth();
+    if (cfg.MODE !== 'discord') {
+      box.innerHTML = `<h3>Accès extérieurs</h3>
+        <p class="mv-sub">Indisponible en mode test : ces accès vivent sur le serveur.</p>`;
+      return;
+    }
+
+    box.innerHTML = `
+      <div class="mv-vit-head" style="margin-bottom:6px;">
+        <h3 style="margin:0;">Accès extérieurs <span class="mv-cpt">${invites.length} / 50</span></h3>
+        <button class="btn primary" id="mvInvNew">+ Créer un accès</button>
+      </div>
+      <p class="mv-sub">Pour un comptable, un partenaire, quelqu'un qui n'est pas sur le Discord.
+        Vous choisissez les pages qu'il voit, et vous pouvez couper l'accès à tout moment —
+        la coupure est immédiate, même s'il est connecté.</p>
+
+      ${invites.length ? `<div class="mv-inv-list">${invites.map(i => `
+        <div class="mv-inv${i.actif ? '' : ' off'}">
+          <div class="mv-inv-top">
+            <div>
+              <div class="mv-inv-nom">${esc(i.nom)}
+                ${i.actif ? '' : '<span class="mag-statut mag-s-annulee">Suspendu</span>'}</div>
+              <div class="mv-inv-code">${esc(i.code)}</div>
+            </div>
+            <div class="mv-inv-actions">
+              <button class="btn" data-inv="pages" data-code="${esc(i.code)}">Pages…</button>
+              <button class="btn" data-inv="mdp" data-code="${esc(i.code)}">Nouveau mot de passe</button>
+              <button class="btn" data-inv="basculer" data-code="${esc(i.code)}">${i.actif ? 'Suspendre' : 'Réactiver'}</button>
+              <button class="icon-btn danger" data-inv="supprimer" data-code="${esc(i.code)}" title="Supprimer">×</button>
+            </div>
+          </div>
+          <div class="mv-inv-meta">
+            ${i.pages.length ? `${i.pages.length} page${i.pages.length > 1 ? 's' : ''}`
+                             : '<span class="mv-inv-rien">aucune page — il ne verra rien</span>'}
+            ${i.ro && i.ro.length ? ` · ${i.ro.length} en lecture seule` : ''}
+            · créé le ${esc(i.cree)}
+            ${i.dernier ? ` · dernière visite ${esc(i.dernier)}` : ' · jamais connecté'}
+          </div>
+        </div>`).join('')}</div>`
+      : `<p class="empty-note" style="margin-top:14px;">Aucun accès extérieur pour l'instant.</p>`}`;
+  }
+
+  async function chargerInvites() {
+    if (!(window.MarloweSession && window.MarloweSession.isPatron)) return;
+    if (cfgAuth().MODE !== 'discord') { renderInvites(); return; }
+    try {
+      const d = await apiInvites('GET');
+      invites = d.invites || [];
+    } catch (e) { invites = []; }
+    renderInvites();
+  }
+
+  async function creerInvite() {
+    const r = await askForm('Créer un accès extérieur', [
+      { key: 'nom', label: 'Nom de la personne ou de la structure', value: '' },
+      { key: 'mdp', label: 'Mot de passe (8 caractères minimum)', value: '' },
+    ], "Le code sera tiré au sort par le serveur. Notez le mot de passe : il ne pourra plus être relu ensuite, seulement remplacé.");
+    if (!r) return;
+
+    try {
+      const d = await apiInvites('PUT', { action: 'creer', nom: r.nom, mdp: r.mdp, pages: [], ro: [] });
+      await chargerInvites();
+      alert(`Accès créé.\n\nCode : ${d.code}\nMot de passe : ${r.mdp}\n\n`
+          + `Transmettez les deux à ${r.nom}. Le mot de passe n'est pas conservé en clair : `
+          + `s'il est perdu, il faudra en générer un nouveau.\n\n`
+          + `Pensez maintenant à cocher les pages auxquelles il a droit — pour l'instant il n'en voit aucune.`);
+      D().note(`a créé un accès extérieur pour ${r.nom}`);
+    } catch (e) { alert('Création impossible : ' + e.message); }
+  }
+
+  async function pagesInvite(code) {
+    const inv = invites.find(i => i.code === code);
+    if (!inv) return;
+
+    const pages = pagesDuPanel();
+    const etat = new Map(pages.map(p => [p.id,
+      inv.pages.includes(p.id) ? (inv.ro && inv.ro.includes(p.id) ? 'ro' : 'oui') : 'non']));
+
+    const groupes = [...new Set(pages.map(p => p.group))];
+    const html = groupes.map(g => `
+      <div class="mv-invp-groupe">
+        <div class="mv-invp-titre">${esc(g)}</div>
+        ${pages.filter(p => p.group === g).map(p => `
+          <button type="button" class="mv-invp" data-page="${esc(p.id)}" data-etat="${etat.get(p.id)}">
+            <span class="mv-invp-e"></span>${esc(p.label)}
+          </button>`).join('')}
+      </div>`).join('');
+
+    const choix = await askHtml(`Pages visibles — ${inv.nom}`, html,
+      "Cliquez pour faire tourner les trois états : aucun accès, accès complet, lecture seule.");
+    if (!choix) return;
+
+    const ouiP = [], roP = [];
+    choix.querySelectorAll('.mv-invp').forEach(b => {
+      if (b.dataset.etat === 'oui') ouiP.push(b.dataset.page);
+      if (b.dataset.etat === 'ro') { ouiP.push(b.dataset.page); roP.push(b.dataset.page); }
+    });
+
+    try {
+      await apiInvites('PUT', { action: 'pages', code, pages: ouiP, ro: roP });
+      D().note(`a modifié les accès de ${inv.nom}`);
+      await chargerInvites();
+      toast('Accès mis à jour.');
+    } catch (e) { alert('Enregistrement impossible : ' + e.message); }
+  }
+
+  /* Une variante d'askForm qui accepte du HTML libre : la matrice de pages ne
+     rentre pas dans une liste de champs. */
+  function askHtml(titre, html, message) {
+    ensureDialog();
+    const d = dlg.querySelector('.mv-dlg');
+    d.innerHTML = `<h3>${esc(titre)}</h3>${message ? `<p>${esc(message)}</p>` : ''}
+      <div class="mv-invp-wrap">${html}</div>
+      <div class="mv-dlg-btns"><button data-no>Annuler</button><button data-yes class="go">Enregistrer</button></div>`;
+    dlg.style.display = 'flex';
+
+    d.querySelectorAll('.mv-invp').forEach(b => b.addEventListener('click', () => {
+      const suite = { non: 'oui', oui: 'ro', ro: 'non' };
+      b.dataset.etat = suite[b.dataset.etat] || 'oui';
+    }));
+
+    d.querySelector('[data-no]').onclick = () => close(null);
+    d.querySelector('[data-yes]').onclick = () => close(d);
+    return new Promise(r => { resolver = r; });
+  }
+
+  document.addEventListener('click', async e => {
+    if (e.target.closest('#mvInvNew')) { creerInvite(); return; }
+    const b = e.target.closest('[data-inv]');
+    if (!b) return;
+    const code = b.dataset.code, quoi = b.dataset.inv;
+    const inv = invites.find(i => i.code === code);
+
+    if (quoi === 'pages') { pagesInvite(code); return; }
+
+    if (quoi === 'mdp') {
+      const r = await askForm('Nouveau mot de passe', [
+        { key: 'mdp', label: 'Mot de passe (8 caractères minimum)', value: '' },
+      ], `Pour ${inv ? inv.nom : code}. L'ancien cessera de fonctionner immédiatement.`);
+      if (!r) return;
+      try {
+        await apiInvites('PUT', { action: 'mdp', code, mdp: r.mdp });
+        alert(`Nouveau mot de passe pour ${inv ? inv.nom : code} :\n\n${r.mdp}\n\nNotez-le, il ne sera plus relisible.`);
+        D().note(`a changé le mot de passe de l'accès ${code}`);
+      } catch (err) { alert('Impossible : ' + err.message); }
+      return;
+    }
+
+    if (quoi === 'basculer') {
+      try { await apiInvites('PUT', { action: 'basculer', code }); await chargerInvites(); }
+      catch (err) { alert('Impossible : ' + err.message); }
+      return;
+    }
+
+    if (quoi === 'supprimer') {
+      if (!confirm(`Supprimer définitivement l'accès de ${inv ? inv.nom : code} ?`)) return;
+      try {
+        await apiInvites('PUT', { action: 'supprimer', code });
+        D().note(`a supprimé l'accès extérieur ${code}`);
+        await chargerInvites();
+        toast('Accès supprimé.');
+      } catch (err) { alert('Impossible : ' + err.message); }
+    }
+  });
+
   window.MarloweActions = {
     recomputeRecruiters, refreshEffectifCount, reprintInvoice,
     refreshWeekDays, refreshWeekHeaders, renderEligibilite, closeWeek, undoClose,
@@ -4259,7 +4994,8 @@
     verifierVersion, battementPresence, renderPresence, setZoom, toggleFullscreen,
     renderQuotas3, renderJournal, appliquerLectureSeule, remplirVides, repartirDeZero,
     renderVitrine, renderCatalogues, appliquerAccesService, renderAvertissements, compteAvertissements,
-    openInvoiceDoc, renderRegles, renderQuotaService, renderPrimeRecrutement,
+    openInvoiceDoc, renderRegles, renderMagasin, renderCommandes, renderStock, renderMagRecap,
+    renderComRunner, renderQuotaService, renderPrimeRecrutement,
     totalPrimeRecrutement,
   };
 

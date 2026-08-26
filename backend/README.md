@@ -87,9 +87,31 @@ jamais dans le dépôt :
 npx wrangler secret put DISCORD_CLIENT_ID
 npx wrangler secret put DISCORD_CLIENT_SECRET
 npx wrangler secret put DISCORD_BOT_TOKEN
+npx wrangler secret put DISCORD_WEBHOOK
 ```
 
 Chaque commande demande la valeur, collez-la et validez.
+
+### Le webhook du salon des runners
+
+`DISCORD_WEBHOOK` est l'adresse qui permet au panel de poster les demandes de
+retrait dans le salon Discord. Pour l'obtenir :
+
+1. dans Discord, ouvrez le salon des runners ;
+2. **Modifier le salon ▸ Intégrations ▸ Webhooks ▸ Nouveau webhook** ;
+3. **Copier l'URL du webhook**.
+
+Un webhook plutôt que le bot : il ne dépend d'aucune permission accordée au bot
+du serveur, que vous ne contrôlez pas.
+
+Cette adresse est une **autorisation d'écrire dans le salon** : n'importe qui
+la possédant peut y publier. C'est pour ça qu'elle est un secret et qu'elle
+n'est jamais envoyée au navigateur — le message est composé par le Worker, à
+partir de l'identité de la personne connectée. Sans elle, le bouton continue
+de fonctionner : la demande s'inscrit dans le fil du panel, et l'envoi Discord
+signale simplement qu'il n'est pas configuré.
+
+Le rôle mentionné se règle dans `wrangler.toml`, variable `DISCORD_RUNNER_ROLE`.
 
 ---
 

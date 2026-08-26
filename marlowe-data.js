@@ -92,6 +92,21 @@ window.MarloweData = (function () {
       render: [() => { const a = window.MarloweActions; if (a) a.renderBilan(); }],
     },
 
+    /* Magasin : bons de commande et état des rayons. */
+    commandes: {
+      ref: () => window.MarloweCommandes,
+      render: [() => { const a = window.MarloweActions;
+                       if (a) { a.renderCommandes(); a.renderMagRecap(); } }],
+    },
+    stock: {
+      ref: () => window.MarloweStock,
+      render: [() => { const a = window.MarloweActions; if (a) a.renderStock(); }],
+    },
+    comRunner: {
+      ref: () => window.MarloweComRunner,
+      render: [() => { const a = window.MarloweActions; if (a) a.renderComRunner(); }],
+    },
+
     /* Règles du domaine : quota de service et prime de recrutement.
        Ce sont des réglages, pas des données de semaine — la clôture n'y touche pas. */
     reglages: {

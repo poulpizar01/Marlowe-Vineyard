@@ -109,11 +109,16 @@
     { id: 'statseffectif',  label: 'Effectif',        group: 'Stats & Quotas' },
     { id: 'statsprimes',    label: 'Primes',          group: 'Stats & Quotas' },
 
+    { id: 'magcommandes',   label: 'Bons de commande', group: 'Magasin' },
+    { id: 'magstock',       label: 'Stock',           group: 'Magasin' },
+    { id: 'magrecap',       label: 'Récap magasin',   group: 'Magasin' },
+
     { id: 'cloture',        label: 'Clôture du lundi', group: 'Gestion' },
     { id: 'quotas3',        label: 'Quotas 3 semaines', group: 'Gestion' },
     { id: 'journal',        label: 'Journal',         group: 'Gestion' },
     { id: 'histo',          label: 'Historique',      group: 'Gestion' },
 
+    { id: 'comrunner',      label: 'Com Runner',      group: 'Personnel' },
     { id: 'masemaine',      label: 'Ma semaine',      group: 'Personnel' },
     { id: 'agenda',         label: 'Agenda',          group: 'Personnel' },
     { id: 'tombola',        label: 'Tombola',         group: 'Personnel' },
@@ -295,6 +300,13 @@
       if (!s || !s.user) return null;
       s.roles = Array.isArray(s.roles) ? s.roles : [];
 
+      /* Accès extérieur : ni rôles ni matrice, ses pages viennent du serveur. */
+      if (s.invite) {
+        s.isOwner = false;
+        s.isPatron = false;
+        return s;
+      }
+
       /* Accès permanent par identifiant Discord, puis par rôle. */
       s.isOwner  = CONFIG.OWNER_IDS.includes(String(s.user.id));
       s.isPatron = s.isOwner || s.roles.some(r => CONFIG.PATRON_ROLES.includes(r));
@@ -330,6 +342,12 @@
   function allowedPages(session, perms) {
     if (!session) return [];
     if (session.isPatron) return PAGES.map(p => p.id);
+    /* Un accès extérieur ne connaît pas les rôles : sa liste vient du serveur,
+       et Paramètres n'en fait jamais partie. */
+    if (session.invite) {
+      const ok = new Set(session.invite.pages || []);
+      return PAGES.filter(p => ok.has(p.id)).map(p => p.id);
+    }
     return PAGES
       .filter(p => (perms[p.id] || []).some(r => session.roles.includes(r)))
       .map(p => p.id);
@@ -361,6 +379,15 @@
     font-weight:600;cursor:pointer;font-family:inherit;transition:.15s;}
   .mv-discord-btn:hover{background:#4854E0;}
   .mv-discord-btn svg{width:21px;height:auto;}
+  .mv-discord-btn:disabled{opacity:.55;cursor:default;}
+  .mv-ou{display:flex;align-items:center;gap:12px;margin:22px 0 6px;
+    font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:#6C6A5F;}
+  .mv-ou::before,.mv-ou::after{content:'';height:1px;flex:1;background:#3D372C;}
+  .mv-invite summary{cursor:pointer;font-size:13px;color:#9C9384;padding:8px 0;
+    list-style:none;text-align:center;}
+  .mv-invite summary::-webkit-details-marker{display:none;}
+  .mv-invite summary:hover{color:#EDE3CF;}
+  .mv-invite[open] summary{color:#EDE3CF;margin-bottom:4px;}
 
   .mv-note{margin-top:22px;padding-top:20px;border-top:1px solid var(--band,#3D372C);
     font-size:11.5px;line-height:1.6;color:var(--muted,#9C9384);text-align:center;}
@@ -483,6 +510,77 @@
   .mv-pdf-ok{font-size:12.5px;color:var(--muted,#9C9384);margin:0 0 12px;display:flex;align-items:center;gap:12px;}
   .mv-hint{font-size:11.5px;color:var(--muted,#9C9384);margin:12px 0 0;line-height:1.65;}
 
+  /* --- Accès extérieurs --- */
+  #mvInvites{margin-top:24px;}
+  #mvInvites .mv-sub{font-size:12.5px;color:var(--muted,#9C9384);margin:6px 0 18px;line-height:1.7;}
+  .mv-inv-list{display:flex;flex-direction:column;gap:10px;}
+  .mv-inv{border:1px solid var(--band,#3D372C);border-radius:12px;padding:13px 15px;
+    background:rgba(255,255,255,.02);}
+  .mv-inv.off{opacity:.6;}
+  .mv-inv-top{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;}
+  .mv-inv-nom{font-size:14px;font-weight:600;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .mv-inv-code{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--or,#C9A961);
+    letter-spacing:.06em;margin-top:3px;}
+  .mv-inv-actions{display:flex;gap:6px;flex-wrap:wrap;}
+  .mv-inv-actions .btn{padding:6px 12px;font-size:12px;}
+  .mv-inv-meta{font-size:11.5px;color:var(--muted,#9C9384);margin-top:9px;}
+  .mv-inv-rien{color:#E08A7A;}
+  .mv-invp-wrap{max-height:46vh;overflow-y:auto;display:flex;flex-direction:column;gap:14px;margin:6px 0 4px;}
+  .mv-invp-groupe{display:flex;flex-wrap:wrap;gap:6px;}
+  .mv-invp-titre{width:100%;font-size:10px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--or-soft,#8E7C4E);margin-bottom:2px;}
+  .mv-invp{display:inline-flex;align-items:center;gap:8px;font:inherit;font-size:12.5px;cursor:pointer;
+    border:1px solid var(--band,#3D372C);background:transparent;color:var(--muted,#9C9384);
+    border-radius:999px;padding:6px 13px;transition:.15s;}
+  .mv-invp-e{width:8px;height:8px;border-radius:50%;background:var(--band,#3D372C);flex-shrink:0;}
+  .mv-invp[data-etat="oui"]{color:var(--parchment,#EDE3CF);border-color:var(--vine,#6E8B5D);}
+  .mv-invp[data-etat="oui"] .mv-invp-e{background:var(--vine,#6E8B5D);}
+  .mv-invp[data-etat="ro"]{color:var(--amber,#D6A75C);border-color:rgba(214,167,92,.5);}
+  .mv-invp[data-etat="ro"] .mv-invp-e{background:var(--amber,#D6A75C);}
+
+  /* --- Com Runner --- */
+  .cr-saisie{display:flex;gap:12px;align-items:flex-end;}
+  .cr-saisie textarea{flex:1;background:rgba(0,0,0,.22);color:var(--parchment,#EDE3CF);
+    border:1px solid var(--band,#3D372C);border-radius:10px;padding:11px 14px;
+    font:inherit;font-size:13.5px;resize:vertical;min-height:52px;}
+  .cr-fil{display:flex;flex-direction:column;gap:12px;max-height:60vh;overflow-y:auto;}
+  .cr-msg{border:1px solid var(--band,#3D372C);border-radius:12px;padding:12px 14px;
+    background:rgba(255,255,255,.02);}
+  .cr-msg.cr-moi{background:rgba(201,169,97,.06);border-color:rgba(201,169,97,.28);}
+  .cr-msg.cr-retrait{border-color:rgba(214,167,92,.45);background:rgba(214,167,92,.09);}
+  .cr-tete{display:flex;align-items:center;gap:10px;margin-bottom:7px;}
+  .cr-av{width:24px;height:24px;border-radius:50%;flex-shrink:0;
+    background:rgba(201,169,97,.15);border:1px solid var(--or-soft,#8E7C4E);color:var(--or,#C9A961);
+    display:flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:600;}
+  .cr-nom{font-size:13px;font-weight:600;color:var(--parchment,#EDE3CF);}
+  .cr-quand{font-size:10.5px;color:var(--muted,#9C9384);font-family:'IBM Plex Mono',monospace;}
+  .cr-x{margin-left:auto;}
+  .cr-texte{font-size:13.5px;line-height:1.6;color:var(--parchment,#EDE3CF);opacity:.92;padding-left:34px;}
+  .cr-retrait .cr-texte{color:var(--amber,#D6A75C);font-weight:500;}
+
+  /* --- Magasin --- */
+  .mag-bon{margin-bottom:14px;}
+  .mag-bon-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;
+    flex-wrap:wrap;margin-bottom:12px;}
+  .mag-bon-qui{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:14px;}
+  .mag-bon-meta{font-size:11px;color:var(--muted,#9C9384);font-family:'IBM Plex Mono',monospace;margin-top:4px;}
+  .mag-bon-droite{display:flex;align-items:center;gap:14px;}
+  .mag-total{font-family:'IBM Plex Mono',monospace;font-size:16px;color:var(--prime,#D4763D);font-weight:600;}
+  .mag-statut{font-size:11px;font-weight:600;padding:4px 11px;border-radius:999px;border:1px solid;white-space:nowrap;}
+  .mag-s-attente{color:var(--amber,#D6A75C);border-color:rgba(214,167,92,.42);background:rgba(214,167,92,.10);}
+  .mag-s-validee{color:var(--vine,#6E8B5D);border-color:rgba(110,139,93,.45);background:rgba(110,139,93,.12);}
+  .mag-s-annulee{color:#E08A7A;border-color:rgba(190,80,90,.5);background:rgba(150,52,60,.14);}
+  .mag-lignes{margin-top:4px;}
+  .mag-annulee{opacity:.62;}
+  .mag-alertes{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;}
+  .mag-alerte{font-size:12px;padding:6px 12px;border-radius:999px;
+    color:var(--amber,#D6A75C);border:1px solid rgba(214,167,92,.42);background:rgba(214,167,92,.10);}
+  .mag-alerte b{margin-right:6px;color:var(--parchment,#EDE3CF);}
+  .mag-inp{width:96px;background:rgba(0,0,0,.22);color:var(--parchment,#EDE3CF);
+    border:1px solid var(--band,#3D372C);border-radius:7px;padding:6px 9px;
+    font:inherit;font-size:12.5px;text-align:right;font-family:'IBM Plex Mono',monospace;}
+  tr.mag-bas .mag-inp{border-color:rgba(214,167,92,.45);}
+
   /* --- Vue des catalogues dans le panel --- */
   .mv-cat-vue{position:relative;border:1px solid var(--band,#3D372C);border-radius:10px;
     background:rgba(0,0,0,.22);aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;
@@ -587,6 +685,24 @@
             Vous serez redirigé vers Discord. Le domaine ne voit que votre pseudo,
             votre avatar et vos rôles sur le serveur.
           </div>
+
+          <div class="mv-ou"><span>ou</span></div>
+
+          <details class="mv-invite">
+            <summary>J'ai un code d'accès</summary>
+            <p class="mv-note" style="margin:10px 0 14px;">Réservé aux intervenants extérieurs,
+              à qui le patron a remis un code et un mot de passe.</p>
+            <div class="mv-field">
+              <label for="mvCode">Code d'accès</label>
+              <input type="text" id="mvCode" placeholder="MV-XXXXXXXX" autocomplete="off" spellcheck="false">
+            </div>
+            <div class="mv-field">
+              <label for="mvMdp">Mot de passe</label>
+              <input type="password" id="mvMdp" autocomplete="current-password">
+            </div>
+            <button class="mv-discord-btn" id="mvInviteGo" style="background:#3D372C;">Entrer</button>
+            <div class="mv-gate-error" id="mvInviteErr"></div>
+          </details>
         `}
       </div>`;
 
@@ -615,6 +731,40 @@
       });
     } else {
       gate.querySelector('#mvLogin').addEventListener('click', () => Auth.login());
+
+      const go = gate.querySelector('#mvInviteGo');
+      const err = gate.querySelector('#mvInviteErr');
+      const tenter = async () => {
+        const code = gate.querySelector('#mvCode').value.trim();
+        const mdp  = gate.querySelector('#mvMdp').value;
+        if (!code || !mdp) { err.textContent = 'Code et mot de passe sont requis.'; return; }
+
+        go.disabled = true; err.textContent = '';
+        try {
+          const res = await fetch(CONFIG.API_BASE + '/api/invite-login', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code, mdp }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            /* Message volontairement identique pour un code inconnu et un
+               mauvais mot de passe : distinguer les deux dirait à un curieux
+               quels codes existent. */
+            err.textContent = res.status === 429
+              ? (data.detail || 'Trop de tentatives.')
+              : 'Code ou mot de passe incorrect.';
+            go.disabled = false;
+            return;
+          }
+          ls.set(LS_TOKEN, data.token);
+          location.reload();
+        } catch (e) {
+          err.textContent = 'Serveur injoignable. Réessayez dans un instant.';
+          go.disabled = false;
+        }
+      };
+      go.addEventListener('click', tenter);
+      gate.querySelector('#mvMdp').addEventListener('keydown', e => { if (e.key === 'Enter') tenter(); });
     }
   }
 
@@ -635,9 +785,11 @@
           ? `<img src="${esc(session.user.avatar)}" alt="">` : esc(initials)}</div>
         <div style="min-width:0;flex:1;">
           <div class="mv-user-name" title="${esc(session.user.name)}">${esc(session.user.name)}</div>
-          <div class="mv-user-role" title="${esc(session.roles.join(', '))}">${
-            session.isOwner ? '<span class="mv-owner-tag">Accès permanent</span> · ' : ''
-          }${esc(session.roles.join(' · '))}</div>
+          <div class="mv-user-role" title="${esc(session.invite ? 'Accès extérieur' : session.roles.join(', '))}">${
+            session.invite ? '<span class="mv-owner-tag">Accès extérieur</span>'
+            : (session.isOwner ? '<span class="mv-owner-tag">Accès permanent</span> · ' : '')
+              + esc(session.roles.join(' · '))
+          }</div>
         </div>
       </div>
       <button class="mv-logout" type="button">Se déconnecter</button>`;
@@ -810,6 +962,8 @@
 
       <div class="panel" id="mvReglages"></div>
 
+      <div class="panel" id="mvInvites"></div>
+
       <div class="panel mv-danger">
         <h3>Repartir de zéro</h3>
         <p>Vide les données du panel pour démarrer proprement — employés, factures, production,
@@ -958,9 +1112,10 @@
     /* Pages que ce membre peut voir sans pouvoir les modifier. Le patron
        n'est jamais en lecture seule. */
     const ro = settings0.permsRO || {};
-    const readOnly = session.isPatron ? [] : PAGES
-      .map(p => p.id)
-      .filter(id => (ro[id] || []).some(r => session.roles.includes(r)));
+    const readOnly = session.isPatron ? []
+      : session.invite ? (session.invite.ro || [])
+      : PAGES.map(p => p.id)
+             .filter(id => (ro[id] || []).some(r => session.roles.includes(r)));
 
     window.MarloweSession = {
       id: session.user.id,
@@ -968,6 +1123,7 @@
       roles: session.roles.slice(),
       isPatron: session.isPatron,
       isOwner: session.isOwner,
+      invite: session.invite || null,
       readOnly,
     };
 

@@ -246,6 +246,25 @@ async function currentSession(request, env) {
   const stored = await env.MARLOWE.get('sess:' + sid, 'json');
   if (!stored) return null;
 
+  /* Session d'un accès extérieur : pas de Discord, donc pas de rôles. Les
+     droits sont relus dans la fiche de l'accès à CHAQUE appel — révoquer un
+     accès le coupe donc immédiatement, sans attendre l'expiration. */
+  if (stored.invite) {
+    const invites = await lireInvites(env);
+    const inv = invites.find(x => x.code === stored.code);
+    if (!inv || inv.actif === false) {
+      await env.MARLOWE.delete('sess:' + sid);
+      return null;
+    }
+    return {
+      user: { id: stored.id, name: inv.nom, avatar: null },
+      roles: [],
+      isOwner: false,
+      isPatron: false,
+      invite: { code: inv.code, pages: inv.pages || [], ro: inv.ro || [] },
+    };
+  }
+
   /* On revérifie l'appartenance : si le membre a quitté le Discord ou
      a changé de rôle, ça se voit immédiatement. */
   const member = await memberRoles(env, stored.id);
@@ -272,7 +291,9 @@ async function currentSession(request, env) {
 async function handleMe(request, env) {
   const s = await currentSession(request, env);
   if (!s) return json(env, { error: 'unauthorized' }, 401);
-  return json(env, { user: s.user, roles: s.roles });
+  /* Le panel a besoin de savoir s'il a affaire à un accès extérieur : il n'a
+     ni rôles ni matrice, ses pages lui sont dictées ici. */
+  return json(env, { user: s.user, roles: s.roles, invite: s.invite || null });
 }
 
 /* GET /api/roles */
@@ -353,6 +374,9 @@ const COLLECTION_PAGES = {
   agenda:          ['agenda'],
   serviceHistory:  ['masemaine'],
   tombola:         ['tombola'],
+  commandes:       ['magcommandes', 'magrecap'],
+  comRunner:       ['comrunner'],
+  stock:           ['magstock', 'magcommandes'],
   /* La vitrine ne se règle que depuis Paramètres, donc réservée au patron. */
   vitrine:         [],
   /* Règles du domaine : réservées au patron, comme la vitrine. */
@@ -361,6 +385,15 @@ const COLLECTION_PAGES = {
 
 function canWrite(session, collection, perms, ro) {
   if (session.isPatron) return true;
+
+  /* Un accès extérieur ne passe pas par les rôles Discord : ses droits sont
+     la liste de pages que le patron lui a cochée. */
+  if (session.invite) {
+    const pages = COLLECTION_PAGES[collection];
+    if (!pages) return false;
+    return pages.some(page => session.invite.pages.includes(page)
+                           && !session.invite.ro.includes(page));
+  }
 
   const pages = COLLECTION_PAGES[collection];
   if (!pages) return false;            /* collection inconnue : on refuse */
@@ -564,6 +597,247 @@ function lienCanva(brut) {
   return `https://www.canva.com/design/${m[1]}/${m[2]}/view?embed`;
 }
 
+/* POST /api/discord  —  relais vers le salon des runners
+   ---------------------------------------------------------------------------
+   L'adresse du webhook est un secret Cloudflare, jamais envoyé au navigateur :
+   une URL de webhook est une autorisation d'écriture, et n'importe qui pourrait
+   poster dans le salon en la lisant dans le code de la page.
+
+   Le message est composé ICI à partir de l'identité de la session : un membre
+   ne peut donc pas demander un retrait au nom de quelqu'un d'autre. */
+const RETRAIT_MIN_MS = 30 * 1000;   // un envoi toutes les 30 s par personne
+
+async function handleDiscord(request, env) {
+  if (request.method !== 'POST') return json(env, { error: 'method' }, 405);
+
+  const s = await currentSession(request, env);
+  if (!s) return json(env, { error: 'unauthorized' }, 401);
+
+  if (!env.DISCORD_WEBHOOK) {
+    return json(env, { error: 'webhook_absent',
+      detail: "Le salon Discord n'est pas encore relié. Le patron doit créer un webhook et l'enregistrer." }, 503);
+  }
+
+  let body;
+  try { body = await request.json(); }
+  catch (e) { return json(env, { error: 'bad_json' }, 400); }
+
+  const texte = (x, n) => String(x == null ? '' : x).slice(0, n).replace(/[`@]/g, '');
+  const produit = texte(body.produit, 120);
+  const quantite = Math.max(1, Math.min(99999, Math.round(Number(body.quantite) || 0)));
+  const heure = texte(body.heure, 12);
+  if (!produit || !heure) return json(env, { error: 'incomplet' }, 400);
+
+  /* Garde-fou anti-spam : sans lui, un clic répété inonderait le salon. */
+  const cle = 'retrait:' + s.user.id;
+  const dernier = await env.MARLOWE.get(cle);
+  if (dernier) {
+    return json(env, { error: 'trop_vite',
+      detail: 'Patientez une trentaine de secondes entre deux demandes.' }, 429);
+  }
+  await env.MARLOWE.put(cle, '1', { expirationTtl: Math.ceil(RETRAIT_MIN_MS / 1000) });
+
+  const role = (env.DISCORD_RUNNER_ROLE || '').trim();
+  const mention = role ? `<@&${role}> ` : '';
+
+  const contenu = `${mention}**Demande de retrait**\n`
+    + `> Runner : **${s.user.name}**\n`
+    + `> Produit : **${produit}**\n`
+    + `> Quantité : **${quantite}**\n`
+    + `> Départ souhaité : **${heure}**`;
+
+  const res = await fetch(env.DISCORD_WEBHOOK, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      content: contenu,
+      username: 'Marlowe Vineyard',
+      /* Sans cette liste, Discord refuse de notifier le rôle depuis un
+         webhook — et le message partirait sans réveiller personne. */
+      allowed_mentions: role ? { parse: [], roles: [role] } : { parse: [] },
+    }),
+  });
+
+  if (!res.ok) {
+    return json(env, { error: 'discord', status: res.status,
+      detail: "Discord a refusé le message. Le webhook a peut-être été supprimé." }, 502);
+  }
+  return json(env, { ok: true, envoyePar: s.user.name });
+}
+
+/* ===========================================================================
+   ACCÈS EXTÉRIEURS — code + mot de passe, sans Discord
+   ---------------------------------------------------------------------------
+   Pour un comptable, un partenaire, quelqu'un qui n'est pas sur le serveur.
+   Le patron crée l'accès, choisit les pages, et peut le révoquer.
+
+   Les mots de passe ne sont jamais stockés en clair : on garde une empreinte
+   PBKDF2 avec un sel propre à chaque accès. Même en lisant la base, on ne
+   peut pas remonter au mot de passe.
+   =========================================================================== */
+
+const PBKDF2_TOURS = 120000;
+
+function b64(buf) {
+  return btoa(String.fromCharCode(...new Uint8Array(buf)));
+}
+
+async function empreinte(motDePasse, sel) {
+  const cle = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(motDePasse), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', salt: new TextEncoder().encode(sel), iterations: PBKDF2_TOURS, hash: 'SHA-256' },
+    cle, 256);
+  return b64(bits);
+}
+
+/* Comparaison à temps constant : une comparaison normale s'arrête au premier
+   caractère différent, ce qui laisse deviner l'empreinte par chronométrage. */
+function memeSecret(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+async function lireInvites(env) {
+  return await env.MARLOWE.get('invites', 'json') || [];
+}
+
+/* GET | PUT /api/invites  —  patron uniquement
+   La liste renvoyée ne contient JAMAIS les empreintes ni les sels. */
+async function handleInvites(request, env) {
+  const s = await currentSession(request, env);
+  if (!s) return json(env, { error: 'unauthorized' }, 401);
+  if (!s.isPatron) return json(env, { error: 'forbidden' }, 403);
+
+  const invites = await lireInvites(env);
+
+  if (request.method === 'GET') {
+    return json(env, { invites: invites.map(i => ({
+      code: i.code, nom: i.nom, pages: i.pages, ro: i.ro || [],
+      cree: i.cree, dernier: i.dernier || null, actif: i.actif !== false,
+    })) });
+  }
+
+  if (request.method !== 'PUT' && request.method !== 'POST') {
+    return json(env, { error: 'method' }, 405);
+  }
+
+  let body;
+  try { body = await request.json(); }
+  catch (e) { return json(env, { error: 'bad_json' }, 400); }
+
+  const texte = (x, n) => String(x == null ? '' : x).slice(0, n);
+  const action = texte(body.action, 20);
+
+  if (action === 'creer') {
+    const nom = texte(body.nom, 60).trim();
+    const mdp = String(body.mdp || '');
+    if (!nom) return json(env, { error: 'nom_manquant' }, 400);
+    if (mdp.length < 8) return json(env, { error: 'mdp_court', detail: '8 caractères minimum.' }, 400);
+    if (invites.length >= 50) return json(env, { error: 'trop', detail: '50 accès au maximum.' }, 400);
+
+    /* Le code est tiré au sort ici, pas côté navigateur : c'est la moitié du
+       secret, il doit venir d'une source sûre. */
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    const brut = crypto.getRandomValues(new Uint8Array(8));
+    const code = 'MV-' + [...brut].map(b => alphabet[b % alphabet.length]).join('');
+
+    const sel = b64(crypto.getRandomValues(new Uint8Array(16)));
+    invites.push({
+      code, nom, sel, hash: await empreinte(mdp, sel),
+      pages: Array.isArray(body.pages) ? body.pages.filter(p => typeof p === 'string').slice(0, 60) : [],
+      ro: Array.isArray(body.ro) ? body.ro.filter(p => typeof p === 'string').slice(0, 60) : [],
+      cree: new Date().toISOString().slice(0, 10),
+      actif: true,
+    });
+    await env.MARLOWE.put('invites', JSON.stringify(invites));
+    return json(env, { ok: true, code });
+  }
+
+  const code = texte(body.code, 30);
+  const i = invites.findIndex(x => x.code === code);
+  if (i < 0) return json(env, { error: 'introuvable' }, 404);
+
+  if (action === 'supprimer') {
+    invites.splice(i, 1);
+    await env.MARLOWE.put('invites', JSON.stringify(invites));
+    return json(env, { ok: true });
+  }
+
+  if (action === 'basculer') {
+    invites[i].actif = invites[i].actif === false;
+    await env.MARLOWE.put('invites', JSON.stringify(invites));
+    return json(env, { ok: true, actif: invites[i].actif });
+  }
+
+  if (action === 'pages') {
+    invites[i].pages = Array.isArray(body.pages) ? body.pages.filter(p => typeof p === 'string').slice(0, 60) : [];
+    invites[i].ro    = Array.isArray(body.ro)    ? body.ro.filter(p => typeof p === 'string').slice(0, 60)    : [];
+    await env.MARLOWE.put('invites', JSON.stringify(invites));
+    return json(env, { ok: true });
+  }
+
+  if (action === 'mdp') {
+    const mdp = String(body.mdp || '');
+    if (mdp.length < 8) return json(env, { error: 'mdp_court', detail: '8 caractères minimum.' }, 400);
+    invites[i].sel = b64(crypto.getRandomValues(new Uint8Array(16)));
+    invites[i].hash = await empreinte(mdp, invites[i].sel);
+    await env.MARLOWE.put('invites', JSON.stringify(invites));
+    return json(env, { ok: true });
+  }
+
+  return json(env, { error: 'action_inconnue' }, 400);
+}
+
+/* POST /api/invite-login  —  PUBLIC (c'est la porte d'entrée) */
+async function handleInviteLogin(request, env) {
+  if (request.method !== 'POST') return json(env, { error: 'method' }, 405);
+
+  let body;
+  try { body = await request.json(); }
+  catch (e) { return json(env, { error: 'bad_json' }, 400); }
+
+  const code = String(body.code || '').trim().toUpperCase().slice(0, 30);
+  const mdp = String(body.mdp || '');
+
+  /* Freinage par code : sans lui, on pourrait essayer les mots de passe en
+     boucle jusqu'à tomber juste. */
+  const cleEssais = 'essais:' + code;
+  const essais = Number(await env.MARLOWE.get(cleEssais) || 0);
+  if (essais >= 8) {
+    return json(env, { error: 'bloque',
+      detail: 'Trop de tentatives. Réessayez dans un quart d\'heure.' }, 429);
+  }
+
+  const invites = await lireInvites(env);
+  const inv = invites.find(x => x.code === code);
+
+  if (!inv || inv.actif === false) {
+    await env.MARLOWE.put(cleEssais, String(essais + 1), { expirationTtl: 900 });
+    return json(env, { error: 'refuse' }, 401);
+  }
+
+  const test = await empreinte(mdp, inv.sel);
+  if (!memeSecret(test, inv.hash)) {
+    await env.MARLOWE.put(cleEssais, String(essais + 1), { expirationTtl: 900 });
+    return json(env, { error: 'refuse' }, 401);
+  }
+
+  await env.MARLOWE.delete(cleEssais);
+
+  inv.dernier = new Date().toISOString().slice(0, 16).replace('T', ' ');
+  await env.MARLOWE.put('invites', JSON.stringify(invites));
+
+  const sid = crypto.randomUUID();
+  await env.MARLOWE.put('sess:' + sid, JSON.stringify({
+    invite: true, code: inv.code, id: 'inv:' + inv.code, name: inv.nom, avatar: null,
+  }), { expirationTtl: SESSION_TTL });
+
+  return json(env, { token: sid, nom: inv.nom, pages: inv.pages, ro: inv.ro || [] });
+}
+
 /* GET | PUT /api/settings
    Réglages du panel. Aujourd'hui : la liste des rôles retenus comme rôles
    du domaine (les autres — partenaires, décoratifs — sont écartés). */
@@ -740,6 +1014,9 @@ export default {
         case '/api/orga':        return handleOrga(request, env);
         case '/api/vitrine':     return handleVitrine(request, env);
         case '/api/upload':      return handleUpload(request, env);
+        case '/api/discord':      return handleDiscord(request, env);
+        case '/api/invites':      return handleInvites(request, env);
+        case '/api/invite-login': return handleInviteLogin(request, env);
         case '/api/data':        return handleData(request, env);
         case '/api/presence':    return handlePresence(request, env);
         case '/api/journal':     return handleJournal(request, env);

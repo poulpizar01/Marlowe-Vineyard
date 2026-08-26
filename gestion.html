@@ -531,12 +531,17 @@
       <div class="nav-item" data-page="statsgrades">Grades &amp; quotas</div>
       <div class="nav-item" data-page="statseffectif">Effectif</div>
       <div class="nav-item" data-page="statsprimes">Primes</div>
+      <div class="nav-section">Magasin</div>
+      <div class="nav-item" data-page="magcommandes">Bons de commande</div>
+      <div class="nav-item" data-page="magstock">Stock</div>
+      <div class="nav-item" data-page="magrecap">Récap magasin</div>
       <div class="nav-section">Gestion</div>
       <div class="nav-item" data-page="cloture">Clôture du lundi</div>
       <div class="nav-item" data-page="quotas3">Quotas 3 semaines</div>
       <div class="nav-item" data-page="journal">Journal</div>
       <div class="nav-item" data-page="histo">Historique</div>
       <div class="nav-section">Personnel</div>
+      <div class="nav-item" data-page="comrunner">Com Runner</div>
       <div class="nav-item" data-page="masemaine">Ma semaine</div>
       <div class="nav-item" data-page="agenda">Agenda</div>
       <div class="nav-item" data-page="tombola">Tombola</div>
@@ -1318,6 +1323,91 @@
     </div>
 
     <!-- ================= AGENDA ================= -->
+    <!-- ================= MAGASIN — BONS DE COMMANDE ================= -->
+    <div class="page-content" id="page-magcommandes">
+      <div class="page-head-row">
+        <div>
+          <h1 class="page-title">Bons de commande</h1>
+          <p class="page-sub">Les commandes passées au magasin — en attente, validées, annulées.</p>
+        </div>
+        <button class="btn primary" id="magNouvelle">+ Nouveau bon</button>
+      </div>
+
+      <div class="metric-grid-3" style="margin-bottom:20px;">
+        <div class="metric-card"><div class="metric-label">En attente</div><div class="metric-value" id="magAttente">0</div><div class="metric-sub">à valider</div></div>
+        <div class="metric-card"><div class="metric-label">Validées cette semaine</div><div class="metric-value" id="magValidees">0</div><div class="metric-sub">bons honorés</div></div>
+        <div class="metric-card"><div class="metric-label">Chiffre validé</div><div class="metric-value" id="magCA">0 $</div><div class="metric-sub">sur la semaine en cours</div></div>
+      </div>
+
+      <div class="toolbar">
+        <div class="search">
+          <span style="color:var(--muted);font-size:14px;">⌕</span>
+          <input type="text" id="magSearch" placeholder="Rechercher un employé, un produit…">
+        </div>
+        <div class="chip active" data-mag-filtre="tous">Tous</div>
+        <div class="chip" data-mag-filtre="attente">En attente</div>
+        <div class="chip" data-mag-filtre="validee">Validés</div>
+        <div class="chip" data-mag-filtre="annulee">Annulés</div>
+      </div>
+
+      <div id="magListe"></div>
+    </div>
+
+    <!-- ================= MAGASIN — STOCK ================= -->
+    <div class="page-content" id="page-magstock">
+      <div class="page-head-row">
+        <div>
+          <h1 class="page-title">Stock</h1>
+          <p class="page-sub">C'est vous qui tenez le magasin : fixez vos seuils, le panel vous prévient.</p>
+        </div>
+        <button class="btn primary" id="magStockAdd">+ Référencer un produit</button>
+      </div>
+
+      <div class="panel" id="magAlertes"></div>
+
+      <div class="toolbar">
+        <div class="search">
+          <span style="color:var(--muted);font-size:14px;">⌕</span>
+          <input type="text" id="magStockSearch" placeholder="Rechercher un produit…">
+        </div>
+      </div>
+
+      <div class="panel">
+        <table class="gtable">
+          <thead><tr><th>Produit</th><th class="num">En stock</th><th class="num">Seuil d'alerte</th><th>État</th><th></th></tr></thead>
+          <tbody id="magStockBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ================= MAGASIN — RÉCAP ================= -->
+    <div class="page-content" id="page-magrecap">
+      <h1 class="page-title">Récap magasin</h1>
+      <p class="page-sub">Ce que chacun a vendu cette semaine, calculé depuis les bons validés.</p>
+      <div class="panel" id="magRecap"></div>
+      <div class="panel" id="magTopProduits"></div>
+    </div>
+
+    <!-- ================= COM RUNNER ================= -->
+    <div class="page-content" id="page-comrunner">
+      <div class="page-head-row">
+        <div>
+          <h1 class="page-title">Com Runner</h1>
+          <p class="page-sub">Le fil des runners — et le bouton qui prévient le salon Discord.</p>
+        </div>
+        <button class="btn primary" id="crRetrait">📦 Demander un retrait</button>
+      </div>
+
+      <div class="panel">
+        <div class="cr-saisie">
+          <textarea id="crTexte" rows="2" placeholder="Un mot pour l'équipe…"></textarea>
+          <button class="btn primary" id="crEnvoyer">Envoyer</button>
+        </div>
+      </div>
+
+      <div id="crFil"></div>
+    </div>
+
     <div class="page-content" id="page-agenda">
       <h1 class="page-title">Agenda</h1>
       <p class="page-sub">Planning du domaine — publie un événement public, privé (visible uniquement par toi) ou réservé à la direction.</p>

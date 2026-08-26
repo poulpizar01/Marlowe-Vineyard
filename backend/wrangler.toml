@@ -21,6 +21,10 @@ PATRON_ROLES = "Patron,Co-Patron"
 # 826526979204841482 = Thomas, développeur du site.
 OWNER_IDS = "826526979204841482,186397473374208000"
 
+# Salon Discord des runners : identifiant du rôle à mentionner.
+# L'adresse du webhook, elle, est un SECRET : voir README.
+DISCORD_RUNNER_ROLE = "1541579306134933505"
+
 # ---------------------------------------------------------------------------
 # Stockage : sessions + matrice des accès.
 # Créer avec :  npx wrangler kv namespace create MARLOWE
@@ -36,4 +40,11 @@ id = "96dc213dcafc411d8417448b46fc9274"
 #   npx wrangler secret put DISCORD_CLIENT_SECRET
 #   npx wrangler secret put DISCORD_BOT_TOKEN
 #   npx wrangler secret put DISCORD_CLIENT_ID
+#   npx wrangler secret put DISCORD_WEBHOOK
+#
+# DISCORD_WEBHOOK = l'adresse du webhook du salon des runners.
+#   Discord ▸ le salon ▸ Modifier le salon ▸ Intégrations ▸ Webhooks ▸
+#   Nouveau webhook ▸ Copier l'URL.
+#   C'est une autorisation d'écrire dans le salon : elle ne doit jamais
+#   se retrouver dans le code du site.
 # ---------------------------------------------------------------------------
