@@ -1011,31 +1011,31 @@ export default {
       /* /api/img/{id} porte l'identifiant dans le chemin : le switch ne sait
          pas filtrer là-dessus, on l'attrape avant. */
       if (url.pathname.startsWith('/api/img/')) {
-        return handleImage(request, env, url.pathname.slice('/api/img/'.length));
+        return await handleImage(request, env, url.pathname.slice('/api/img/'.length));
       }
 
       switch (url.pathname) {
-        case '/api/login':       return handleLogin(request, env, url);
-        case '/api/callback':    return handleCallback(request, env, url);
-        case '/api/me':          return handleMe(request, env);
-        case '/api/roles':       return handleRoles(request, env);
-        case '/api/permissions': return handlePermissions(request, env);
-        case '/api/settings':    return handleSettings(request, env);
-        case '/api/orga':        return handleOrga(request, env);
-        case '/api/vitrine':     return handleVitrine(request, env);
-        case '/api/upload':      return handleUpload(request, env);
+        case '/api/login':       return await handleLogin(request, env, url);
+        case '/api/callback':    return await handleCallback(request, env, url);
+        case '/api/me':          return await handleMe(request, env);
+        case '/api/roles':       return await handleRoles(request, env);
+        case '/api/permissions': return await handlePermissions(request, env);
+        case '/api/settings':    return await handleSettings(request, env);
+        case '/api/orga':        return await handleOrga(request, env);
+        case '/api/vitrine':     return await handleVitrine(request, env);
+        case '/api/upload':      return await handleUpload(request, env);
         /* Deux noms pour la même route. Les bloqueurs de publicité et les
            filtres d'entreprise coupent volontiers tout ce qui contient le mot
            « discord » dans une adresse ; /api/relais passe partout. L'ancien
            nom reste en place pour ne rien casser. */
-        case '/api/relais':       return handleDiscord(request, env);
-        case '/api/discord':      return handleDiscord(request, env);
-        case '/api/invites':      return handleInvites(request, env);
-        case '/api/invite-login': return handleInviteLogin(request, env);
-        case '/api/data':        return handleData(request, env);
-        case '/api/presence':    return handlePresence(request, env);
-        case '/api/journal':     return handleJournal(request, env);
-        case '/api/logout':      return handleLogout(request, env);
+        case '/api/relais':       return await handleDiscord(request, env);
+        case '/api/discord':      return await handleDiscord(request, env);
+        case '/api/invites':      return await handleInvites(request, env);
+        case '/api/invite-login': return await handleInviteLogin(request, env);
+        case '/api/data':        return await handleData(request, env);
+        case '/api/presence':    return await handlePresence(request, env);
+        case '/api/journal':     return await handleJournal(request, env);
+        case '/api/logout':      return await handleLogout(request, env);
         default:                 return json(env, { error: 'not_found' }, 404);
       }
     } catch (e) {

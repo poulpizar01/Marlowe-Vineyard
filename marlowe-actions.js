@@ -5181,6 +5181,13 @@
         dire('', '');
         dire('Conclusion', "le serveur ne connaît pas encore /api/relais.");
         dire('', 'Depuis le dossier backend : npx wrangler deploy');
+      } else if (r.status === 500) {
+        dire('', '');
+        dire('Conclusion', "le serveur a planté pendant le traitement. Le");
+        dire('', "détail ci-dessus est le message exact de l'erreur.");
+        dire('', "Pour la voir en direct, depuis le dossier backend :");
+        dire('', '    npx wrangler tail');
+        dire('', "puis recliquez sur ce bouton.");
       } else if (r.status === 502) {
         dire('', '');
         dire('Conclusion', "Discord a refusé le message : le webhook a sans doute");

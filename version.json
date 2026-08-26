@@ -1,4 +1,4 @@
 {
-  "v": "1.9.3",
-  "note": "relais Discord : route neutre /api/relais + voie de repli sans requete preparatoire, diagnostic qui distingue CORS et blocage par extension"
+  "v": "1.9.4",
+  "note": "correctif majeur : les handlers du Worker n'etaient pas awaites, toute erreur sortait en 1101 sans en-tetes CORS. Route neutre /api/relais + voie de repli."
 }
