@@ -5109,7 +5109,7 @@
 
     /* 3. l'envoi lui-même. On essaie les deux voies séparément pour savoir
        laquelle marche, au lieu de conclure au hasard. */
-    let r = null, voie = null, erreurNormale = null, erreurRepli = null;
+    let r = null, voie = null, erreurNormale = null, erreurRepli = null, brut = '';
     const charge = { produit: 'Test de liaison', quantite: 1, heure: '00:00' };
 
     try {
@@ -5158,6 +5158,7 @@
       const d = await r.json().catch(() => ({}));
       dire('Envoi Discord', `${r.status} ${d.error || (d.ok ? 'envoyé' : '')} (voie ${voie})`);
       if (d.detail) dire('Détail', d.detail);
+      brut = d.detail || d.error || '';
 
       if (r.ok) {
         dire('', '');
@@ -5196,6 +5197,14 @@
         dire('Conclusion', "Discord a refusé le message : le webhook a sans doute");
         dire('', 'été supprimé. Recréez-le et réenregistrez le secret.');
       }
+    }
+
+    /* Le message exact du serveur est répété en dernier : c'est la seule
+       ligne qui permet de trancher, et une capture d'écran coupe toujours
+       par le bas. */
+    if (brut) {
+      dire('', '');
+      dire('>>> MESSAGE EXACT', String(brut).slice(0, 400));
     }
 
     alert(L.join('\n'));
