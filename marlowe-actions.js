@@ -2521,7 +2521,10 @@
   /* ========================================================================
      PRÉSENCE — qui d'autre travaille en ce moment
      ======================================================================== */
-  const PRESENCE_MS = 45000;
+  /* Deux minutes entre deux battements : le serveur n'inscrit la fiche que
+     lorsqu'elle a changé ou qu'elle vieillit, mais chaque appel reste une
+     lecture de la base. Inutile de la solliciter toutes les 45 secondes. */
+  const PRESENCE_MS = 120000;
   let presenceTimer = null;
 
   function pageCourante() {

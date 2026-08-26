@@ -1,4 +1,4 @@
 {
-  "v": "1.9.4",
-  "note": "correctif majeur : les handlers du Worker n'etaient pas awaites, toute erreur sortait en 1101 sans en-tetes CORS. Route neutre /api/relais + voie de repli."
+  "v": "1.10.0",
+  "note": "quota KV : caches sortis de la base, connexion sans ecriture, presence regroupee. Handlers awaites pour ne plus perdre les erreurs en 1101."
 }

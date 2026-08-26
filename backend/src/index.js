@@ -65,6 +65,36 @@ function errorPage(title, message, env) {
   return new Response(html, { status: 403, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 }
 
+/* ---------------------------------------------------------------------------
+   Cache en mémoire vive — et pas dans KV
+   ---------------------------------------------------------------------------
+   Le plan gratuit de Cloudflare KV autorise 1 000 ÉCRITURES par jour (les
+   lectures, elles, sont 100 fois plus généreuses). Or les caches courts de ce
+   Worker écrivaient dans KV : les rôles d'un membre toutes les 60 secondes,
+   soit près de 1 500 écritures par jour et par personne connectée. Le quota
+   partait en fumée avant midi, et TOUTE écriture suivante levait une erreur —
+   connexion impossible, enregistrement impossible.
+
+   Un cache de quelques dizaines de secondes n'a aucun besoin d'être durable.
+   Il vit ici, dans la mémoire de l'isolat Cloudflare, et ne coûte rien. Il
+   disparaît quand l'isolat est recyclé : au pire on réinterroge Discord, ce
+   qui est précisément ce que le cache évitait — jamais une erreur. */
+const memoire = new Map();
+
+function memGet(cle) {
+  const e = memoire.get(cle);
+  if (!e) return undefined;
+  if (Date.now() > e.exp) { memoire.delete(cle); return undefined; }
+  return e.val;
+}
+
+function memSet(cle, val, ttlSecondes) {
+  /* Un isolat ne doit pas enfler indéfiniment : au-delà de 500 entrées on
+     repart de zéro plutôt que de gérer une éviction fine. */
+  if (memoire.size > 500) memoire.clear();
+  memoire.set(cle, { val, exp: Date.now() + ttlSecondes * 1000 });
+}
+
 function bearer(request) {
   const h = request.headers.get('Authorization') || '';
   return h.startsWith('Bearer ') ? h.slice(7) : null;
@@ -91,7 +121,7 @@ async function botFetch(env, path) {
 
 /* Tous les rôles du serveur : {id -> name}, plus la liste ordonnée. */
 async function guildRoles(env) {
-  const cached = await env.MARLOWE.get('cache:roles', 'json');
+  const cached = memGet('roles');
   if (cached) return cached;
 
   const res = await botFetch(env, `/guilds/${env.DISCORD_GUILD_ID}/roles`);
@@ -108,7 +138,7 @@ async function guildRoles(env) {
     .map(r => ({ id: r.id, name: r.name }));
 
   const out = { list, byId: Object.fromEntries(list.map(r => [r.id, r.name])) };
-  await env.MARLOWE.put('cache:roles', JSON.stringify(out), { expirationTtl: 300 });
+  memSet('roles', out, 300);
   return out;
 }
 
@@ -121,14 +151,14 @@ async function guildRoles(env) {
 const MEMBER_TTL = 60;
 
 async function memberRoles(env, userId) {
-  const cacheKey = 'mcache:' + userId;
-  const cached = await env.MARLOWE.get(cacheKey, 'json');
+  const cacheKey = 'membre:' + userId;
+  const cached = memGet(cacheKey);
   if (cached) return cached.gone ? null : cached;
 
   const res = await botFetch(env, `/guilds/${env.DISCORD_GUILD_ID}/members/${userId}`);
 
   if (res.status === 404) {
-    await env.MARLOWE.put(cacheKey, JSON.stringify({ gone: true }), { expirationTtl: MEMBER_TTL });
+    memSet(cacheKey, { gone: true }, MEMBER_TTL);
     return null;
   }
   if (!res.ok) throw new Error('member ' + res.status);
@@ -140,7 +170,7 @@ async function memberRoles(env, userId) {
     nick: member.nick || null,
   };
 
-  await env.MARLOWE.put(cacheKey, JSON.stringify(out), { expirationTtl: MEMBER_TTL });
+  memSet(cacheKey, out, MEMBER_TTL);
   return out;
 }
 
@@ -148,10 +178,60 @@ async function memberRoles(env, userId) {
    Routes
    --------------------------------------------------------------------------- */
 
+/* L'état anti-CSRF de la connexion Discord
+   ---------------------------------------------------------------------------
+   Il servait à ça : on tirait un identifiant au hasard, on l'écrivait dans KV,
+   et on vérifiait au retour qu'il s'y trouvait. Correct, mais une écriture KV
+   à CHAQUE clic sur « se connecter » — et le quota gratuit est vite atteint.
+
+   Même garantie sans rien écrire : l'état porte sa propre preuve. C'est un
+   horodatage accompagné d'une signature HMAC calculée avec un secret que seul
+   le serveur connaît. Personne ne peut en fabriquer un, et il périme tout
+   seul au bout de dix minutes.
+
+   Différence assumée : un état signé reste valable jusqu'à sa péremption, là
+   où la version KV était à usage unique. Sur une fenêtre de dix minutes, pour
+   une redirection que l'attaquant ne peut de toute façon pas fabriquer, c'est
+   un échange raisonnable. */
+async function cleEtat(env) {
+  return crypto.subtle.importKey(
+    'raw', new TextEncoder().encode('etat:' + env.DISCORD_CLIENT_SECRET),
+    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+}
+
+function b64url(x) {
+  return b64(x).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function signerEtat(env) {
+  const corps = String(Date.now());
+  const sig = await crypto.subtle.sign('HMAC', await cleEtat(env), new TextEncoder().encode(corps));
+  return corps + '.' + b64url(sig);
+}
+
+async function verifierEtat(env, etat) {
+  const pt = String(etat || '').indexOf('.');
+  if (pt < 1) return false;
+  const corps = etat.slice(0, pt);
+  const donne = etat.slice(pt + 1);
+
+  const age = Date.now() - Number(corps);
+  if (!Number.isFinite(age) || age < -60000 || age > STATE_TTL * 1000) return false;
+
+  const sig = await crypto.subtle.sign('HMAC', await cleEtat(env), new TextEncoder().encode(corps));
+  const attendu = b64url(sig);
+
+  /* Comparaison à temps constant : une comparaison ordinaire s'arrête au
+     premier caractère qui diffère, et cette durée renseigne l'attaquant. */
+  if (attendu.length !== donne.length) return false;
+  let diff = 0;
+  for (let i = 0; i < attendu.length; i++) diff |= attendu.charCodeAt(i) ^ donne.charCodeAt(i);
+  return diff === 0;
+}
+
 /* GET /api/login → redirige vers Discord */
 async function handleLogin(request, env, url) {
-  const state = crypto.randomUUID();
-  await env.MARLOWE.put('state:' + state, '1', { expirationTtl: STATE_TTL });
+  const state = await signerEtat(env);
 
   const params = new URLSearchParams({
     client_id: env.DISCORD_CLIENT_ID,
@@ -173,11 +253,9 @@ async function handleCallback(request, env, url) {
     return errorPage('Connexion incomplète', "Discord n'a pas renvoyé les informations attendues. Réessayez depuis le site.", env);
   }
 
-  const known = await env.MARLOWE.get('state:' + state);
-  if (!known) {
-    return errorPage('Lien expiré', "Cette demande de connexion a expiré ou a déjà été utilisée. Relancez la connexion depuis le site.", env);
+  if (!(await verifierEtat(env, state))) {
+    return errorPage('Lien expiré', "Cette demande de connexion a expiré. Relancez la connexion depuis le site.", env);
   }
-  await env.MARLOWE.delete('state:' + state);
 
   /* 1. le code contre un token */
   const tokenRes = await fetch(`${DISCORD}/oauth2/token`, {
@@ -447,7 +525,8 @@ async function handleJournal(request, env) {
    Qui d'autre est en train de travailler sur le panel. Chaque navigateur
    signale sa présence toutes les 45 secondes ; une entrée non renouvelée
    disparaît d'elle-même au bout de 100 secondes. */
-const PRESENCE_TTL = 100;
+const PRESENCE_TTL     = 720;   // 12 min : au-delà, le membre disparaît du listing
+const PRESENCE_REAFFIRME = 300; // on ne réécrit la fiche qu'une fois toutes les 5 min
 
 async function handlePresence(request, env) {
   const s = await currentSession(request, env);
@@ -456,10 +535,22 @@ async function handlePresence(request, env) {
   if (request.method === 'POST') {
     let page = '';
     try { page = String((await request.json()).page || '').slice(0, 40); } catch (e) {}
-    await env.MARLOWE.put('pres:' + s.user.id, JSON.stringify({
-      id: s.user.id, name: s.user.name, avatar: s.user.avatar,
-      page, at: Date.now(),
-    }), { expirationTtl: PRESENCE_TTL });
+
+    /* Le battement arrive toutes les deux minutes, mais on n'écrit pas à
+       chaque fois : une écriture KV est une ressource comptée, une lecture
+       ne l'est presque pas. On ne réécrit que si la personne a changé de page
+       ou si sa fiche approche de la péremption. Une personne qui reste sur le
+       tableau de bord toute la journée coûte donc 288 écritures, pas 1 920. */
+    const cle = 'pres:' + s.user.id;
+    const avant = await env.MARLOWE.get(cle, 'json');
+    const vieille = !avant || (Date.now() - (avant.at || 0)) > PRESENCE_REAFFIRME * 1000;
+
+    if (vieille || avant.page !== page || avant.name !== s.user.name) {
+      await env.MARLOWE.put(cle, JSON.stringify({
+        id: s.user.id, name: s.user.name, avatar: s.user.avatar,
+        page, at: Date.now(),
+      }), { expirationTtl: PRESENCE_TTL });
+    }
   }
 
   const list = await env.MARLOWE.list({ prefix: 'pres:' });
@@ -645,7 +736,12 @@ async function handleDiscord(request, env) {
     return json(env, { error: 'trop_vite',
       detail: 'Patientez une trentaine de secondes entre deux demandes.' }, 429);
   }
-  await env.MARLOWE.put(cle, '1', { expirationTtl: Math.ceil(RETRAIT_MIN_MS / 1000) });
+  /* Le garde-fou est un confort, pas une sécurité : s'il ne peut pas
+     s'inscrire, la demande part quand même. Mieux vaut un doublon possible
+     qu'un retrait bloqué. */
+  try {
+    await env.MARLOWE.put(cle, '1', { expirationTtl: Math.ceil(RETRAIT_MIN_MS / 1000) });
+  } catch (e) { /* sans effet */ }
 
   const role = (env.DISCORD_RUNNER_ROLE || '').trim();
   const mention = role ? `<@&${role}> ` : '';
@@ -1039,7 +1135,18 @@ export default {
         default:                 return json(env, { error: 'not_found' }, 404);
       }
     } catch (e) {
-      return json(env, { error: 'server_error', detail: String(e.message || e) }, 500);
+      const msg = String((e && e.message) || e);
+
+      /* Le plan gratuit compte 1 000 écritures KV par jour, remises à zéro à
+         minuit UTC. Quand le compte est épuisé, chaque écriture lève une
+         erreur peu parlante — autant la traduire. */
+      if (/KV (PUT|DELETE)|limit|429|quota/i.test(msg)) {
+        return json(env, { error: 'quota_kv', detail:
+          "Le quota d'écritures de la base (1 000 par jour sur le plan gratuit) est atteint. "
+          + "Il se remet à zéro à minuit UTC (2 h du matin en France). "
+          + "Message technique : " + msg }, 503);
+      }
+      return json(env, { error: 'server_error', detail: msg }, 500);
     }
   },
 };

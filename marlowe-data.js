@@ -279,9 +279,15 @@ window.MarloweData = (function () {
       });
   }
 
+  /* Chaque enregistrement coûte trois écritures dans la base (les données,
+     leur numéro de révision, le journal), et le plan gratuit en compte 1 000
+     par jour. Une seconde et demie d'attente regroupe une rafale d'actions —
+     remplir un formulaire, cocher plusieurs cases — en un seul envoi, sans
+     que personne ne s'en aperçoive : l'indicateur en bas à droite montre
+     l'état réel. */
   function schedule() {
     clearTimeout(timer);
-    timer = setTimeout(flush, 400);
+    timer = setTimeout(flush, 1500);
   }
 
   /* ------------------------------------------------------------------------
