@@ -23,7 +23,7 @@ OWNER_IDS = "826526979204841482,186397473374208000"
 
 # Salon Discord des runners : identifiant du rôle à mentionner.
 # L'adresse du webhook, elle, est un SECRET : voir README.
-DISCORD_RUNNER_ROLE = "1541579306134933505"
+DISCORD_RUNNER_ROLE = "1112654936749125632"
 
 # ---------------------------------------------------------------------------
 # Stockage principal : D1 (base SQLite).
