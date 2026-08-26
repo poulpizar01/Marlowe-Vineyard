@@ -4799,6 +4799,15 @@
       const data = await res.json().catch(() => ({}));
       if (res.ok) { toast('Demande envoyée sur Discord.'); return; }
 
+      if (res.status === 503 && data.error === 'webhook_invalide') {
+        alert("Le salon Discord est relié, mais l'adresse enregistrée n'en est pas une.\n\n"
+            + "Depuis le dossier backend :\n\n"
+            + "    npx wrangler secret put DISCORD_WEBHOOK\n\n"
+            + "Au prompt, RIEN ne s'affiche pendant que vous collez : c'est normal, "
+            + "la saisie est masquée. Collez une fois, puis Entrée.\n\n"
+            + "La demande reste visible dans le fil ci-dessous.");
+        return;
+      }
       if (res.status === 503) {
         alert("Le salon Discord n'est pas encore relié.\n\n"
             + "Le patron doit créer un webhook dans le salon des runners "

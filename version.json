@@ -1,4 +1,4 @@
 {
-  "v": "1.11.1",
-  "note": "le diagnostic Discord repete le message exact du serveur en derniere ligne ; le Worker valide l'adresse du webhook au lieu de planter dessus."
+  "v": "1.11.2",
+  "note": "les messages du relais distinguent secret absent et secret au contenu invalide."
 }
