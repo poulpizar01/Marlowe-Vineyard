@@ -4120,6 +4120,13 @@
         </div>
       </div>
 
+      <div class="mv-vit-sec">
+        <h4>Liaison Discord</h4>
+        <p class="mv-hint" style="margin:0 0 12px;">Vérifie que le bouton « Demander un retrait » du Com Runner
+          arrive bien dans le salon. Envoie un message de test et dit précisément ce qui coince, le cas échéant.</p>
+        <button class="btn" id="mvTestDiscord">Tester le lien Discord</button>
+      </div>
+
       <div class="btn-row" style="margin-top:6px;align-items:center;">
         <button class="btn primary" id="mvRegSave">Enregistrer les règles</button>
         <span class="mv-saved" id="mvRegSaved">Enregistré ✓</span>
@@ -5008,6 +5015,97 @@
     }
   });
 
+
+  /* --- Diagnostic du lien Discord ------------------------------------------
+     Quand un envoi échoue, le navigateur ne dit presque rien : « Failed to
+     fetch » couvre aussi bien un blocage CORS qu'une extension, une coupure
+     réseau ou un nom de domaine filtré. Ce bouton refait l'appel étape par
+     étape et rapporte ce qui se passe RÉELLEMENT, au lieu de laisser deviner. */
+  async function testerDiscord() {
+    const cfg = cfgAuth();
+    const tok = jeton();
+    const L = [];
+    const dire = (t, v) => L.push(`${t.padEnd(26, '.')} ${v}`);
+
+    dire('Adresse du panel', location.origin || 'fichier local');
+    dire('Adresse attendue', SITE_ATTENDU);
+    dire('Concordance', location.origin === SITE_ATTENDU ? 'oui' : 'NON — le navigateur bloquera tout');
+    dire('Mode', cfg.MODE || '—');
+    dire('Adresse du serveur', cfg.API_BASE || '—');
+    dire('Jeton de session', tok ? 'présent' : 'ABSENT — reconnectez-vous');
+
+    /* 1. le serveur répond-il tout court ? */
+    try {
+      const r = await fetch(cfg.API_BASE + '/api/vitrine', { cache: 'no-store' });
+      dire('Serveur joignable', `oui (${r.status})`);
+    } catch (e) {
+      dire('Serveur joignable', `NON — ${e.message}`);
+      dire('', '');
+      dire('Conclusion', "le serveur n'est pas atteignable du tout.");
+      dire('', "Une extension de navigateur (bloqueur de pubs, filtre DNS)");
+      dire('', "bloque souvent les adresses en .workers.dev. Réessayez en");
+      dire('', "navigation privée, extensions désactivées.");
+      alert(L.join('\n'));
+      return;
+    }
+
+    /* 2. la session est-elle valable ? */
+    try {
+      const r = await fetch(cfg.API_BASE + '/api/me', { headers: { 'Authorization': 'Bearer ' + tok } });
+      dire('Session valable', r.ok ? 'oui' : `NON (${r.status}) — reconnectez-vous`);
+    } catch (e) {
+      dire('Session valable', `échec — ${e.message}`);
+    }
+
+    /* 3. l'envoi lui-même, avec un message de test */
+    try {
+      const r = await fetch(cfg.API_BASE + '/api/discord', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tok },
+        body: JSON.stringify({ produit: 'Test de liaison', quantite: 1, heure: '00:00' }),
+      });
+      const d = await r.json().catch(() => ({}));
+      dire('Envoi Discord', `${r.status} ${d.error || (d.ok ? 'envoyé' : '')}`);
+      if (d.detail) dire('Détail', d.detail);
+
+      if (r.ok) {
+        dire('', '');
+        dire('Conclusion', 'tout fonctionne — un message de test est parti');
+        dire('', 'dans le salon des runners.');
+      } else if (r.status === 503) {
+        dire('', '');
+        dire('Conclusion', "le webhook n'est pas enregistré côté serveur.");
+        dire('', 'Depuis le dossier backend :');
+        dire('', 'npx wrangler secret put DISCORD_WEBHOOK');
+      } else if (r.status === 429) {
+        dire('', '');
+        dire('Conclusion', 'trop de demandes coup sur coup. Attendez 30 s.');
+      } else if (r.status === 401) {
+        dire('', '');
+        dire('Conclusion', 'session expirée — déconnectez-vous et reconnectez-vous.');
+      } else if (r.status === 502) {
+        dire('', '');
+        dire('Conclusion', "Discord a refusé le message : le webhook a sans doute");
+        dire('', 'été supprimé. Recréez-le et réenregistrez le secret.');
+      }
+    } catch (e) {
+      dire('Envoi Discord', `bloqué — ${e.message}`);
+      dire('', '');
+      dire('Conclusion', "l'appel n'est jamais parti alors que le serveur");
+      dire('', "répond par ailleurs. C'est le contrôle d'origine (CORS) :");
+      dire('', "vérifiez que SITE_URL dans wrangler.toml vaut bien");
+      dire('', SITE_ATTENDU + '/Marlowe-Vineyard');
+      dire('', "puis relancez npx wrangler deploy.");
+    }
+
+    alert(L.join('\n'));
+    console.log('[Marlowe] diagnostic Discord\n' + L.join('\n'));
+  }
+
+  document.addEventListener('click', e => {
+    if (e.target.closest('#mvTestDiscord')) testerDiscord();
+  });
+
   window.MarloweActions = {
     recomputeRecruiters, refreshEffectifCount, reprintInvoice,
     refreshWeekDays, refreshWeekHeaders, renderEligibilite, closeWeek, undoClose,
@@ -5018,7 +5116,7 @@
     renderQuotas3, renderJournal, appliquerLectureSeule, remplirVides, repartirDeZero,
     renderVitrine, renderCatalogues, appliquerAccesService, renderAvertissements, compteAvertissements,
     openInvoiceDoc, renderRegles, renderMagasin, renderCommandes, renderStock, renderMagRecap,
-    renderComRunner, renderQuotaService, renderPrimeRecrutement,
+    renderComRunner, testerDiscord, renderQuotaService, renderPrimeRecrutement,
     totalPrimeRecrutement,
   };
 
