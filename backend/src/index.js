@@ -830,6 +830,19 @@ async function handleDiscord(request, env) {
       detail: "Le salon Discord n'est pas encore relié. Le patron doit créer un webhook et l'enregistrer." }, 503);
   }
 
+  /* Le secret existe, mais rien ne garantit que c'en soit une adresse valable :
+     une commande mal tapée y met vite autre chose. Sans ce contrôle, fetch()
+     lèverait une exception et l'erreur remonterait en « le serveur a planté »,
+     ce qui n'aide personne. Autant nommer le vrai problème. */
+  const cible = String(env.DISCORD_WEBHOOK).trim();
+  if (!/^https:\/\/(discord\.com|discordapp\.com)\/api\/webhooks\/\d+\/[\w-]+$/.test(cible)) {
+    return json(env, { error: 'webhook_invalide', detail:
+      "Le secret DISCORD_WEBHOOK ne contient pas une adresse de webhook Discord valable. "
+      + "Elle doit ressembler à https://discord.com/api/webhooks/<nombres>/<jeton>. "
+      + "Depuis le dossier backend : npx wrangler secret put DISCORD_WEBHOOK, "
+      + "puis collez l'adresse au prompt (sans guillemets, sans espace)." }, 503);
+  }
+
   const texte = (x, n) => String(x == null ? '' : x).slice(0, n).replace(/[`@]/g, '');
   const produit = texte(body.produit, 120);
   const quantite = Math.max(1, Math.min(99999, Math.round(Number(body.quantite) || 0)));
@@ -859,7 +872,7 @@ async function handleDiscord(request, env) {
     + `> Quantité : **${quantite}**\n`
     + `> Départ souhaité : **${heure}**`;
 
-  const res = await fetch(env.DISCORD_WEBHOOK, {
+  const res = await fetch(cible, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
