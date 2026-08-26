@@ -4717,6 +4717,42 @@
      Le nom n'est pas demandé : il vient de la session Discord. Le serveur
      recompose le message à partir de cette même identité, donc personne ne
      peut demander un retrait au nom d'un autre. */
+  /* --- L'envoi vers le salon des runners ------------------------------------
+     Deux voies, essayées dans cet ordre :
+
+     1. la voie normale — jeton dans l'en-tête Authorization. Un en-tête
+        personnalisé oblige le navigateur à envoyer d'abord une requête
+        préparatoire (OPTIONS). C'est la forme propre, et c'est aussi celle
+        qu'un bloqueur de publicité, un antivirus ou un réseau d'entreprise
+        peut avaler sans le moindre message d'erreur exploitable.
+
+     2. la voie de repli — requête « simple » au sens du navigateur : aucun
+        en-tête personnalisé, donc aucune requête préparatoire, donc rien à
+        bloquer. Le jeton voyage dans le corps, vers le même serveur, en
+        HTTPS : la confidentialité est identique.
+
+     L'adresse s'appelle /api/relais et non /api/discord : les listes de
+     filtrage coupent volontiers toute adresse contenant « discord ». */
+  const RELAIS = '/api/relais';
+
+  async function postRelais(cfg, tok, charge) {
+    try {
+      const r = await fetch(cfg.API_BASE + RELAIS, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tok },
+        body: JSON.stringify(charge),
+      });
+      return { res: r, voie: 'normale' };
+    } catch (e) {
+      const r = await fetch(cfg.API_BASE + RELAIS, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+        body: JSON.stringify(Object.assign({}, charge, { token: tok })),
+      });
+      return { res: r, voie: 'repli' };
+    }
+  }
+
   async function demanderRetrait() {
     const cfg = (window.MarloweAuth && window.MarloweAuth.CONFIG) || {};
     let tok = null;
@@ -4756,11 +4792,7 @@
     }
 
     try {
-      const res = await fetch(cfg.API_BASE + '/api/discord', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tok },
-        body: JSON.stringify({ produit, quantite, heure: r.heure }),
-      });
+      const { res } = await postRelais(cfg, tok, { produit, quantite, heure: r.heure });
       const data = await res.json().catch(() => ({}));
       if (res.ok) { toast('Demande envoyée sur Discord.'); return; }
 
@@ -4793,7 +4825,14 @@
             + "(poussez vos fichiers sur GitHub), pas depuis le fichier ouvert sur votre ordinateur.");
         return;
       }
-      toast("Serveur injoignable — la demande reste dans le fil.");
+      /* Les deux voies ont échoué depuis la bonne adresse : ce n'est plus une
+         question d'origine, c'est que quelque chose entre le navigateur et
+         Cloudflare coupe l'appel. Le bouton de diagnostic le nomme. */
+      alert("La demande est inscrite dans le fil, mais elle n'a pas pu partir sur Discord.\n\n"
+          + "L'appel n'est même pas sorti du navigateur — ni par la voie normale, ni par la voie de repli.\n"
+          + "C'est presque toujours une extension (bloqueur de publicité, antivirus, filtre DNS) ou le\n"
+          + "réseau qui coupe les adresses en .workers.dev.\n\n"
+          + "Paramètres ▸ Règles du domaine ▸ « Tester le lien Discord » donne le détail.");
     }
   }
 
@@ -5049,53 +5088,104 @@
       return;
     }
 
-    /* 2. la session est-elle valable ? */
+    /* 2. la requête préparatoire passe-t-elle ?
+       /api/me porte un en-tête Authorization : le navigateur envoie donc
+       d'abord un OPTIONS. Si CETTE étape passe, le contrôle d'origine est
+       correctement réglé — et un échec plus loin ne peut plus être du CORS.
+       C'est la mesure qui départage les deux causes. */
+    let prepOk = false;
     try {
       const r = await fetch(cfg.API_BASE + '/api/me', { headers: { 'Authorization': 'Bearer ' + tok } });
+      prepOk = true;
+      dire('Requête préparatoire', 'passe');
       dire('Session valable', r.ok ? 'oui' : `NON (${r.status}) — reconnectez-vous`);
     } catch (e) {
-      dire('Session valable', `échec — ${e.message}`);
+      dire('Requête préparatoire', `BLOQUÉE — ${e.message}`);
+      dire('Session valable', 'non vérifiable');
     }
 
-    /* 3. l'envoi lui-même, avec un message de test */
+    /* 3. l'envoi lui-même. On essaie les deux voies séparément pour savoir
+       laquelle marche, au lieu de conclure au hasard. */
+    let r = null, voie = null, erreurNormale = null, erreurRepli = null;
+    const charge = { produit: 'Test de liaison', quantite: 1, heure: '00:00' };
+
     try {
-      const r = await fetch(cfg.API_BASE + '/api/discord', {
+      r = await fetch(cfg.API_BASE + RELAIS, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tok },
-        body: JSON.stringify({ produit: 'Test de liaison', quantite: 1, heure: '00:00' }),
+        body: JSON.stringify(charge),
       });
+      voie = 'normale';
+    } catch (e) { erreurNormale = e.message; }
+
+    if (!r) {
+      try {
+        r = await fetch(cfg.API_BASE + RELAIS, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+          body: JSON.stringify(Object.assign({}, charge, { token: tok })),
+        });
+        voie = 'repli';
+      } catch (e) { erreurRepli = e.message; }
+    }
+
+    dire('Voie normale', erreurNormale ? `bloquée — ${erreurNormale}` : 'passe');
+    if (erreurNormale) dire('Voie de repli', erreurRepli ? `bloquée — ${erreurRepli}` : 'passe');
+
+    if (!r) {
+      /* Rien ne sort, alors que /api/vitrine répond. Une requête simple ne
+         peut pas être refusée par le contrôle d'origine — le navigateur
+         l'envoie et lit seulement la réponse. Donc ce n'est pas du CORS. */
+      dire('', '');
+      dire('Conclusion', "aucune des deux voies ne sort du navigateur, alors");
+      dire('', "que le serveur répond par ailleurs. Ce n'est pas un problème");
+      dire('', "de réglage : c'est une extension (bloqueur de publicité,");
+      dire('', "antivirus, filtre DNS) ou le réseau qui coupe l'adresse.");
+      if (prepOk) {
+        dire('', "");
+        dire('', "(le contrôle d'origine est hors de cause : /api/me est passé,");
+        dire('', " et il utilise exactement le même mécanisme.)");
+      }
+      dire('', "");
+      dire('À faire', "rouvrez le panel en navigation privée, extensions");
+      dire('', "désactivées, et refaites ce test. Si ça passe, c'est une");
+      dire('', "extension : ajoutez marlowe-api.marlowe-vineyard.workers.dev");
+      dire('', "à ses exceptions.");
+    } else {
       const d = await r.json().catch(() => ({}));
-      dire('Envoi Discord', `${r.status} ${d.error || (d.ok ? 'envoyé' : '')}`);
+      dire('Envoi Discord', `${r.status} ${d.error || (d.ok ? 'envoyé' : '')} (voie ${voie})`);
       if (d.detail) dire('Détail', d.detail);
 
       if (r.ok) {
         dire('', '');
         dire('Conclusion', 'tout fonctionne — un message de test est parti');
         dire('', 'dans le salon des runners.');
+        if (voie === 'repli') {
+          dire('', "La voie normale est bloquée mais le repli prend le relais");
+          dire('', "automatiquement : rien à faire, les demandes partiront.");
+        }
       } else if (r.status === 503) {
         dire('', '');
         dire('Conclusion', "le webhook n'est pas enregistré côté serveur.");
-        dire('', 'Depuis le dossier backend :');
-        dire('', 'npx wrangler secret put DISCORD_WEBHOOK');
+        dire('', 'Dans un terminal, depuis le dossier backend :');
+        dire('', '    cd backend');
+        dire('', '    npx wrangler secret put DISCORD_WEBHOOK');
+        dire('', "puis collez l'adresse du webhook au prompt caché.");
       } else if (r.status === 429) {
         dire('', '');
         dire('Conclusion', 'trop de demandes coup sur coup. Attendez 30 s.');
       } else if (r.status === 401) {
         dire('', '');
         dire('Conclusion', 'session expirée — déconnectez-vous et reconnectez-vous.');
+      } else if (r.status === 404) {
+        dire('', '');
+        dire('Conclusion', "le serveur ne connaît pas encore /api/relais.");
+        dire('', 'Depuis le dossier backend : npx wrangler deploy');
       } else if (r.status === 502) {
         dire('', '');
         dire('Conclusion', "Discord a refusé le message : le webhook a sans doute");
         dire('', 'été supprimé. Recréez-le et réenregistrez le secret.');
       }
-    } catch (e) {
-      dire('Envoi Discord', `bloqué — ${e.message}`);
-      dire('', '');
-      dire('Conclusion', "l'appel n'est jamais parti alors que le serveur");
-      dire('', "répond par ailleurs. C'est le contrôle d'origine (CORS) :");
-      dire('', "vérifiez que SITE_URL dans wrangler.toml vaut bien");
-      dire('', SITE_ATTENDU + '/Marlowe-Vineyard');
-      dire('', "puis relancez npx wrangler deploy.");
     }
 
     alert(L.join('\n'));

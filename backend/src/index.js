@@ -239,8 +239,15 @@ async function handleCallback(request, env, url) {
 }
 
 /* Lit la session depuis le header Authorization, rôles rafraîchis à chaque appel */
-async function currentSession(request, env) {
-  const sid = bearer(request);
+/* Le jeton arrive normalement dans l'en-tête Authorization. Certaines routes
+   acceptent en plus de le recevoir dans le corps de la requête : un en-tête
+   personnalisé oblige le navigateur à envoyer une requête préparatoire
+   (OPTIONS) avant la vraie, et cette requête-là se fait parfois avaler
+   silencieusement par une extension ou un réseau filtré. Sans en-tête
+   personnalisé, il n'y a pas de requête préparatoire — et donc rien à bloquer.
+   Le jeton reste au même endroit, vers le même serveur, en HTTPS. */
+async function currentSession(request, env, jetonExplicite) {
+  const sid = bearer(request) || jetonExplicite || null;
   if (!sid) return null;
 
   const stored = await env.MARLOWE.get('sess:' + sid, 'json');
@@ -610,17 +617,20 @@ const RETRAIT_MIN_MS = 30 * 1000;   // un envoi toutes les 30 s par personne
 async function handleDiscord(request, env) {
   if (request.method !== 'POST') return json(env, { error: 'method' }, 405);
 
-  const s = await currentSession(request, env);
+  /* Le corps est lu AVANT la session : il peut porter le jeton quand l'appel
+     arrive par la voie de repli (sans en-tête Authorization). */
+  let body;
+  try { body = await request.json(); }
+  catch (e) { return json(env, { error: 'bad_json' }, 400); }
+  if (!body || typeof body !== 'object') return json(env, { error: 'bad_json' }, 400);
+
+  const s = await currentSession(request, env, typeof body.token === 'string' ? body.token : null);
   if (!s) return json(env, { error: 'unauthorized' }, 401);
 
   if (!env.DISCORD_WEBHOOK) {
     return json(env, { error: 'webhook_absent',
       detail: "Le salon Discord n'est pas encore relié. Le patron doit créer un webhook et l'enregistrer." }, 503);
   }
-
-  let body;
-  try { body = await request.json(); }
-  catch (e) { return json(env, { error: 'bad_json' }, 400); }
 
   const texte = (x, n) => String(x == null ? '' : x).slice(0, n).replace(/[`@]/g, '');
   const produit = texte(body.produit, 120);
@@ -1014,6 +1024,11 @@ export default {
         case '/api/orga':        return handleOrga(request, env);
         case '/api/vitrine':     return handleVitrine(request, env);
         case '/api/upload':      return handleUpload(request, env);
+        /* Deux noms pour la même route. Les bloqueurs de publicité et les
+           filtres d'entreprise coupent volontiers tout ce qui contient le mot
+           « discord » dans une adresse ; /api/relais passe partout. L'ancien
+           nom reste en place pour ne rien casser. */
+        case '/api/relais':       return handleDiscord(request, env);
         case '/api/discord':      return handleDiscord(request, env);
         case '/api/invites':      return handleInvites(request, env);
         case '/api/invite-login': return handleInviteLogin(request, env);

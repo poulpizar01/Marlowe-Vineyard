@@ -1,4 +1,4 @@
 {
-  "v": "1.9.2",
-  "note": "bouton de diagnostic de la liaison Discord dans Parametres"
+  "v": "1.9.3",
+  "note": "relais Discord : route neutre /api/relais + voie de repli sans requete preparatoire, diagnostic qui distingue CORS et blocage par extension"
 }
