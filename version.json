@@ -1,4 +1,4 @@
 {
-  "v": "1.22.0",
-  "note": "Ma semaine reparee et reservee a soi (selecteur patron uniquement) ; remise a zero des heures de service ; reponses repliables dans le Com Runner ; magasin limite aux postes de vente avec vue personnelle par employe."
+  "v": "1.23.0",
+  "note": "com runner : la suppression est verrouillee sur l'identifiant Discord de l'auteur, et reverifiee au clic ; prise de service ouverte a la vente, au commerce, au magasin, aux RH et a la direction."
 }

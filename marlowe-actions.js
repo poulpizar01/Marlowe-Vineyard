@@ -4933,15 +4933,26 @@
   window.renderMaSemaine = renderMaSemaine;
 
 /* ==========================================================================
-   PRISE DE SERVICE — réservée aux postes de vente
+   PRISE DE SERVICE — réservée aux postes qui pointent
    --------------------------------------------------------------------------
-   Un saisonnier ne pointe pas : sa semaine se mesure en bouteilles, pas en
-   heures. Le pointage ne concerne que la boutique et le commerce.
+   Un saisonnier, un ouvrier viticole, un chef de culture ne pointent pas : leur
+   semaine se mesure en bouteilles, pas en heures — c'est le quota qui les juge.
+   Le pointage concerne la vente, le commerce, le magasin, les RH et la
+   direction, dont le travail ne se compte pas en production.
    ========================================================================== */
 
   const POSTES_SERVICE = [
-    'Vendeur', 'Vendeuse', 'Assistant(e) magasin', 'Assistant magasin',
-    'Assistante magasin', 'Resp. Magasin', 'Responsable Magasin', 'Commercial',
+    /* vente */
+    'Vendeur', 'Vendeuse',
+    /* commerce */
+    'Commercial', 'Resp. Commercial', 'Responsable Commercial',
+    /* magasin */
+    'Assistant(e) magasin', 'Assistant magasin', 'Assistante magasin',
+    'Resp. Magasin', 'Responsable Magasin',
+    /* ressources humaines */
+    'RH', 'DRH', 'Resp. RH', 'Responsable RH',
+    /* la direction pointe aussi — et le patron passe de toute façon */
+    'Responsable Général', 'Resp. Général', 'Patron', 'Co-Patron',
   ];
 
   /* Comparaison indulgente : « Resp. Magasin », « resp magasin » et
@@ -6842,11 +6853,33 @@
   const crInitiales = nom => String(nom || '?').split(/\s+/).filter(Boolean)
     .map(w => w[0]).join('').slice(0, 2).toUpperCase();
 
+  /* Qui peut retirer un message ou une réponse : son auteur, et le patron.
+     Personne d'autre.
+
+     La comparaison portait sur le pseudo affiché — deux personnes au même
+     pseudo se seraient effacées mutuellement. L'identifiant Discord est
+     désormais enregistré à la publication et fait foi ; le nom ne sert plus
+     que de repli pour les messages écrits avant ce changement.
+
+     À noter : c'est une règle d'interface. Le fil est enregistré d'un bloc,
+     et le serveur ne sait pas distinguer un message d'un autre à l'intérieur —
+     il vérifie seulement que la personne a le droit d'écrire dans le panel.
+     La règle protège donc des maladresses, pas d'un acharné qui passerait par
+     la console. Pour aller plus loin il faudrait une route par message côté
+     serveur ; dis-le-moi si tu veux que je la fasse. */
+  function crPeutSupprimer(entree) {
+    const s = window.MarloweSession;
+    if (!s) return true;                       /* hors connexion : rien n'est bridé */
+    if (s.isPatron || s.isOwner) return true;
+    if (entree && entree.par) return String(entree.par) === String(s.id);
+    return !!(entree && entree.auteur === moiSession());
+  }
+
   function crReponses(m) {
     return Array.isArray(m.rep) ? m.rep : [];
   }
 
-  function crRepHtml(m, moi, patron) {
+  function crRepHtml(m, moi) {
     const reps = crReponses(m);
     const ouvert = crOuverts.has(m.id);
     const compose = crRepondreA === m.id;
@@ -6869,7 +6902,7 @@
             <div class="cr-rep-tete">
               <span class="cr-nom">${esc(r.auteur)}</span>
               <span class="cr-quand">${esc(r.quand)}</span>
-              ${(r.auteur === moi || patron)
+              ${crPeutSupprimer(r)
                 ? `<button class="icon-btn danger cr-x" data-cr-repdel="${esc(m.id)}|${esc(r.id)}"
                      title="Retirer cette réponse">×</button>` : ''}
             </div>
@@ -6900,7 +6933,6 @@
     }
 
     const moi = moiSession();
-    const patron = !!(window.MarloweSession && window.MarloweSession.isPatron);
 
     fil.innerHTML = `<div class="panel"><div class="cr-fil">${comRunner.map(m => `
       <div class="cr-msg${m.type === 'retrait' ? ' cr-retrait' : ''}${m.auteur === moi ? ' cr-moi' : ''}">
@@ -6908,11 +6940,11 @@
           <span class="cr-av">${esc(crInitiales(m.auteur))}</span>
           <span class="cr-nom">${esc(m.auteur)}</span>
           <span class="cr-quand">${esc(m.quand)}</span>
-          ${(m.auteur === moi || patron)
+          ${crPeutSupprimer(m)
             ? `<button class="icon-btn danger cr-x" data-cr-del="${esc(m.id)}" title="Retirer">×</button>` : ''}
         </div>
         <div class="cr-texte">${esc(m.texte).replace(/\n/g, '<br>')}</div>
-        ${crRepHtml(m, moi, patron)}
+        ${crRepHtml(m, moi)}
       </div>`).join('')}</div></div>`;
 
     /* Le champ vient d'être recréé : on lui rend le curseur et le brouillon. */
@@ -6932,7 +6964,8 @@
     if (!Array.isArray(m.rep)) m.rep = [];
     m.rep.push({
       id: 'R' + Date.now().toString(36),
-      auteur: moiSession(), texte: texte.slice(0, 800),
+      auteur: moiSession(), par: (window.MarloweSession || {}).id || null,
+      texte: texte.slice(0, 800),
       quand: quandFR(new Date()),
     });
     /* Une réponse ne remonte pas le message en tête du fil : le fil est un
@@ -6953,7 +6986,8 @@
 
     comRunner.unshift({
       id: 'M' + Date.now().toString(36),
-      auteur: moiSession(), texte: texte.slice(0, 800),
+      auteur: moiSession(), par: (window.MarloweSession || {}).id || null,
+      texte: texte.slice(0, 800),
       quand: quandFR(new Date()), type: 'msg',
     });
     /* Le fil est plafonné : sans ça il grossirait indéfiniment et finirait
@@ -7032,7 +7066,7 @@
        injoignable, l'équipe voit la demande dans le panel. */
     comRunner.unshift({
       id: 'R' + Date.now().toString(36),
-      auteur: moiSession(),
+      auteur: moiSession(), par: (window.MarloweSession || {}).id || null,
       texte: `Demande de retrait — ${produit} ×${quantite}, départ vers ${r.heure}`,
       quand: quandFR(new Date()), type: 'retrait',
     });
@@ -7138,6 +7172,8 @@
       const m = comRunner.find(x => x.id === mid);
       if (m && Array.isArray(m.rep)) {
         const i = m.rep.findIndex(r => r.id === rid);
+        /* La règle est revérifiée ici : masquer le bouton ne suffit pas. */
+        if (i >= 0 && !crPeutSupprimer(m.rep[i])) { toast('Seul son auteur peut retirer cette réponse.'); return; }
         if (i >= 0) {
           m.rep.splice(i, 1);
           D().note('a retiré une réponse du Com Runner');
@@ -7150,6 +7186,7 @@
     const d = e.target.closest('[data-cr-del]');
     if (d) {
       const i = comRunner.findIndex(m => m.id === d.dataset.crDel);
+      if (i >= 0 && !crPeutSupprimer(comRunner[i])) { toast('Seul son auteur ou le patron peut retirer ce message.'); return; }
       if (i >= 0) { comRunner.splice(i, 1); D().note('a retiré un message du Com Runner'); D().save('comRunner'); }
     }
   });
