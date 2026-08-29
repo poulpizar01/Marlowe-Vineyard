@@ -1,4 +1,4 @@
 {
-  "v": "1.18.0",
-  "note": "l'effectif se deduit enfin du registre RH et de la tablette ; le collage de la tablette s'enregistre ; multiplicateur de prime du Chef de Culture corrige."
+  "v": "1.19.0",
+  "note": "multiplicateurs de prime x1 / x2 / x3 ; eligibilite calee sur la semaine cloturee (semaine -1) ; Top 5 classe sur l'avancement du quota ; tableau des primes de recrutement repliable."
 }

@@ -341,7 +341,9 @@
   .ov-top5-rank{width:22px;height:22px;border-radius:50%;background:rgba(201,169,97,.1);color:var(--or);font-family:'IBM Plex Mono';font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-right:10px;}
   .ov-top5-left{display:flex;align-items:center;}
   .ov-top5-name{color:var(--parchment);}
-  .ov-top5-val{font-family:'IBM Plex Mono';color:var(--or);}
+  .ov-top5-val{font-family:'IBM Plex Mono';color:var(--or);text-align:right;}
+  .ov-top5-sub{font-size:11px;color:var(--muted);font-family:'IBM Plex Mono';margin-top:2px;}
+  .ov-top5-name{display:block;}
 
   .grade-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;}
   @media(max-width:900px){.grade-grid{grid-template-columns:1fr;}}
@@ -627,7 +629,7 @@
       <p class="page-sub">Employés ayant atteint leur quota au dimanche 00h00 — aptes à recevoir leur récompense hebdomadaire.</p>
 
       <div class="metric-grid-3">
-        <div class="metric-card"><div class="metric-label">Éligibles cette semaine</div><div class="metric-value" id="el-count">0</div><div class="metric-sub">quota validé</div></div>
+        <div class="metric-card"><div class="metric-label">Éligibles · semaine clôturée</div><div class="metric-value" id="el-count">0</div><div class="metric-sub">quota validé sur la semaine précédente</div></div>
         <div class="metric-card"><div class="metric-label">Récompenses distribuées</div><div class="metric-value" id="el-distrib">0</div><div class="metric-sub">sur le total éligible</div></div>
         <div class="metric-card"><div class="metric-label">En attente</div><div class="metric-value" id="el-pending">0</div><div class="metric-sub">à traiter avant lundi</div></div>
       </div>
@@ -1095,14 +1097,14 @@
         </table>
       </div>
       <div class="ov-card">
-        <h3 class="ov-card-title">Top 5 de la semaine</h3>
+        <h3 class="ov-card-title">Top 5 des quotas</h3>
         <div id="ov-top5"></div>
       </div>
     </div>
 
     <div class="ov-card" style="margin-top:20px;">
       <h3 class="ov-card-title">Semaines précédentes</h3>
-      <p class="ov-empty">Aucune semaine clôturée pour l'instant. L'historique se construira à partir de la première clôture du lundi.</p>
+      <p class="ov-empty" id="ov-hist-empty">Aucune semaine clôturée pour l'instant. L'historique se construira à partir de la première clôture du lundi.</p>
     </div>
   </div>
 
@@ -1805,12 +1807,45 @@ function populateOverview(){
       <td class="num">${v.prod.toLocaleString('fr-FR')}</td>
     </tr>`).join('');
 
-  const top5 = [...dash].filter(e => e.ventes > 0).sort((a, b) => b.ventes - a.ventes).slice(0, 5);
+  /* Classement sur l'avancement du quota, et non sur la production brute :
+     un saisonnier à 3 200 barils sur 3 000 a mieux fait qu'un chef de culture
+     à 4 000 sur 8 000. Les quotas viennent des fiches d'effectif ; si aucune
+     n'est encore remplie, on retombe sur le barème par grade — baseQuota est
+     déclaré plus bas dans le fichier, d'où la copie locale. */
+  const QUOTA_DEFAUT = {'Saisonnier':3000, 'Ouvrier Viticole':5000, 'Chef de Culture':8000, 'Chef de culture':8000};
+  const canonGrade = g => (g === 'Chef de culture' ? 'Chef de Culture' : g);
+
+  let baseTop = effectifData
+    .filter(e => e.active !== false)
+    .map(e => ({
+      name: e.name,
+      grade: canonGrade(e.grade),
+      barils: Number(e.barils) || 0,
+      quota: Number(e.quota) || QUOTA_DEFAUT[e.grade] || 0,
+    }));
+
+  if (!baseTop.some(e => e.quota > 0)) {
+    baseTop = dash.map(e => ({
+      name: e.name,
+      grade: canonGrade(e.rank),
+      barils: Math.round((e.runs || 0) / 5),
+      quota: QUOTA_DEFAUT[e.rank] || 0,
+    }));
+  }
+
+  const top5 = baseTop
+    .filter(e => e.quota > 0 && e.barils > 0)
+    .map(e => Object.assign({ pct: e.barils / e.quota * 100 }, e))
+    .sort((a, b) => b.pct - a.pct || b.barils - a.barils)
+    .slice(0, 5);
+
   document.getElementById('ov-top5').innerHTML = top5.length ? top5.map((e, i) => `
     <div class="ov-top5-row">
-      <div class="ov-top5-left"><span class="ov-top5-rank">${i + 1}</span><span class="ov-top5-name">${e.name}</span></div>
-      <span class="ov-top5-val">${e.ventes.toLocaleString('fr-FR')}</span>
-    </div>`).join('') : `<p class="ov-empty">Aucune production saisie cette semaine.</p>`;
+      <div class="ov-top5-left"><span class="ov-top5-rank">${i + 1}</span>
+        <span><span class="ov-top5-name">${e.name}</span>
+          <span class="ov-top5-sub">${e.barils.toLocaleString('fr-FR')} / ${e.quota.toLocaleString('fr-FR')} barils</span></span></div>
+      <span class="ov-top5-val">${Math.round(e.pct)} %</span>
+    </div>`).join('') : `<p class="ov-empty">Aucun quota renseigné : collez la tablette dans Tableau de bord, puis synchronisez l'effectif.</p>`;
 }
 populateOverview();
 
@@ -1891,10 +1926,11 @@ document.getElementById('sortDir').addEventListener('click', (ev) => {
 /* ---- Primes ---- */
 const PLAFOND = 19000;
 const baseQuota = {'Saisonnier':3000, 'Ouvrier Viticole':5000, 'Chef de culture':8000};
-/* « Chef de culture » avec un c minuscule ne correspondait à aucun grade :
+/* Barème officiel : ×1 / ×2 / ×3.
+   « Chef de culture » avec un c minuscule ne correspondait à aucun grade :
    rewardsByGrade et gradePillClass écrivent « Chef de Culture ». La prime
-   retombait donc sur le multiplicateur par défaut, ×1 au lieu de ×2,5. */
-const multiplierFor = {'Saisonnier':1, 'Ouvrier Viticole':2, 'Chef de Culture':2.5};
+   retombait donc sur le multiplicateur par défaut au lieu du sien. */
+const multiplierFor = {'Saisonnier':1, 'Ouvrier Viticole':2, 'Chef de Culture':3};
 const recruesData = {'Julio Cortes':2, 'Nella Valmora':1};
 const salaireData = {'Julio Cortes':28000, 'Nella Valmora':44000};
 
@@ -1903,7 +1939,7 @@ function primesRows(){
     const barils = Math.round(e.runs / 5);
     const quota = baseQuota[e.rank] || 3000;
     const atteint = barils >= quota;
-    const mult = multiplierFor[e.rank] || 2.5;
+    const mult = multiplierFor[e.rank] || 1;
     const prime = atteint ? (window.mvCalculPrime ? window.mvCalculPrime(e.runs, e.rank, null)
                                                   : Math.min(barils, PLAFOND) * mult) : null;
     const recrues = recruesData[e.name] || 0;

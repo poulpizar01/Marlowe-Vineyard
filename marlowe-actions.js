@@ -1833,26 +1833,22 @@
       </div></td></tr>`;
     }
 
+    /* Aucune semaine clôturée : l'éligibilité se lit sur la semaine -1, il n'y
+       en a donc encore aucune à afficher. Le dire, plutôt que de montrer la
+       semaine en cours — ses chiffres bougent encore et les récompenses
+       auraient été distribuées sur des quotas non arrêtés. */
     const production = effectifData.some(e => e.active && (e.barils || 0) > 0);
-
-    if (!production) {
-      return `<tr><td colspan="6"><div class="mv-vide">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3">
-          <path d="M3 7h18l-2 12H5Z"/><path d="M8 7a4 4 0 0 1 8 0"/><path d="M9 12v4M15 12v4"/></svg>
-        <div class="mv-vide-t">La semaine n'a pas encore de production.</div>
-        <div class="mv-vide-s">Collez la tablette dans <b>Tableau de bord</b> :
-          les barils, les quotas et cette liste se rempliront tout seuls.</div>
-        <button class="btn" data-aller="statsdash">Aller au tableau de bord</button>
-      </div></td></tr>`;
-    }
 
     return `<tr><td colspan="6"><div class="mv-vide">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3">
-        <path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
-      <div class="mv-vide-t">Personne n'a encore atteint son quota cette semaine.</div>
-      <div class="mv-vide-s">La production est bien enregistrée, mais aucun employé n'a
-        franchi son palier. Les paliers se règlent dans <b>Grades &amp; quotas</b>.</div>
-      <button class="btn" data-aller="statsgrades">Voir les quotas</button>
+        <rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18M8 2v4M16 2v4"/></svg>
+      <div class="mv-vide-t">Aucune semaine n'a encore été clôturée.</div>
+      <div class="mv-vide-s">Les récompenses se calculent sur la <b>semaine précédente</b>,
+        une fois ses chiffres arrêtés. ${production
+          ? 'La production de la semaine en cours est bien enregistrée : clôturez-la et cette liste se remplira.'
+          : 'Collez d\'abord la tablette dans <b>Tableau de bord</b>, puis clôturez la semaine.'}</div>
+      <button class="btn" data-aller="${production ? 'cloture' : 'statsdash'}">${
+        production ? 'Aller à la clôture' : 'Aller au tableau de bord'}</button>
     </div></td></tr>`;
   }
 
@@ -1860,14 +1856,10 @@
     const body = $('eligibiliteBody');
     if (!body) return;
 
+    /* Semaine -1 uniquement : la dernière semaine clôturée. Tant qu'aucune ne
+       l'est, la page reste vide et l'explique — voir videEligibilite. */
     const w = lastClosedWeek();
-    const rows = w ? w.eligibles
-                   : effectifData.filter(e => e.active && e.barils >= e.quota)
-                       .map(e => ({
-                         name: e.name, grade: e.grade, barils: e.barils,
-                         reward: (typeof rewardsByGrade === 'object' && rewardsByGrade[e.grade]) || '—',
-                         distributed: e.distributed,
-                       }));
+    const rows = w ? w.eligibles : [];
 
     const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
     set('el-count', rows.length);
@@ -1878,7 +1870,7 @@
     if (sub) {
       sub.textContent = w
         ? `Récompenses de la ${w.label.toLowerCase()} — du ${w.du} au ${w.au}, clôturée le ${w.closedAt}.`
-        : 'Production de la semaine en cours — aucune semaine clôturée pour l\'instant.';
+        : 'Les récompenses portent sur la semaine précédente : aucune semaine clôturée pour l\'instant.';
     }
 
     const cls = (typeof gradePillClass === 'function') ? gradePillClass : () => 'gp-muted';
@@ -2437,7 +2429,10 @@
     const weeks = clotures.weeks || [];
 
     /* Vue d'ensemble — « Semaines précédentes » */
-    const ovEmpty = document.querySelector('#page-statsvue .ov-empty');
+    /* Cible explicite : depuis que le Top 5 a lui aussi un état vide, un
+       simple « .ov-empty » attrapait la mauvaise carte et rangeait
+       l'historique des semaines dans le Top 5. */
+    const ovEmpty = $('ov-hist-empty') || document.querySelector('#page-statsvue .ov-empty');
     const ovHost = ovEmpty ? ovEmpty.parentNode : null;
     if (ovHost) {
       let box = $('mvWeekHist');
@@ -4890,6 +4885,20 @@
     return recruesEligibles().filter(r => r.atteint).length * (Number(reglages.primeRecrutMontant) || 0);
   }
 
+  /* Le tableau des recrues s'intercale entre l'en-tête et les primes de la
+     semaine, qui sont la raison d'être de la page. Il se replie donc, et reste
+     replié tant qu'on ne l'a pas ouvert (préférence gardée par navigateur). */
+  let primeRecrutOuvert = (() => {
+    try { return localStorage.getItem('mv.primeRecrut') === 'ouvert'; } catch (e) { return false; }
+  })();
+
+  document.addEventListener('click', e => {
+    if (!e.target.closest('#mvPrimeRecrutToggle')) return;
+    primeRecrutOuvert = !primeRecrutOuvert;
+    try { localStorage.setItem('mv.primeRecrut', primeRecrutOuvert ? 'ouvert' : 'replie'); } catch (err) {}
+    renderPrimeRecrutement();
+  });
+
   function renderPrimeRecrutement() {
     const head = document.querySelector('#page-statsprimes .primes-head');
     if (!head) return;
@@ -4912,9 +4921,15 @@
     const gagnants = recrues.filter(r => r.atteint).length;
 
     box.innerHTML = `
-      <h3>Prime de recrutement
-        <span class="mv-unit">${gagnants} sur ${recrues.length} · ${(gagnants * montant).toLocaleString('fr-FR')} $</span></h3>
-      <p class="mv-sub" style="margin:6px 0 14px;">Arrivées entre jeudi et dimanche de la semaine en cours.
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+        <h3 style="margin:0;flex-grow:1;">Prime de recrutement
+          <span class="mv-unit">${gagnants} sur ${recrues.length} · ${(gagnants * montant).toLocaleString('fr-FR')} $</span></h3>
+        <button class="btn" id="mvPrimeRecrutToggle" style="padding:8px 14px;font-size:11.5px;"
+          aria-expanded="${primeRecrutOuvert}" aria-controls="mvPrimeRecrutCorps">${
+          primeRecrutOuvert ? '▾ Réduire le tableau' : `▸ Afficher les ${recrues.length} recrue${recrues.length > 1 ? 's' : ''}`}</button>
+      </div>
+      <div id="mvPrimeRecrutCorps"${primeRecrutOuvert ? '' : ' style="display:none;"'}>
+      <p class="mv-sub" style="margin:12px 0 14px;font-size:12.5px;color:var(--muted);">Arrivées entre jeudi et dimanche de la semaine en cours.
         ${seuil ? `Il faut ${seuil.toLocaleString('fr-FR')} bouteilles pour y avoir droit.` : 'Aucun quota exigé.'}</p>
       <table class="gtable">
         <thead><tr><th>Employé</th><th>Poste</th><th>Arrivée</th><th class="num">Production</th><th class="num">Prime</th></tr></thead>
@@ -4928,7 +4943,8 @@
               ? `<b style="color:var(--prime,#D4763D);">${montant.toLocaleString('fr-FR')} $</b>`
               : `<span class="dim">pas encore</span>`}</td>
           </tr>`).join('')}</tbody>
-      </table>`;
+      </table>
+      </div>`;
   }
 
   /* --- Le panneau de réglage, dans Paramètres --- */
