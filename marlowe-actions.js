@@ -211,20 +211,27 @@
   const initialsOf = (name) => name.split(/\s+/).filter(Boolean)
     .map(w => w[0]).join('').slice(0, 2).toUpperCase();
 
+  /* Les deux tables ne couvraient que les cinq postes de terrain : tout le
+     reste — direction, responsables, magasin — retombait sur « clay » et
+     « terrain », donc sur le mauvais sceau et le mauvais filtre. */
   const DEPT_BY_POSTE = {
+    'Patron': 'direction', 'Co-Patron': 'direction', 'Responsable Général': 'direction',
+    'DRH': 'direction', 'Resp. Commercial': 'direction', 'Resp. Magasin': 'direction',
+    'Resp. Runner': 'direction',
+    'RH': 'direction', 'Commercial': 'direction',
+    'Assistant(e) magasin': 'terrain', 'Vendeur': 'terrain', 'Vendeuse': 'terrain',
+    'Runner': 'terrain', 'Chef de culture': 'terrain', 'Ouvrier viticole': 'terrain',
     'Saisonnier': 'saisonnier',
-    'Ouvrier viticole': 'terrain',
-    'Chef de culture': 'terrain',
-    'Vendeur': 'terrain',
-    'Commercial': 'direction',
   };
 
   const TIER_BY_POSTE = {
-    'Saisonnier': 'clay',
-    'Ouvrier viticole': 'clay',
-    'Chef de culture': 'bronze',
-    'Vendeur': 'bronze',
-    'Commercial': 'silver',
+    'Patron': 'gold', 'Co-Patron': 'gold', 'Responsable Général': 'gold',
+    'DRH': 'gold', 'Resp. Commercial': 'silver', 'Resp. Magasin': 'silver',
+    'Resp. Runner': 'silver',
+    'RH': 'silver', 'Commercial': 'silver',
+    'Assistant(e) magasin': 'bronze', 'Vendeur': 'bronze', 'Vendeuse': 'bronze',
+    'Runner': 'bronze', 'Chef de culture': 'bronze',
+    'Ouvrier viticole': 'clay', 'Saisonnier': 'clay',
   };
 
   /* Recompte les recrutements de la SEMAINE EN COURS (lundi → dimanche)
@@ -306,6 +313,85 @@
     return POSTE_SYNONYMES[k] || null;
   }
 
+  /* Le second format, celui du registre en place
+     ---------------------------------------------------------------------------
+     Il ne ressemble pas au premier : trois champs par fiche seulement, aucun
+     retour à la ligne, et surtout le poste et la date collés dans un même
+     champ — « Chef de Culture 29/08/2026 », parfois « Saisonnier - » quand la
+     date manque.
+
+         n° civil ⇥ nom ⇥ poste date ⇥ n° civil ⇥ nom ⇥ poste date ⇥ …
+
+     Plutôt que de demander à quelqu'un de reformater son tableau, on reconnaît
+     lequel des deux arrive. La signature est nette : dans ce format, un champ
+     sur trois se termine par une date ou un tiret, précédé d'un poste connu. */
+  const RX_POSTE_DATE = /^(.+?)\s+(\d{2}\/\d{2}\/\d{4}|-)$/;
+
+  function jetonsPlats(texte) {
+    return String(texte || '').split(/[\t\r\n]+/).map(x => x.trim()).filter(x => x !== '');
+  }
+
+  function estFormatColle(texte) {
+    const t = jetonsPlats(texte);
+    if (t.length < 6) return false;
+    let testes = 0, reconnus = 0;
+    for (let i = 2; i < t.length; i += 3) {
+      testes++;
+      const m = t[i].match(RX_POSTE_DATE);
+      if (m && posteCanonique(m[1])) reconnus++;
+    }
+    return testes >= 2 && reconnus / testes >= 0.6;
+  }
+
+  function analyserColle(texte) {
+    const t = jetonsPlats(texte);
+    const fiches = [], rejets = [], postesInconnus = new Set();
+    const vus = new Set();
+
+    for (let i = 0; i + 2 < t.length; i += 3) {
+      const civil = t[i], nom = t[i + 1], reste = t[i + 2];
+      const rang = Math.floor(i / 3) + 1;
+
+      if (!/^\d+$/.test(civil)) {
+        rejets.push({ n: rang, brut: `${civil} · ${nom} · ${reste}`,
+                      raison: `« ${civil} » n'est pas un n° civil` });
+        continue;
+      }
+
+      const m = reste.match(RX_POSTE_DATE);
+      const poste = m ? m[1].trim() : reste.trim();
+      /* Un tiret veut dire « on ne sait pas ». Mettre la date du jour serait
+         inventer une information — on laisse la case parlante et vide. */
+      const date = (m && m[2] !== '-') ? m[2] : '—';
+
+      const canon = posteCanonique(poste);
+      if (!canon) postesInconnus.add(poste);
+
+      if (vus.has(civil)) {
+        rejets.push({ n: rang, brut: nom, raison: `n° civil ${civil} déjà dans la liste` });
+        continue;
+      }
+      vus.add(civil);
+
+      fiches.push({
+        id: civil, name: nom.trim(),
+        poste: canon || poste,
+        init: initialsOf(nom.trim()),
+        tier: TIER_BY_POSTE[canon] || 'clay',
+        dept: DEPT_BY_POSTE[canon] || 'terrain',
+        rec: '—', date, status: 'actif',
+        phone: '', rib: '', discord: '',
+      });
+    }
+
+    /* Un reliquat de un ou deux champs signale un tableau tronqué. */
+    const reste = t.length % 3;
+    if (reste) rejets.push({ n: Math.floor(t.length / 3) + 1, brut: t.slice(-reste).join(' · '),
+                             raison: 'fiche incomplète en fin de collage' });
+
+    return { fiches, rejets, postesInconnus: [...postesInconnus] };
+  }
+
   function decouperLigne(ligne) {
     /* Une copie de tableur sépare par tabulations. Un copier-coller depuis un
        document mis en forme peut n'avoir que des espaces : on l'accepte, mais
@@ -317,6 +403,8 @@
   }
 
   function analyserListeRH(texte) {
+    if (estFormatColle(texte)) return analyserColle(texte);
+
     const lignes = String(texte || '').split(/\r?\n/);
     const fiches = [], rejets = [], postesInconnus = new Set();
     const vus = new Set();
@@ -357,6 +445,75 @@
 
     return { fiches, rejets, postesInconnus: [...postesInconnus] };
   }
+
+  /* Modifier une fiche existante
+     ---------------------------------------------------------------------------
+     On pouvait créer un employé et déclarer son départ, mais pas corriger sa
+     fiche entre les deux. C'était supportable tant que tout se saisissait à la
+     main ; ça ne l'est plus quand un import dépose quatre-vingts fiches dont le
+     téléphone, le RIB et le Discord sont à compléter après coup.
+
+     Le n° civil sert d'identifiant : le changer revient à changer de personne,
+     on refuse donc si le nouveau numéro est déjà pris. */
+  const POSTES_CANON = [
+    'Patron', 'Co-Patron', 'Responsable Général', 'DRH',
+    'Resp. Commercial', 'Resp. Magasin', 'Resp. Runner',
+    'RH', 'Commercial', 'Assistant(e) magasin', 'Vendeur', 'Vendeuse', 'Runner',
+    'Chef de culture', 'Ouvrier viticole', 'Saisonnier',
+  ];
+
+  async function modifierEmploye(id) {
+    const e = rhRosterData.find(x => String(x.id) === String(id));
+    if (!e) { toast('Fiche introuvable.'); return; }
+
+    const recruteurs = [...new Set(rhRosterData.map(x => x.rec).filter(r => r && r !== '—'))].sort();
+
+    const r = await askForm(`Fiche de ${e.name}`, [
+      { key: 'name',    label: 'Prénom Nom', value: e.name || '' },
+      { key: 'poste',   label: 'Poste', value: e.poste || 'Saisonnier', options: POSTES_CANON },
+      { key: 'id',      label: 'N° civil', value: String(e.id || '') },
+      { key: 'date',    label: "Date d'arrivée (jj/mm/aaaa)", value: e.date || '' },
+      { key: 'phone',   label: 'N° téléphone', value: e.phone || '' },
+      { key: 'rib',     label: 'RIB', value: e.rib || '' },
+      { key: 'discord', label: 'Discord', value: e.discord || '' },
+      { key: 'rec',     label: 'Recruteur', value: e.rec || '—',
+        options: recruteurs.length ? ['—', ...recruteurs] : undefined },
+    ], 'Laissez un champ vide s\'il est encore inconnu — il restera à compléter.');
+    if (!r) return;
+
+    const nom = (r.name || '').trim();
+    if (!nom) { toast('Le nom ne peut pas être vide.'); return; }
+
+    const nouvelId = String(r.id || '').trim() || String(e.id);
+    if (nouvelId !== String(e.id) && rhRosterData.some(x => String(x.id) === nouvelId)) {
+      toast('Ce numéro civil appartient déjà à quelqu\'un d\'autre.');
+      return;
+    }
+
+    const poste = POSTES_CANON.includes(r.poste) ? r.poste : (posteCanonique(r.poste) || e.poste);
+
+    e.id = nouvelId;
+    e.name = nom;
+    e.init = initialsOf(nom);
+    e.poste = poste;
+    e.tier = TIER_BY_POSTE[poste] || 'clay';
+    e.dept = DEPT_BY_POSTE[poste] || 'terrain';
+    e.date = (r.date || '').trim() || e.date || '—';
+    e.phone = (r.phone || '').trim();
+    e.rib = (r.rib || '').trim();
+    e.discord = (r.discord || '').trim();
+    e.rec = (r.rec || '—').trim() || '—';
+
+    recomputeRecruiters();
+    D().note(`a modifié la fiche de ${nom}`);
+    D().saveMany(['rhRoster', 'rhRecruiters']);
+    toast('Fiche mise à jour.');
+  }
+
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-emp-edit]');
+    if (b) modifierEmploye(b.dataset.empEdit);
+  });
 
   async function importerListeRH() {
     ensureDialog();
@@ -6621,7 +6778,7 @@
     verifierVersion, battementPresence, renderPresence, setZoom, toggleFullscreen,
     renderQuotas3, renderJournal, appliquerLectureSeule, remplirVides, repartirDeZero,
     renderVitrine, renderCatalogues, appliquerAccesService, renderAvertissements, compteAvertissements,
-    openInvoiceDoc, renderRegles, chargerDemo, importerListeRH, analyserListeRH, renderMagasin, renderCommandes, renderStock, renderMagRecap,
+    openInvoiceDoc, renderRegles, chargerDemo, importerListeRH, analyserListeRH, modifierEmploye, renderMagasin, renderCommandes, renderStock, renderMagRecap,
     renderComRunner, testerDiscord, renderQuotaService, renderPrimeRecrutement,
     renderTombola, ticketsDe, renderEntretien, renderDocuments,
     railConstruire, railSynchroniser, allerA,

@@ -1955,7 +1955,7 @@ function renderRhRoster(list){
       <td>${e.status === 'actif'
           ? `<span class="statut statut-actif">Actif</span>`
           : `<span class="statut statut-absent">Absent · ${e.absence}</span>`}</td>
-      <td style="text-align:right;"><button class="btn-depart" data-depart="${e.id}">Déclarer un départ</button></td>
+      <td style="text-align:right;white-space:nowrap;"><button class="icon-btn" data-emp-edit="${e.id}" title="Modifier la fiche">✎</button><button class="btn-depart" data-depart="${e.id}">Déclarer un départ</button></td>
     </tr>
   `).join('');
 }

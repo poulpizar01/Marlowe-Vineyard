@@ -1,4 +1,4 @@
 {
-  "v": "1.16.0",
-  "note": "import d'un registre d'employes colle depuis un tableur, avec rapport avant enregistrement ; cases a cocher des boites de dialogue corrigees."
+  "v": "1.17.0",
+  "note": "l'import reconnait aussi le format civil/nom/poste-date colle sans retour a la ligne ; modification d'une fiche employe depuis le registre ; sceaux et poles completes pour tous les postes."
 }
