@@ -3433,6 +3433,8 @@
     renderMagasin();
     renderComRunner();
     renderRegles();
+    renderTombola();
+    renderEntretien();
     appliquerLectureSeule();
     remplirVides();
     D().redraw('rhRecruiters');
@@ -3492,16 +3494,49 @@
      « …/view?embed » est intégrable. On remet donc le lien en forme dès la
      saisie, pour que ça marche tout de suite dans le panel — le serveur refait
      la même chose de son côté, par sécurité. */
-  function lienCanva(brut) {
+/* --- Les liens de catalogue -------------------------------------------------
+   Un lien de partage ordinaire ne s'affiche pas dans un cadre : Canva comme
+   Google refusent d'être intégrés sous cette forme, et la page reste blanche
+   sans le moindre message. Chacun a une adresse de consultation distincte,
+   celle-là intégrable — c'est elle qu'on reconstruit ici à partir du lien que
+   la personne a copié, quel qu'il soit.
+
+   Renvoie l'adresse intégrable, '' si le champ est vide, ou null si le lien
+   n'est d'aucun service reconnu. */
+  function lienEmbed(brut) {
     const t = String(brut || '').trim();
     if (!t) return '';
     let u;
     try { u = new URL(t); } catch (e) { return null; }
-    if (u.hostname !== 'www.canva.com' && u.hostname !== 'canva.com') return null;
-    const m = u.pathname.match(/^\/design\/([A-Za-z0-9_-]+)\/([A-Za-z0-9_-]+)/);
-    if (!m) return null;
-    return `https://www.canva.com/design/${m[1]}/${m[2]}/view?embed`;
+    const hote = u.hostname.replace(/^www\./, '');
+    const p = u.pathname;
+    let m;
+
+    if (hote === 'canva.com') {
+      m = p.match(/^\/design\/([A-Za-z0-9_-]+)\/([A-Za-z0-9_-]+)/);
+      return m ? `https://www.canva.com/design/${m[1]}/${m[2]}/view?embed` : null;
+    }
+
+    if (hote === 'docs.google.com') {
+      /* Présentation, document, tableur : même forme d'adresse, terminaison
+         différente. « embed » fait défiler les diapositives ; « preview »
+         affiche la page sans la barre d'outils d'édition. */
+      m = p.match(/^\/(presentation|document|spreadsheets)\/d\/(?:e\/)?([A-Za-z0-9_-]{10,})/);
+      if (!m) return null;
+      const fin = m[1] === 'presentation' ? 'embed?start=false&loop=false&delayms=60000' : 'preview';
+      return `https://docs.google.com/${m[1]}/d/${m[2]}/${fin}`;
+    }
+
+    if (hote === 'drive.google.com') {
+      m = p.match(/^\/file\/d\/([A-Za-z0-9_-]{10,})/);
+      return m ? `https://drive.google.com/file/d/${m[1]}/preview` : null;
+    }
+
+    return null;
   }
+
+  /* L'ancien nom reste en service : il est appelé ailleurs dans le fichier. */
+  const lienCanva = lienEmbed;
   const CAT_MAX  = 40;
 
   function cfgAuth() { return (window.MarloweAuth && window.MarloweAuth.CONFIG) || {}; }
@@ -3621,10 +3656,11 @@
           <input type="text" id="mvCatDesc" placeholder="Une ligne de présentation" value="${esc(vitrine.catDesc || '')}">
         </div>
         <input type="text" id="mvCatEmbed" class="mv-large"
-               placeholder="Lien Canva (facultatif) — collez l'adresse du design"
+               placeholder="Lien Canva ou Google (facultatif) — collez l'adresse telle quelle"
                value="${esc(vitrine.catEmbed || '')}">
-        <p class="mv-hint">Avec un lien Canva, le catalogue s'affiche directement : rien à exporter.
-          Le design doit être <b>partagé publiquement</b> dans Canva, sinon vos visiteurs verront une page vide.
+        <p class="mv-hint">Avec un lien, le catalogue s'affiche directement : rien à exporter.
+          Acceptés : Canva, Google Slides, Docs, Sheets et Drive.
+          Le document doit être <b>lisible par toute personne disposant du lien</b>, sinon vos visiteurs verront une page vide.
           Sans lien, ce sont les pages déposées ci-dessous qui s'affichent.</p>
         ${vitrine.catPdf ? `<p class="mv-pdf-ok">PDF joint — un bouton de téléchargement s'affiche sur le site.
             <button class="btn" id="mvCatPdfDel">Retirer</button></p>` : ''}
@@ -3648,7 +3684,7 @@
           <input type="text" id="mvEntDesc" placeholder="Une ligne de présentation" value="${esc(vitrine.entDesc || '')}">
         </div>
         <input type="text" id="mvEntEmbed" class="mv-large"
-               placeholder="Lien Canva entreprise (facultatif)"
+               placeholder="Lien Canva ou Google, catalogue entreprise (facultatif)"
                value="${esc(vitrine.entEmbed || '')}">
         <p class="mv-hint">Celui-ci <b>ne part pas sur le site public</b> : il n'apparaît que dans
           Commerce ▸ Catalogue ▸ Catalogue Entreprise, pour les membres connectés.</p>
@@ -3741,23 +3777,35 @@
 
       /* Un lien non reconnu est signalé plutôt qu'enregistré en silence :
          sinon le catalogue reste vide sans qu'on sache pourquoi. */
+      /* Un lien non reconnu est signalé, mais il n'annule plus le reste :
+         perdre un titre et une description à cause d'une adresse mal collée
+         était une punition disproportionnée. Le lien fautif est simplement
+         laissé de côté, les autres champs sont enregistrés. */
       const mauvais = [];
       [['mvCatEmbed', 'catEmbed', 'citoyens'], ['mvEntEmbed', 'entEmbed', 'entreprise']]
         .forEach(([id, cle, quoi]) => {
           const brut = (document.getElementById(id) || {}).value || '';
-          const propre = lienCanva(brut);
+          const propre = lienEmbed(brut);
           if (propre === null) { mauvais.push(quoi); return; }
           vitrine[cle] = propre;
         });
 
+      sauverVitrine('Vitrine publiée');
+
       if (mauvais.length) {
-        alert("Le lien du catalogue " + mauvais.join(' et ')
-          + " n'est pas une adresse Canva valide.\n\n"
-          + "Attendu : une adresse qui commence par https://www.canva.com/design/…\n"
-          + "Ouvrez le design, Partager, copiez le lien, et collez-le tel quel.");
+        alert("Le reste a bien été enregistré, mais le lien du catalogue "
+          + mauvais.join(' et ') + " n'a pas été reconnu.\n\n"
+          + "Services acceptés :\n"
+          + "  · Canva          https://www.canva.com/design/…\n"
+          + "  · Google Slides  https://docs.google.com/presentation/d/…\n"
+          + "  · Google Docs    https://docs.google.com/document/d/…\n"
+          + "  · Google Sheets  https://docs.google.com/spreadsheets/d/…\n"
+          + "  · Google Drive   https://drive.google.com/file/d/…\n\n"
+          + "Ouvrez le document, Partager, copiez le lien, collez-le tel quel. "
+          + "Pensez aussi à autoriser la lecture à toute personne disposant du lien : "
+          + "sans ça, le cadre restera vide pour les autres.");
         return;
       }
-      sauverVitrine('Vitrine publiée');
       const ok = document.getElementById('mvVitSaved');
       if (ok) { ok.classList.add('on'); setTimeout(() => ok.classList.remove('on'), 1800); }
     }
@@ -4227,6 +4275,481 @@
   });
 
 
+  /* ==========================================================================
+     KIT D'ENTRETIEN — ce qu'on montre au candidat
+     --------------------------------------------------------------------------
+     Le recruteur fait défiler des documents pendant qu'il parle : le règlement,
+     la grille des salaires, les véhicules, le coffre. Jusqu'ici ces documents
+     vivaient éparpillés dans des salons Discord, qu'il fallait ouvrir un par un
+     à côté du panel.
+
+     Ici ils sont rangés par sujet, et un clic les affiche en grand. C'est cette
+     vue-là qu'on partage à l'écran — d'où l'absence totale d'habillage dedans :
+     le document occupe l'écran, rien d'autre.
+     ========================================================================== */
+
+  const ENT_MAX_ITEMS = 30;
+
+  function entId(p) { return p + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36); }
+
+  function entKit() {
+    return (typeof entretienKit !== 'undefined' && Array.isArray(entretienKit)) ? entretienKit : [];
+  }
+
+  function renderEntretien() {
+    const box = $('entretienBox');
+    if (!box) return;
+    const kit = entKit();
+
+    if (!kit.length) {
+      box.innerHTML = `<div class="panel"><p class="empty-note">
+        Aucune rubrique pour l'instant. Créez-en une par sujet abordé en entretien —
+        Règlement, Salaires, Véhicules, Coffre — et déposez-y les visuels correspondants.</p></div>`;
+      return;
+    }
+
+    box.innerHTML = kit.map((r, ri) => `
+      <div class="panel ent-rub" data-ri="${ri}">
+        <div class="ent-head">
+          <div>
+            <h3>${esc(r.titre || 'Sans titre')}
+              <span class="mv-cpt">${(r.items || []).length}</span></h3>
+            ${r.note ? `<p class="ent-note">${esc(r.note)}</p>` : ''}
+          </div>
+          <div class="btn-row">
+            ${(r.items || []).length ? `<button class="btn primary" data-ent="montrer" data-ri="${ri}">▶ Présenter</button>` : ''}
+            <button class="btn" data-ent="ajouter"  data-ri="${ri}">+ Visuel</button>
+            <button class="btn" data-ent="lien"     data-ri="${ri}">+ Lien</button>
+            <button class="btn" data-ent="renommer" data-ri="${ri}">Renommer</button>
+            <button class="btn" data-ent="haut"     data-ri="${ri}" ${ri === 0 ? 'disabled' : ''} title="Monter">↑</button>
+            <button class="btn" data-ent="bas"      data-ri="${ri}" ${ri === kit.length - 1 ? 'disabled' : ''} title="Descendre">↓</button>
+            <button class="btn" data-ent="suppr"    data-ri="${ri}" title="Supprimer la rubrique">✕</button>
+          </div>
+        </div>
+
+        ${(r.items || []).length ? `<div class="ent-grille">
+          ${r.items.map((it, ii) => it.type === 'lien'
+            ? `<a class="ent-vig est-lien" href="${esc(it.url)}" target="_blank" rel="noopener"
+                  title="${esc(it.titre || it.url)}">
+                 <span class="ent-lien-ic">🔗</span>
+                 <span class="ent-vig-nom">${esc(it.titre || it.url)}</span>
+                 <button class="ent-vig-x" data-ent="ritem" data-ri="${ri}" data-ii="${ii}" title="Retirer">✕</button>
+               </a>`
+            : `<div class="ent-vig" data-ent="voir" data-ri="${ri}" data-ii="${ii}"
+                    title="${esc(it.titre || 'Afficher en grand')}">
+                 <img src="${esc(it.url)}" alt="${esc(it.titre || '')}" loading="lazy">
+                 ${it.titre ? `<span class="ent-vig-nom">${esc(it.titre)}</span>` : ''}
+                 <button class="ent-vig-x" data-ent="ritem" data-ri="${ri}" data-ii="${ii}" title="Retirer">✕</button>
+               </div>`).join('')}
+        </div>` : `<p class="empty-note" style="margin-top:12px;">Rubrique vide — déposez-y un visuel ou un lien.</p>`}
+      </div>`).join('');
+  }
+
+  /* --- L'affichage plein écran ---------------------------------------------
+     Volontairement nu : pas de cadre, pas de titre par-dessus le document. Ce
+     qui est projeté au candidat, c'est le document, pas notre interface. */
+  let entVue = null;
+
+  function ouvrirEntretien(ri, ii) {
+    const r = entKit()[ri];
+    if (!r || !(r.items || []).length) return;
+
+    const images = r.items.map((it, k) => ({ ...it, k })).filter(it => it.type !== 'lien');
+    if (!images.length) return;
+
+    let pos = Math.max(0, images.findIndex(it => it.k === ii));
+    if (pos < 0) pos = 0;
+
+    if (!entVue) {
+      entVue = document.createElement('div');
+      entVue.className = 'ent-scene';
+      entVue.innerHTML = `
+        <button class="ent-fermer" title="Fermer (Échap)">✕</button>
+        <button class="ent-fleche est-gauche" title="Précédent">‹</button>
+        <img class="ent-grand" alt="">
+        <button class="ent-fleche est-droite" title="Suivant">›</button>
+        <div class="ent-legende"></div>`;
+      document.body.appendChild(entVue);
+
+      entVue.addEventListener('click', e => {
+        if (e.target.closest('.ent-fermer') || e.target === entVue) { fermerEntretien(); return; }
+        if (e.target.closest('.est-gauche'))  { entVue._aller(-1); return; }
+        if (e.target.closest('.est-droite')) { entVue._aller(1); return; }
+      });
+    }
+
+    const img = entVue.querySelector('.ent-grand');
+    const leg = entVue.querySelector('.ent-legende');
+
+    const peindre = () => {
+      const it = images[pos];
+      img.src = it.url;
+      img.alt = it.titre || '';
+      leg.textContent = `${r.titre}${it.titre ? ' — ' + it.titre : ''}   ·   ${pos + 1} / ${images.length}`;
+      entVue.querySelectorAll('.ent-fleche').forEach(f => { f.hidden = images.length < 2; });
+    };
+
+    entVue._aller = d => { pos = (pos + d + images.length) % images.length; peindre(); };
+    peindre();
+    entVue.classList.add('on');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function fermerEntretien() {
+    if (!entVue) return;
+    entVue.classList.remove('on');
+    document.body.style.overflow = '';
+  }
+
+  document.addEventListener('keydown', e => {
+    if (!entVue || !entVue.classList.contains('on')) return;
+    if (e.key === 'Escape')     { fermerEntretien(); e.preventDefault(); }
+    if (e.key === 'ArrowLeft')  { entVue._aller(-1); e.preventDefault(); }
+    if (e.key === 'ArrowRight') { entVue._aller(1);  e.preventDefault(); }
+  });
+
+  /* --- Les actions ---------------------------------------------------------- */
+  document.addEventListener('click', async e => {
+    if (e.target.closest('#entNouvelle')) {
+      const r = await askForm('Nouvelle rubrique', [
+        { key: 'titre', label: 'Sujet', value: '' },
+        { key: 'note',  label: 'Précision (facultatif)', value: '' },
+      ], "Un sujet abordé pendant l'entretien : Règlement, Salaires, Véhicules, Coffre…");
+      if (!r) return;
+      const titre = (r.titre || '').trim();
+      if (!titre) { toast('Il faut un titre.'); return; }
+      entKit().push({ id: entId('R'), titre, note: (r.note || '').trim(), items: [] });
+      D().note(`a créé la rubrique d'entretien « ${titre} »`);
+      D().save('entretien');
+      return;
+    }
+
+    const b = e.target.closest('[data-ent]');
+    if (!b) return;
+    const quoi = b.dataset.ent;
+    const ri = +b.dataset.ri;
+    const kit = entKit();
+    const rub = kit[ri];
+    if (!rub) return;
+
+    /* Le ✕ d'une vignette est posé DANS la vignette cliquable : sans ça, le
+       retirer ouvrirait aussi l'affichage plein écran. */
+    if (quoi === 'ritem') {
+      e.preventDefault();
+      e.stopPropagation();
+      const ii = +b.dataset.ii;
+      const it = rub.items[ii];
+      if (!it) return;
+      if (!confirm(`Retirer « ${it.titre || 'ce document'} » de ${rub.titre} ?`)) return;
+      rub.items.splice(ii, 1);
+      D().note(`a retiré un document de ${rub.titre}`);
+      D().save('entretien');
+      return;
+    }
+
+    if (quoi === 'voir')    { ouvrirEntretien(ri, +b.dataset.ii); return; }
+    if (quoi === 'montrer') { ouvrirEntretien(ri, -1); return; }   /* -1 : on part du premier */
+
+    if (quoi === 'haut' && ri > 0)               { [kit[ri - 1], kit[ri]] = [kit[ri], kit[ri - 1]]; D().save('entretien'); return; }
+    if (quoi === 'bas'  && ri < kit.length - 1)  { [kit[ri + 1], kit[ri]] = [kit[ri], kit[ri + 1]]; D().save('entretien'); return; }
+
+    if (quoi === 'suppr') {
+      if (!confirm(`Supprimer la rubrique « ${rub.titre} » et ses ${rub.items.length} document(s) ?`)) return;
+      kit.splice(ri, 1);
+      D().note(`a supprimé la rubrique d'entretien « ${rub.titre} »`);
+      D().save('entretien');
+      return;
+    }
+
+    if (quoi === 'renommer') {
+      const r = await askForm('Renommer la rubrique', [
+        { key: 'titre', label: 'Sujet', value: rub.titre || '' },
+        { key: 'note',  label: 'Précision', value: rub.note || '' },
+      ]);
+      if (!r) return;
+      rub.titre = (r.titre || '').trim() || rub.titre;
+      rub.note = (r.note || '').trim();
+      D().note(`a renommé une rubrique d'entretien`);
+      D().save('entretien');
+      return;
+    }
+
+    if (quoi === 'lien') {
+      const r = await askForm('Ajouter un lien', [
+        { key: 'titre', label: 'Intitulé', value: '' },
+        { key: 'url',   label: 'Adresse', value: 'https://' },
+      ], "Un document en ligne : Google Docs, Canva, un salon Discord… Il s'ouvrira dans un nouvel onglet.");
+      if (!r) return;
+      let u;
+      try { u = new URL((r.url || '').trim()); } catch (err) { toast("Cette adresse n'est pas valide."); return; }
+      if (u.protocol !== 'https:' && u.protocol !== 'http:') { toast('Seules les adresses web sont acceptées.'); return; }
+      if (rub.items.length >= ENT_MAX_ITEMS) { toast(`Maximum ${ENT_MAX_ITEMS} documents par rubrique.`); return; }
+      rub.items.push({ id: entId('I'), type: 'lien', titre: (r.titre || '').trim() || u.hostname, url: u.href });
+      D().note(`a ajouté un lien à ${rub.titre}`);
+      D().save('entretien');
+      return;
+    }
+
+    if (quoi === 'ajouter') {
+      const inp = document.createElement('input');
+      inp.type = 'file';
+      inp.accept = 'image/*';
+      inp.multiple = true;
+      inp.onchange = async () => {
+        const fichiers = [...(inp.files || [])];
+        if (!fichiers.length) return;
+        const place = ENT_MAX_ITEMS - rub.items.length;
+        if (place <= 0) { toast(`Maximum ${ENT_MAX_ITEMS} documents par rubrique.`); return; }
+
+        toast(`Envoi de ${Math.min(place, fichiers.length)} visuel(s)…`);
+        try {
+          for (const f of fichiers.slice(0, place)) {
+            const url = await envoyerFichier(f);
+            rub.items.push({
+              id: entId('I'), type: 'image', url,
+              titre: f.name.replace(/\.[a-z0-9]+$/i, '').slice(0, 60),
+            });
+          }
+          D().note(`a ajouté des documents à ${rub.titre}`);
+          D().save('entretien');
+          toast('Visuels ajoutés.');
+        } catch (err) {
+          alert("Le visuel n'a pas pu être déposé : " + err.message);
+          D().save('entretien');
+        }
+      };
+      inp.click();
+      return;
+    }
+  });
+
+  /* ==========================================================================
+     TOMBOLA — les tickets ne se saisissent pas, ils se déduisent
+     --------------------------------------------------------------------------
+     Deux sources, additionnées :
+
+       1. le grade. Un barème fixe, décidé par la direction : les postes de
+          commandement n'y participent pas (ils organisent le tirage), les
+          postes de terrain oui.
+
+       2. le travail de la semaine. Un ticket de plus par tranche de 3 000 de
+          quota effectué — le quota effectué étant runs ÷ 5, une tranche vaut
+          donc 15 000 $ de runs.
+
+     Rien n'est stocké : les tickets se relisent du tableau de bord à chaque
+     affichage. Un tirage lancé sur une liste figée serait un tirage sur des
+     chiffres périmés, ce qui est exactement ce qu'une tombola ne doit pas
+     être.
+     ========================================================================== */
+
+  const TICKETS_PAR_GRADE = {
+    'patron': 0, 'co patron': 0, 'resp generale': 0, 'resp general': 0,
+    'drh': 0, 'rh': 0, 'saisonnier': 0,
+    'resp commercial': 2, 'resp commerciale': 2, 'resp evenementiel': 2,
+    'resp magasin': 2, 'resp runner': 2,
+    'commercial': 2, 'commerciale': 2,
+    'vendeur': 2, 'vendeuse': 2,
+    'chef de culture': 2,
+    'ouvrier viticole': 1, 'ouvriere viticole': 1,
+  };
+
+  /* Une tranche de quota effectué vaut un ticket. Le quota effectué est
+     runs ÷ 5 : 3 000 de quota correspondent donc à 15 000 $ de runs. */
+  const QUOTA_PAR_TICKET = 3000;
+
+  function ticketsDuGrade(grade) {
+    const k = clefPoste(grade);
+    if (k in TICKETS_PAR_GRADE) return TICKETS_PAR_GRADE[k];
+
+    /* Un grade inconnu ne doit ni planter ni offrir des tickets par erreur :
+       on retombe sur le poste de terrain le plus courant, sans surprise. */
+    return 0;
+  }
+
+  function quotaEffectue(runs) {
+    return Math.round(Math.max(0, Number(runs) || 0) / 5);
+  }
+
+  function ticketsDe(ligne) {
+    const q = quotaEffectue(ligne && ligne.runs);
+    const parGrade = ticketsDuGrade(ligne && ligne.rank);
+    const parQuota = Math.floor(q / QUOTA_PAR_TICKET);
+    return { parGrade, parQuota, total: parGrade + parQuota, quota: q };
+  }
+
+  /* Les couleurs de la roue : une teinte par participant, réparties sur le
+     cercle chromatique pour rester distinctes quel qu'en soit le nombre. */
+  function teinte(i, n) {
+    return `hsl(${Math.round((i * 360) / Math.max(n, 1) + 28) % 360} 52% 52%)`;
+  }
+
+  function participantsTombola() {
+    const lignes = (typeof dash !== 'undefined' && Array.isArray(dash)) ? dash : [];
+    const out = [];
+    lignes.forEach(e => {
+      const t = ticketsDe(e);
+      if (t.total > 0) {
+        out.push({ name: e.name, rank: e.rank, runs: Number(e.runs) || 0, ...t });
+      }
+    });
+    out.sort((a, b) => b.total - a.total || String(a.name).localeCompare(b.name));
+    out.forEach((p, i) => { p.color = teinte(i, out.length); });
+
+    let curseur = 0;
+    const total = out.reduce((s, p) => s + p.total, 0);
+    out.forEach(p => {
+      p.startDeg = total ? (curseur / total) * 360 : 0;
+      curseur += p.total;
+      p.endDeg = total ? (curseur / total) * 360 : 0;
+    });
+    return { liste: out, total };
+  }
+
+  function renderTombola() {
+    const roue = $('tombolaWheel');
+    if (!roue) return;
+
+    const { liste, total } = participantsTombola();
+    const lignes = (typeof dash !== 'undefined' && Array.isArray(dash)) ? dash : [];
+
+    /* La roue. Sans participant, un disque neutre plutôt qu'un dégradé vide,
+       qui s'afficherait en noir. */
+    roue.style.background = liste.length
+      ? `conic-gradient(${liste.map(p => `${p.color} ${p.startDeg}deg ${p.endDeg}deg`).join(', ')})`
+      : 'repeating-conic-gradient(#3D372C 0deg 12deg, #2E2A23 12deg 24deg)';
+
+    const cpt = $('tombolaCompte');
+    if (cpt) cpt.textContent = liste.length
+      ? `${liste.length} · ${total} ticket${total > 1 ? 's' : ''}` : '';
+
+    const vide = $('tombolaVide');
+    if (vide) vide.hidden = liste.length > 0;
+
+    const leg = $('tombolaLegend');
+    if (leg) leg.innerHTML = liste.map(p => `
+      <div class="tombola-legend-row">
+        <span class="tombola-swatch" style="background:${p.color};"></span>
+        <span class="tombola-legend-name">${esc(p.name)}</span>
+        <span class="tombola-legend-tickets">${p.total} ticket${p.total > 1 ? 's' : ''}
+          · ${total ? Math.round((p.total / total) * 100) : 0} %</span>
+      </div>`).join('');
+
+    /* Le détail montre TOUT LE MONDE, y compris ceux à zéro ticket : savoir
+       pourquoi on n'est pas dans la roue vaut mieux que de ne pas y être. */
+    const det = $('tombolaDetail');
+    if (det) {
+      const rangs = lignes.slice().sort((a, b) =>
+        (ticketsDe(b).total - ticketsDe(a).total) || String(a.name).localeCompare(b.name));
+      det.innerHTML = rangs.length ? rangs.map(e => {
+        const t = ticketsDe(e);
+        return `<tr${t.total ? '' : ' style="opacity:.5;"'}>
+          <td>${esc(e.name)}</td>
+          <td>${esc(e.rank || '—')}</td>
+          <td class="num">${(Number(e.runs) || 0).toLocaleString('fr-FR')} $</td>
+          <td class="num">${t.quota.toLocaleString('fr-FR')}</td>
+          <td class="num">${t.parGrade}</td>
+          <td class="num">${t.parQuota}</td>
+          <td class="num"><b>${t.total}</b></td>
+        </tr>`;
+      }).join('') : `<tr><td colspan="7" class="empty-note">Aucune ligne dans le tableau de bord de la semaine.</td></tr>`;
+    }
+
+    renderTombolaHisto();
+  }
+
+  function renderTombolaHisto() {
+    const box = $('tombolaHisto');
+    if (!box) return;
+    const h = (typeof tombolaParticipants !== 'undefined' && Array.isArray(tombolaParticipants))
+      ? tombolaParticipants : [];
+    box.innerHTML = h.length ? h.map((t, i) => `
+      <tr>
+        <td>${esc(t.quand || '—')}</td>
+        <td><b>${esc(t.gagnant || '—')}</b></td>
+        <td class="num">${t.tickets || 0}</td>
+        <td class="num">${t.total || 0}</td>
+        <td class="num"><button class="btn btn-mini" data-tombola-del="${i}">✕</button></td>
+      </tr>`).join('')
+      : `<tr><td colspan="5" class="empty-note">Aucun tirage effectué pour l'instant.</td></tr>`;
+  }
+
+  /* Le tirage. La roue tourne pour le spectacle, mais le gagnant est désigné
+     AVANT de la lancer : l'animation se cale ensuite sur lui. L'inverse —
+     lire l'angle d'arrivée — donnerait un résultat dépendant des arrondis du
+     navigateur, donc pas tout à fait proportionnel aux tickets. */
+  let tombolaTourne = false;
+  let tombolaAngle = 0;
+
+  function tirerAuSort(liste, total) {
+    let r = Math.random() * total;
+    for (const p of liste) {
+      if (r < p.total) return p;
+      r -= p.total;
+    }
+    return liste[liste.length - 1];
+  }
+
+  document.addEventListener('click', e => {
+    const del = e.target.closest('[data-tombola-del]');
+    if (del) {
+      const i = +del.dataset.tombolaDel;
+      if (typeof tombolaParticipants === 'undefined' || !tombolaParticipants[i]) return;
+      const t = tombolaParticipants[i];
+      tombolaParticipants.splice(i, 1);
+      D().note(`a retiré le tirage du ${t.quand} (${t.gagnant})`);
+      D().save('tombola');
+      return;
+    }
+
+    if (!e.target.closest('#spinBtn')) return;
+    if (tombolaTourne) return;
+
+    const roue = $('tombolaWheel');
+    const btn = $('spinBtn');
+    const aff = $('tombolaWinner');
+    if (!roue || !btn) return;
+
+    const { liste, total } = participantsTombola();
+    if (!liste.length || !total) {
+      toast("Aucun participant : le tableau de bord de la semaine est vide.");
+      return;
+    }
+
+    tombolaTourne = true;
+    btn.disabled = true;
+    if (aff) aff.textContent = '';
+
+    const gagnant = tirerAuSort(liste, total);
+    const cible = gagnant.startDeg + Math.random() * (gagnant.endDeg - gagnant.startDeg);
+    tombolaAngle = (tombolaAngle - (tombolaAngle % 360)) + 6 * 360 + (360 - cible);
+    roue.style.transform = `rotate(${tombolaAngle}deg)`;
+
+    const fini = () => {
+      if (aff) aff.textContent = `🏆 Gagnant : ${gagnant.name} (${gagnant.total} ticket${gagnant.total > 1 ? 's' : ''} sur ${total})`;
+      tombolaTourne = false;
+      btn.disabled = false;
+
+      if (typeof tombolaParticipants !== 'undefined' && Array.isArray(tombolaParticipants)) {
+        tombolaParticipants.unshift({
+          quand: quandFR(new Date()),
+          gagnant: gagnant.name,
+          tickets: gagnant.total,
+          total,
+        });
+        if (tombolaParticipants.length > 100) tombolaParticipants.length = 100;
+        D().note(`a tiré la tombola — ${gagnant.name} l'emporte`);
+        D().save('tombola');
+      }
+    };
+
+    /* transitionend peut ne jamais arriver si l'onglet passe en arrière-plan :
+       un filet de sécurité évite un bouton bloqué pour toujours. */
+    let fait = false;
+    const une = () => { if (!fait) { fait = true; fini(); } };
+    roue.addEventListener('transitionend', une, { once: true });
+    setTimeout(une, 4600);
+  });
+
   /* Une ligne saisie à la main, pour quelqu'un que la tablette n'a pas
      remonté — un service hors ligne, un oubli, une correction. Elle rejoint
      `dash` comme les autres et suit donc la clôture. */
@@ -4295,38 +4818,140 @@
 
   /* --- Bons de commande ---------------------------------------------------- */
 
+  /* --- Le bon de commande, à plusieurs articles ------------------------------
+     La version précédente n'acceptait qu'un produit, à charge d'ajouter les
+     suivants une fois le bon créé. C'est l'inverse de la façon dont on remplit
+     un bon : on sait ce qu'on veut avant de l'écrire. Le formulaire porte donc
+     autant de lignes qu'il en faut, avec le total qui se met à jour à mesure
+     qu'on les remplit. */
+  function ligneBonHtml(arts, i) {
+    return `<tr data-bl="${i}">
+      <td><select class="mv-bl-prod">${
+        arts.map(a => `<option value="${esc(a.desc)}">${esc(a.desc)}</option>`).join('')
+      }</select></td>
+      <td style="width:92px;"><input type="number" class="mv-bl-qte" min="1" step="1" value="1"></td>
+      <td class="num mv-bl-pu" style="width:90px;">—</td>
+      <td class="num mv-bl-tot" style="width:100px;">—</td>
+      <td style="width:34px;"><button type="button" class="btn btn-mini mv-bl-del" title="Retirer cette ligne">✕</button></td>
+    </tr>`;
+  }
+
   async function nouveauBon() {
     const arts = magProduits();
     if (!arts.length) { toast("Le catalogue d'articles est vide."); return; }
 
     const noms = (typeof rhRosterData !== 'undefined' ? rhRosterData : []).map(e => e.name);
     const moi = (window.MarloweSession && window.MarloweSession.name) || '';
+    const choisi = noms.includes(moi) ? moi : (noms[0] || moi);
 
-    const r = await askForm('Nouveau bon de commande', [
-      { key: 'employe', label: 'Employé', value: noms.includes(moi) ? moi : (noms[0] || moi),
-        options: noms.length ? noms : undefined },
-      { key: 'produit', label: 'Produit', value: arts[0].desc, options: arts.map(a => a.desc).slice(0, 200) },
-      { key: 'qte',     label: 'Quantité', value: '1', type: 'number' },
-    ], "Un bon peut contenir plusieurs produits : créez-le avec le premier, puis ajoutez les suivants depuis la ligne du bon.");
+    const html = `
+      <div class="mv-bon-form">
+        <label class="mv-bon-lab">Employé</label>
+        ${noms.length
+          ? `<select id="mvBonEmp">${noms.map(n =>
+              `<option value="${esc(n)}"${n === choisi ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select>`
+          : `<input type="text" id="mvBonEmp" value="${esc(moi)}">`}
+
+        <label class="mv-bon-lab" style="margin-top:16px;">Articles</label>
+        <table class="gtable mv-bon-table">
+          <thead><tr><th>Produit</th><th>Qté</th><th class="num">P.U.</th><th class="num">Total</th><th></th></tr></thead>
+          <tbody id="mvBonLignes">${ligneBonHtml(arts, 0)}</tbody>
+        </table>
+
+        <div class="btn-row" style="margin-top:10px;justify-content:space-between;align-items:center;">
+          <button type="button" class="btn" id="mvBonPlus">+ Ajouter un article</button>
+          <span class="mv-bon-total">Total : <b id="mvBonTotal">0 $</b></span>
+        </div>
+      </div>`;
+
+    /* Le prix unitaire vit dans le catalogue, pas dans le formulaire : on le
+       relit à chaque changement plutôt que de le recopier dans le HTML, sinon
+       une modification du catalogue en cours de saisie passerait inaperçue. */
+    const prixDe = nom => magPrix(arts.find(a => a.desc === nom));
+
+    const rafraichir = d => {
+      let total = 0;
+      d.querySelectorAll('#mvBonLignes tr').forEach(tr => {
+        const nom = tr.querySelector('.mv-bl-prod').value;
+        const qte = Math.max(1, Math.round(Number(tr.querySelector('.mv-bl-qte').value) || 0));
+        const pu = prixDe(nom);
+        const t = pu * qte;
+        total += t;
+        tr.querySelector('.mv-bl-pu').textContent = pu.toLocaleString('fr-FR') + ' $';
+        tr.querySelector('.mv-bl-tot').textContent = t.toLocaleString('fr-FR') + ' $';
+      });
+      const el = d.querySelector('#mvBonTotal');
+      if (el) el.textContent = total.toLocaleString('fr-FR') + ' $';
+    };
+
+    const r = await askHtml('Nouveau bon de commande', html,
+      "Ajoutez autant d'articles que nécessaire. Le stock ne bougera qu'à la validation du bon.",
+      d => {
+        /* Trois colonnes de chiffres et une liste de produits ne tiennent pas
+           dans la largeur d'une boîte de dialogue ordinaire. */
+        d.style.maxWidth = '680px';
+
+        let n = 1;
+        const corps = d.querySelector('#mvBonLignes');
+
+        d.querySelector('#mvBonPlus').addEventListener('click', () => {
+          corps.insertAdjacentHTML('beforeend', ligneBonHtml(arts, n++));
+          rafraichir(d);
+        });
+
+        /* Délégation : les lignes apparaissent et disparaissent, des écouteurs
+           posés une fois pour toutes seraient perdus. */
+        d.addEventListener('input', e => {
+          if (e.target.closest('.mv-bl-qte, .mv-bl-prod')) rafraichir(d);
+        });
+        d.addEventListener('change', e => {
+          if (e.target.closest('.mv-bl-prod')) rafraichir(d);
+        });
+        d.addEventListener('click', e => {
+          if (!e.target.closest('.mv-bl-del')) return;
+          if (corps.children.length <= 1) { rafraichir(d); return; }   /* jamais zéro ligne */
+          e.target.closest('tr').remove();
+          rafraichir(d);
+        });
+
+        rafraichir(d);
+      });
     if (!r) return;
 
-    const art = arts.find(a => a.desc === r.produit);
-    const qte = Math.max(1, Math.round(Number(r.qte) || 0));
-    const pu = magPrix(art);
+    const employe = (r.querySelector('#mvBonEmp') || {}).value || '';
+    if (!employe) { toast('Il faut désigner un employé.'); return; }
 
-    const fiche = (typeof rhRosterData !== 'undefined' ? rhRosterData : []).find(e => e.name === r.employe);
+    /* Deux fois le même produit sur un bon, c'est presque toujours une
+       maladresse : on additionne les quantités plutôt que d'empiler des
+       lignes qui compliqueront la préparation. */
+    const parNom = new Map();
+    r.querySelectorAll('#mvBonLignes tr').forEach(tr => {
+      const nom = tr.querySelector('.mv-bl-prod').value;
+      const qte = Math.max(1, Math.round(Number(tr.querySelector('.mv-bl-qte').value) || 0));
+      if (!nom) return;
+      if (parNom.has(nom)) parNom.get(nom).qte += qte;
+      else {
+        const art = arts.find(a => a.desc === nom);
+        parNom.set(nom, { ref: art ? art.ref : '', nom, pu: magPrix(art), qte });
+      }
+    });
+
+    const lignes = [...parNom.values()];
+    if (!lignes.length) { toast('Aucun article sur le bon.'); return; }
+
+    const fiche = (typeof rhRosterData !== 'undefined' ? rhRosterData : []).find(e => e.name === employe);
 
     commandes.unshift({
       id: 'BC' + Date.now().toString(36).toUpperCase().slice(-6),
       date: todayFR(),
-      employe: r.employe,
+      employe,
       grade: fiche ? fiche.poste : '—',
-      lignes: [{ ref: art ? art.ref : '', nom: r.produit, pu, qte }],
+      lignes,
       statut: 'attente',
     });
-    D().note(`a créé un bon de commande pour ${r.employe}`);
+    D().note(`a créé un bon de commande pour ${employe} (${lignes.length} article${lignes.length > 1 ? 's' : ''})`);
     D().save('commandes');
-    toast('Bon créé.');
+    toast(`Bon créé — ${lignes.length} article${lignes.length > 1 ? 's' : ''}.`);
   }
 
   async function ajouterLigneBon(id) {
@@ -5011,9 +5636,23 @@
 
   /* Une variante d'askForm qui accepte du HTML libre : la matrice de pages ne
      rentre pas dans une liste de champs. */
-  function askHtml(titre, html, message) {
+  /* `apres` reçoit la boîte une fois dessinée : c'est là qu'un formulaire
+     vivant — une liste où l'on ajoute et retire des lignes — branche ses
+     propres boutons. Sans ce crochet, chaque formulaire de ce genre devrait
+     réécrire toute la mécanique de la boîte de dialogue. */
+  function askHtml(titre, html, message, apres) {
     ensureDialog();
-    const d = dlg.querySelector('.mv-dlg');
+
+    /* La boîte est un élément unique, réutilisé d'une ouverture à l'autre.
+       Or `apres` y accroche des écouteurs : les laisser en place les ferait
+       s'empiler, et ceux de la fois précédente continueraient d'agir sur des
+       lignes qui n'existent plus. On repart donc d'un élément neuf — un clone
+       sans enfants ne porte aucun écouteur. */
+    const vieux = dlg.querySelector('.mv-dlg');
+    const d = vieux.cloneNode(false);
+    d.removeAttribute('style');      /* une largeur posée par un formulaire précédent ne doit pas suivre */
+    vieux.replaceWith(d);
+
     d.innerHTML = `<h3>${esc(titre)}</h3>${message ? `<p>${esc(message)}</p>` : ''}
       <div class="mv-invp-wrap">${html}</div>
       <div class="mv-dlg-btns"><button data-no>Annuler</button><button data-yes class="go">Enregistrer</button></div>`;
@@ -5023,6 +5662,8 @@
       const suite = { non: 'oui', oui: 'ro', ro: 'non' };
       b.dataset.etat = suite[b.dataset.etat] || 'oui';
     }));
+
+    if (typeof apres === 'function') apres(d);
 
     d.querySelector('[data-no]').onclick = () => close(null);
     d.querySelector('[data-yes]').onclick = () => close(d);
@@ -5245,6 +5886,7 @@
     renderVitrine, renderCatalogues, appliquerAccesService, renderAvertissements, compteAvertissements,
     openInvoiceDoc, renderRegles, renderMagasin, renderCommandes, renderStock, renderMagRecap,
     renderComRunner, testerDiscord, renderQuotaService, renderPrimeRecrutement,
+    renderTombola, ticketsDe, renderEntretien,
     totalPrimeRecrutement,
   };
 

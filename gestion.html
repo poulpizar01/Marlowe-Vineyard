@@ -517,6 +517,7 @@
       <div class="nav-section">RH</div>
       <div class="nav-item" data-page="rhemployes">Employés</div>
       <div class="nav-item" data-page="rhrecrutement">Recrutement</div>
+      <div class="nav-item" data-page="entretien">Kit d'entretien</div>
       <div class="nav-item" data-page="blacklist">Blacklist</div>
       <div class="nav-section">Commerce</div>
       <div class="nav-item" data-page="facturation">Facturation</div>
@@ -571,6 +572,17 @@
     </div>
 
     <!-- ================= BLACKLIST ================= -->
+    <div class="page-content" id="page-entretien">
+      <h1 class="page-title">Kit <span class="accent">d'entretien</span></h1>
+      <p class="page-sub">Les documents qu'on montre au candidat pendant l'entretien, rangés par sujet. Cliquez sur un visuel pour l'afficher en grand — c'est cet écran-là qu'on présente.</p>
+
+      <div class="btn-row" style="margin-bottom:18px;">
+        <button class="btn primary" id="entNouvelle">+ Nouvelle rubrique</button>
+      </div>
+
+      <div id="entretienBox"></div>
+    </div>
+
     <div class="page-content" id="page-blacklist">
       <h1 class="page-title">Blacklist</h1>
       <p class="page-sub">Archive des personnes exclues du domaine — accès et embauche interdits.</p>
@@ -1429,7 +1441,7 @@
     <!-- ================= TOMBOLA ================= -->
     <div class="page-content" id="page-tombola">
       <h1 class="page-title">Tombola <span class="accent">interne</span></h1>
-      <p class="page-sub">Tirage au sort pondéré par le nombre de tickets — à définir : mode d'attribution des tickets, fréquence des tirages, lot(s) mis en jeu.</p>
+      <p class="page-sub">Tirage pondéré : chaque ticket est une chance de plus. Les tickets se calculent tout seuls à partir du grade et du quota de la semaine en cours.</p>
 
       <div class="tombola-grid">
         <div class="panel tombola-wheel-panel">
@@ -1444,9 +1456,31 @@
         </div>
 
         <div class="panel">
-          <h3>Participants (pondérés par tickets)</h3>
+          <h3>Participants <span class="mv-cpt" id="tombolaCompte"></span></h3>
           <div id="tombolaLegend"></div>
-          <p class="empty-note" style="margin-top:16px;">Chaque ticket augmente les chances au tirage. Cette liste reprend pour l'exemple le classement de tickets déjà vu dans le tableau de bord — dis-moi comment les tickets doivent réellement être attribués (ventes, recrutement, événements…) et j'ajusterai la logique.</p>
+          <p class="empty-note" id="tombolaVide" hidden>Personne pour l'instant : les tickets se calculent à partir du tableau de bord de la semaine. Collez la tablette dans <b>Stats &amp; quotas ▸ Tableau de bord</b> et les participants apparaîtront ici.</p>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:20px;">
+        <h3>Le détail des tickets</h3>
+        <p class="page-sub" style="margin-top:4px;">Tickets du grade, plus un ticket par tranche de 3 000 de quota effectué — soit 15 000 $ de runs.</p>
+          <table class="gtable">
+            <thead><tr>
+              <th>Employé</th><th>Grade</th><th class="num">Runs</th>
+              <th class="num">Quota effectué</th><th class="num">Grade</th>
+              <th class="num">Quota</th><th class="num">Total</th>
+            </tr></thead>
+            <tbody id="tombolaDetail"></tbody>
+          </table>
+      </div>
+
+      <div class="panel" style="margin-top:20px;">
+        <h3>Tirages passés</h3>
+          <table class="gtable">
+            <thead><tr><th>Date</th><th>Gagnant</th><th class="num">Ses tickets</th><th class="num">Sur</th><th></th></tr></thead>
+            <tbody id="tombolaHisto"></tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -2681,66 +2715,19 @@ document.getElementById('serviceBtn').addEventListener('click', () => {
   renderServiceHistory();
 });
 
-/* ---------- Tombola ---------- */
+/* ---------- Kit d'entretien ----------
+   Une liste de rubriques, chacune portant ses visuels et ses liens. Le rendu
+   et les actions vivent dans marlowe-actions.js ; ici on ne déclare que le
+   tableau, pour que marlowe-data.js sache quoi synchroniser. */
+const entretienKit = [];
+
+/* ---------- Tombola ----------
+   La roue, la légende, le détail et l'historique sont dessinés par
+   marlowe-actions.js à partir du tableau de bord de la semaine. Ce tableau ne
+   garde plus que la mémoire des tirages déjà effectués — les participants,
+   eux, se recalculent : figer une liste de tickets, c'est tirer au sort sur
+   des chiffres périmés. */
 const tombolaParticipants = [];
-
-const tombolaTotal = tombolaParticipants.reduce((s, p) => s + p.tickets, 0);
-let cursor = 0;
-tombolaParticipants.forEach(p => {
-  p.startDeg = cursor / tombolaTotal * 360;
-  cursor += p.tickets;
-  p.endDeg = cursor / tombolaTotal * 360;
-});
-
-function buildWheelGradient(){
-  const stops = tombolaParticipants.map(p => `${p.color} ${p.startDeg}deg ${p.endDeg}deg`);
-  return `conic-gradient(${stops.join(', ')})`;
-}
-document.getElementById('tombolaWheel').style.background = buildWheelGradient();
-
-document.getElementById('tombolaLegend').innerHTML = tombolaParticipants.map(p => `
-  <div class="tombola-legend-row">
-    <span class="tombola-swatch" style="background:${p.color};"></span>
-    <span class="tombola-legend-name">${p.name}</span>
-    <span class="tombola-legend-tickets">${p.tickets} ticket${p.tickets > 1 ? 's' : ''}</span>
-  </div>`).join('');
-
-function pickWeightedWinner(){
-  let r = Math.random() * tombolaTotal;
-  for(const p of tombolaParticipants){
-    if(r < p.tickets) return p;
-    r -= p.tickets;
-  }
-  return tombolaParticipants[tombolaParticipants.length - 1];
-}
-
-let wheelRotation = 0;
-let spinning = false;
-const wheelEl = document.getElementById('tombolaWheel');
-const spinBtn = document.getElementById('spinBtn');
-const winnerEl = document.getElementById('tombolaWinner');
-
-spinBtn.addEventListener('click', () => {
-  if(spinning) return;
-  spinning = true;
-  winnerEl.textContent = '';
-  spinBtn.disabled = true;
-
-  const winner = pickWeightedWinner();
-  const targetAngle = winner.startDeg + Math.random() * (winner.endDeg - winner.startDeg);
-  const extraSpins = 6;
-  const baseRotation = wheelRotation - (wheelRotation % 360);
-  wheelRotation = baseRotation + extraSpins * 360 + (360 - targetAngle);
-
-  wheelEl.style.transform = `rotate(${wheelRotation}deg)`;
-
-  wheelEl.addEventListener('transitionend', function onEnd(){
-    wheelEl.removeEventListener('transitionend', onEnd);
-    winnerEl.textContent = `🏆 Gagnant : ${winner.name}`;
-    spinning = false;
-    spinBtn.disabled = false;
-  }, {once:true});
-});
 </script>
 <script src="marlowe-data.js"></script>
 <script src="marlowe-actions.js"></script>

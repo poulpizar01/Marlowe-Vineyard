@@ -8,15 +8,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500;1,9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-<!-- Applique le thème AVANT le rendu pour éviter le flash blanc au chargement -->
-<script>
-(function(){
-  var t;
-  try{ t = localStorage.getItem('mv-theme'); }catch(e){}
-  if(!t) t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
-  document.documentElement.setAttribute('data-theme', t);
-})();
-</script>
 
 <style>
   /* ==========================================================
@@ -62,48 +53,6 @@
     --g3:#E0A06A;  /* Chef de culture */
   }
 
-  /* ==========================================================
-     THÈME CLAIR
-     ========================================================== */
-  :root[data-theme="light"]{
-    color-scheme:light;
-    --page:
-      radial-gradient(ellipse 1200px 700px at 78% 8%, rgba(143,110,36,.07), transparent 60%),
-      linear-gradient(165deg, #FAF7F0 0%, #F5F1E6 48%, #EFEBDD 100%);
-    --text:#16281C;
-    --muted:#5F7263;
-
-    --gold:#8F6E24;
-    --gold-soft:#8A6C28;
-    --gold-btn:#D9B872;
-    --gold-btn-hi:#E8C989;
-    --on-gold:#0B140F;
-
-    --line:rgba(20,40,28,.13);
-    --line-2:rgba(20,40,28,.26);
-    --gold-line:rgba(143,110,36,.30);
-    --gold-line-2:rgba(143,110,36,.48);
-    --gold-tint:rgba(143,110,36,.07);
-
-    --card:#FFFFFF;
-    --card-2:#FFFDF7;
-    --surface:linear-gradient(160deg,#EFEAE0,#E3DDD1);
-    --glass:rgba(255,255,255,.72);
-    --glass-2:rgba(255,255,255,.96);
-    --dot:rgba(20,40,28,.18);
-    --speck:rgba(143,110,36,.18);
-    --shadow:0 20px 50px rgba(20,40,28,.14);
-    --card-shadow:0 2px 10px rgba(20,40,28,.05);
-    --veil:linear-gradient(165deg, rgba(250,247,240,.94) 0%, rgba(245,241,230,.92) 45%, rgba(239,235,221,.95) 100%);
-    --veil-min:.58;
-    --page-solid:#FAF7F0;
-    --scrim:linear-gradient(100deg, rgba(252,250,244,.94) 0%, rgba(252,250,244,.86) 32%, rgba(252,250,244,.38) 62%, rgba(252,250,244,0) 82%);
-    --vignette:radial-gradient(ellipse 120% 92% at 50% 42%, transparent 44%, rgba(90,70,30,.16) 100%);
-
-    --g1:#4E7A52;
-    --g2:#8F6E24;
-    --g3:#A35E2E;
-  }
 
   *{box-sizing:border-box;margin:0;padding:0;}
   html{scroll-behavior:smooth;}
@@ -155,11 +104,6 @@
   .nav-actions{display:flex;align-items:center;gap:12px;}
   .btn-member{display:flex;align-items:center;gap:7px;border:1px solid var(--gold-line-2);color:var(--text);background:var(--gold-tint);padding:10px 20px;border-radius:999px;font-size:13px;font-weight:500;text-decoration:none;transition:.15s;white-space:nowrap;}
   .btn-member:hover{background:rgba(217,184,114,.16);border-color:var(--gold);}
-  .theme-toggle{width:38px;height:38px;border-radius:50%;border:1px solid var(--line-2);background:transparent;
-    display:flex;align-items:center;justify-content:center;color:var(--gold-soft);cursor:pointer;flex-shrink:0;
-    transition:.15s;font-size:15px;line-height:1;padding:0;}
-  .theme-toggle:hover{color:var(--gold);border-color:var(--gold-line-2);background:var(--gold-tint);}
-  .theme-toggle svg{width:17px;height:17px;}
 
   /* ===== HERO ===== */
   .hero{display:grid;grid-template-columns:1.15fr .85fr;gap:40px;align-items:center;padding:90px 0 70px;min-height:640px;}
@@ -409,13 +353,6 @@
       color-mix(in srgb, var(--page-solid) 62%, transparent) 55%,
       color-mix(in srgb, var(--page-solid) 72%, transparent) 100%);}
   }
-  /* En thème clair le texte est sombre : il lui faut plus de couverture. */
-  @media(max-width:980px){
-    :root[data-theme="light"] .bg-scrim{background:linear-gradient(180deg,
-      color-mix(in srgb, var(--page-solid) 66%, transparent) 0%,
-      color-mix(in srgb, var(--page-solid) 78%, transparent) 55%,
-      color-mix(in srgb, var(--page-solid) 84%, transparent) 100%);}
-  }
 
   /* ===== LOCATION DU DOMAINE ===== */
   .loc-intro{display:grid;grid-template-columns:1.02fr .98fr;gap:44px;align-items:start;}
@@ -553,6 +490,22 @@
   footer a{color:var(--gold-soft);text-decoration:none;}
   footer a:hover{color:var(--gold);}
   .coming-next{border-top:1px solid var(--line);padding:24px 0;text-align:center;font-size:11.5px;color:var(--muted);opacity:.75;letter-spacing:.03em;}
+
+  /* ===== SIGNATURE DU DÉVELOPPEUR =====
+     Discrète par construction : elle vit sous le pied de page, en retrait, et
+     ne réclame l'attention qu'au survol. Une signature qui crie plus fort que
+     le domaine qu'elle a servi à bâtir est une signature ratée. */
+  .signature{border-top:1px solid var(--line);padding:20px 0 40px;display:flex;justify-content:center;}
+  .signature a{display:inline-flex;align-items:center;gap:9px;text-decoration:none;
+    color:var(--muted);font-size:11px;letter-spacing:.06em;opacity:.55;
+    padding:7px 14px;border-radius:999px;border:1px solid transparent;
+    transition:opacity .2s ease, color .2s ease, border-color .2s ease, background .2s ease;}
+  .signature a:hover{opacity:1;color:var(--text);border-color:var(--line-2);background:var(--gold-tint);}
+  .signature img{width:20px;height:20px;object-fit:contain;
+    filter:saturate(.55) brightness(.9);transition:filter .2s ease;}
+  .signature a:hover img{filter:none;}
+  .signature b{font-weight:500;color:var(--gold-soft);}
+  .signature a:hover b{color:var(--gold);}
 </style>
 </head>
 <body>
@@ -622,7 +575,6 @@
     </ul>
     <div class="nav-actions">
       <a href="gestion.html" class="btn-member">🍷 Espace membre</a>
-      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Changer de thème" title="Changer de thème"></button>
     </div>
   </nav>
 
@@ -1093,6 +1045,15 @@
     <div><a href="https://discord.gg/CG4gYAEat" target="_blank" rel="noopener">Discord du domaine</a> · <a href="gestion.html">Espace membre</a></div>
   </footer>
 
+  <div class="signature">
+    <a href="https://discord.gg/dDAFWxeU8" target="_blank" rel="noopener"
+       title="Roxwood Network — rejoindre le Discord">
+      <img src="img/roxwood.png" alt="" width="20" height="20"
+           onerror="this.remove();" loading="lazy">
+      <span>Développé par <b>Roxwood Network</b></span>
+    </a>
+  </div>
+
 </div>
 
 <script>
@@ -1122,30 +1083,6 @@ const MAX_NOUVEAUTES = 5;
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-/* ---------------- Thème clair / sombre ---------------- */
-(function(){
-  const btn  = document.getElementById('themeToggle');
-  const root = document.documentElement;
-
-  const MOON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>';
-  const SUN  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.4v2.2M12 19.4v2.2M4.2 12H2M22 12h-2.2M6.3 6.3 4.8 4.8M19.2 19.2l-1.5-1.5M17.7 6.3l1.5-1.5M4.8 19.2l1.5-1.5"/></svg>';
-
-  function paint(theme){
-    /* en thème sombre on propose de passer en clair (soleil), et inversement */
-    btn.innerHTML = theme === 'dark' ? SUN : MOON;
-    btn.setAttribute('aria-label', theme === 'dark' ? 'Passer en thème clair' : 'Passer en thème sombre');
-    btn.setAttribute('title',      theme === 'dark' ? 'Thème clair' : 'Thème sombre');
-  }
-
-  paint(root.getAttribute('data-theme') || 'dark');
-
-  btn.addEventListener('click', () => {
-    const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-    root.setAttribute('data-theme', next);
-    paint(next);
-    try{ localStorage.setItem('mv-theme', next); }catch(e){}
-  });
-})();
 
 /* ==================================================================
    VITRINE PILOTÉE PAR L'ESPACE MEMBRE

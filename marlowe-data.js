@@ -47,7 +47,10 @@ window.MarloweData = (function () {
     dash: {
       ref: () => dash,
       render: [() => renderDash(dash), call('updateGradeCounts'), call('populateOverview'),
-               () => { const a = window.MarloweActions; if (a) a.renderBilan(); }],
+               () => { const a = window.MarloweActions;
+                       /* Les tickets de tombola se déduisent des runs : le
+                          tableau de bord change, la roue doit suivre. */
+                       if (a) { a.renderBilan(); a.renderTombola(); } }],
     },
     rhRoster:        { ref: () => rhRosterData,
                        render: [() => renderRhRoster(rhRosterData),
@@ -72,7 +75,12 @@ window.MarloweData = (function () {
     depenses:        { ref: () => depensesData,        render: [call('bcRenderDetail')] },
     retraits:        { ref: () => retraitsData,        render: [call('bcRenderDetail')] },
     agenda:          { ref: () => agendaData,          render: [call('renderAgendaList'), call('renderWeekGrid')] },
-    tombola:         { ref: () => tombolaParticipants, render: [] },
+    entretien:       { ref: () => entretienKit,
+                       render: [() => { const a = window.MarloweActions;
+                                        if (a) a.renderEntretien(); }] },
+    tombola:         { ref: () => tombolaParticipants,
+                       render: [() => { const a = window.MarloweActions;
+                                        if (a) a.renderTombola(); }] },
     serviceHistory:  { ref: () => serviceHistory,
                        render: [call('renderServiceHistory'),
                                 () => { const a = window.MarloweActions; if (a) a.renderQuotaService(); }] },

@@ -95,6 +95,7 @@
   const PAGES = [
     { id: 'rhemployes',     label: 'Employés',        group: 'RH' },
     { id: 'rhrecrutement',  label: 'Recrutement',     group: 'RH' },
+    { id: 'entretien',      label: "Kit d'entretien", group: 'RH' },
     { id: 'blacklist',      label: 'Blacklist',       group: 'RH' },
 
     { id: 'facturation',    label: 'Facturation',     group: 'Commerce' },
@@ -137,7 +138,7 @@
      Le patron a tout, il n'a pas besoin d'être listé.                        */
   const PERSONNEL = ['masemaine', 'agenda', 'tombola'];
   const GESTION   = ['histo', 'cloture', 'quotas3'];   /* le journal reste à la direction */
-  const RH_PAGES  = ['rhemployes', 'rhrecrutement', 'blacklist'];
+  const RH_PAGES  = ['rhemployes', 'rhrecrutement', 'entretien', 'blacklist'];
   const COMMERCE  = ['facturation', 'catalogue', 'bilan', 'facturesrecues'];
   const STATS     = ['eligibilite', 'statsvue', 'statsdash', 'statsgrades', 'statseffectif', 'statsprimes'];
 
@@ -591,6 +592,78 @@
   .mv-cat-vue iframe{position:absolute;inset:0;width:100%;height:100%;border:none;}
   .mv-cat-bar{display:flex;align-items:center;gap:12px;margin-top:12px;}
   .mv-cat-n{font-size:12.5px;color:var(--muted,#9C9384);font-variant-numeric:tabular-nums;min-width:60px;text-align:center;}
+  /* --- Kit d'entretien --- */
+  .ent-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;}
+  .ent-head h3{margin:0;}
+  .ent-note{margin:5px 0 0;font-size:12.5px;color:var(--stone,#9C9384);line-height:1.6;}
+  .ent-rub + .ent-rub{margin-top:18px;}
+
+  .ent-grille{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:12px;margin-top:16px;}
+  .ent-vig{position:relative;border:1px solid var(--band,#3D372C);border-radius:11px;overflow:hidden;
+    background:var(--ink,#1C1B18);cursor:pointer;aspect-ratio:4/3;display:flex;flex-direction:column;
+    transition:border-color .18s ease, transform .18s ease;}
+  .ent-vig:hover{border-color:var(--or,#C9A961);transform:translateY(-2px);}
+  .ent-vig img{width:100%;height:100%;object-fit:cover;display:block;}
+  .ent-vig-nom{position:absolute;left:0;right:0;bottom:0;padding:16px 9px 7px;font-size:11px;
+    color:#EDE3CF;background:linear-gradient(180deg,transparent,rgba(0,0,0,.82));
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .ent-vig-x{position:absolute;top:6px;right:6px;width:23px;height:23px;border-radius:50%;
+    border:none;background:rgba(12,11,9,.72);color:#EDE3CF;font-size:12px;line-height:1;cursor:pointer;
+    opacity:0;transition:opacity .15s ease, background .15s ease;}
+  .ent-vig:hover .ent-vig-x{opacity:1;}
+  .ent-vig-x:hover{background:#C4674F;}
+
+  .ent-vig.est-lien{aspect-ratio:auto;min-height:74px;align-items:center;justify-content:center;gap:7px;
+    text-decoration:none;padding:14px 10px;text-align:center;}
+  .ent-vig.est-lien .ent-vig-nom{position:static;padding:0;background:none;white-space:normal;
+    color:var(--or-soft,#B8A47C);}
+  .ent-vig.est-lien:hover .ent-vig-x{opacity:1;}
+  .ent-lien-ic{font-size:19px;opacity:.75;}
+
+  /* La scène de présentation : nue, pour que le document occupe tout. */
+  .ent-scene{position:fixed;inset:0;z-index:10000;display:none;align-items:center;justify-content:center;
+    background:rgba(8,7,6,.96);padding:34px;}
+  .ent-scene.on{display:flex;}
+  .ent-grand{max-width:96vw;max-height:92vh;object-fit:contain;border-radius:6px;
+    box-shadow:0 30px 90px rgba(0,0,0,.6);}
+  .ent-fermer{position:absolute;top:18px;right:22px;width:40px;height:40px;border-radius:50%;
+    border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.05);color:#EDE3CF;
+    font-size:16px;cursor:pointer;transition:.15s;}
+  .ent-fermer:hover{background:rgba(255,255,255,.14);}
+  .ent-fleche{position:absolute;top:50%;transform:translateY(-50%);width:52px;height:52px;border-radius:50%;
+    border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.05);color:#EDE3CF;
+    font-size:27px;line-height:1;cursor:pointer;transition:.15s;}
+  .ent-fleche:hover{background:rgba(255,255,255,.14);}
+  .ent-fleche.est-gauche{left:20px;}
+  .ent-fleche.est-droite{right:20px;}
+  .ent-fleche[hidden]{display:none;}
+  .ent-legende{position:absolute;left:0;right:0;bottom:16px;text-align:center;font-size:12px;
+    letter-spacing:.05em;color:rgba(237,227,207,.6);pointer-events:none;}
+  @media(max-width:700px){
+    .ent-scene{padding:14px;}
+    .ent-fleche{width:42px;height:42px;font-size:22px;}
+    .ent-fleche.est-gauche{left:6px;} .ent-fleche.est-droite{right:6px;}
+  }
+
+  /* --- Bon de commande à plusieurs lignes --- */
+  .mv-bon-form select,.mv-bon-form input[type=text],.mv-bon-form input[type=number]{
+    width:100%;padding:9px 11px;border-radius:9px;border:1px solid var(--band,#3D372C);
+    background:var(--ink,#1C1B18);color:var(--parchment,#EDE3CF);font-size:13px;font-family:inherit;}
+  .mv-bon-lab{display:block;font-size:11px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--stone,#9C9384);margin:0 0 7px;}
+  .mv-bon-table{width:100%;margin-top:4px;table-layout:auto;}
+  .mv-bon-table td:first-child{min-width:250px;}
+  .mv-bon-table th{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--stone,#9C9384);
+    padding:0 6px 6px;text-align:left;}
+  .mv-bon-table th.num,.mv-bon-table td.num{text-align:right;}
+  .mv-bon-table td{padding:4px 6px;vertical-align:middle;border:none;
+    font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--parchment,#EDE3CF);}
+  .mv-bon-table td:first-child{padding-left:0;}
+  .mv-bon-total{font-size:13px;color:var(--stone,#9C9384);}
+  .mv-bon-total b{font-family:'IBM Plex Mono',monospace;color:var(--or,#C9A961);font-size:15px;}
+  .mv-bl-del{opacity:.6;}
+  .mv-bl-del:hover{opacity:1;color:#C4674F;}
+
   #catCitoyens .mv-sub,#catEntreprise .mv-sub{font-size:12.5px;color:var(--muted,#9C9384);margin:6px 0 0;line-height:1.65;}
 
   /* --- Règles du domaine --- */

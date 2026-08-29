@@ -791,15 +791,47 @@ async function handleVitrine(request, env) {
 
    Le domaine est vérifié — sinon ce champ deviendrait un moyen d'afficher
    n'importe quelle page dans le site du domaine. */
+/* Reconstruit l'adresse INTÉGRABLE d'un document à partir du lien de partage.
+
+   Un lien de partage ordinaire refuse de s'afficher dans un cadre — Canva
+   comme Google le bloquent, et la page reste blanche sans message. Chaque
+   service a une adresse de consultation distincte, celle-là intégrable ; on
+   la recompose à partir de l'identifiant, sans jamais faire confiance au
+   reste de ce qui a été collé.
+
+   Renvoie '' pour un champ vide ou un lien non reconnu : cette valeur part
+   sur le site public, il n'y a donc rien à y publier qu'on n'ait pas
+   entièrement fabriqué ici. */
 function lienCanva(brut) {
   if (!brut) return '';
   let u;
-  try { u = new URL(brut.trim()); } catch (e) { return ''; }
-  if (u.hostname !== 'www.canva.com' && u.hostname !== 'canva.com') return '';
+  try { u = new URL(String(brut).trim()); } catch (e) { return ''; }
+  if (u.protocol !== 'https:') return '';
 
-  const m = u.pathname.match(/^\/design\/([A-Za-z0-9_-]+)\/([A-Za-z0-9_-]+)/);
-  if (!m) return '';
-  return `https://www.canva.com/design/${m[1]}/${m[2]}/view?embed`;
+  const hote = u.hostname.replace(/^www\./, '');
+  const p = u.pathname;
+  let m;
+
+  if (hote === 'canva.com') {
+    m = p.match(/^\/design\/([A-Za-z0-9_-]+)\/([A-Za-z0-9_-]+)/);
+    return m ? `https://www.canva.com/design/${m[1]}/${m[2]}/view?embed` : '';
+  }
+
+  if (hote === 'docs.google.com') {
+    m = p.match(/^\/(presentation|document|spreadsheets)\/d\/(?:e\/)?([A-Za-z0-9_-]{10,})/);
+    if (!m) return '';
+    const fin = m[1] === 'presentation'
+      ? 'embed?start=false&loop=false&delayms=60000'
+      : 'preview';
+    return `https://docs.google.com/${m[1]}/d/${m[2]}/${fin}`;
+  }
+
+  if (hote === 'drive.google.com') {
+    m = p.match(/^\/file\/d\/([A-Za-z0-9_-]{10,})/);
+    return m ? `https://drive.google.com/file/d/${m[1]}/preview` : '';
+  }
+
+  return '';
 }
 
 /* POST /api/discord  —  relais vers le salon des runners
