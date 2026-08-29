@@ -3038,6 +3038,228 @@
       cles: ['articles', 'catalogueSlides'], defaut: false },
   ];
 
+  /* ==========================================================================
+     JEU DE DÉMONSTRATION
+     --------------------------------------------------------------------------
+     Un panel vide ne se juge pas : on ne voit ni les colonnes qui débordent, ni
+     les tris, ni ce que donne une semaine chargée. Ce bouton remplit RH,
+     Commerce et Quotas d'un ensemble cohérent — les mêmes personnes d'un
+     tableau à l'autre, des chiffres qui s'additionnent juste.
+
+     Deux précautions qui comptent :
+       · ces données partent sur le serveur comme les vraies, donc TOUT LE MONDE
+         les voit. Ce n'est pas un bac à sable privé, et c'est dit avant ;
+       · rien n'est écrasé sans le demander — une collection déjà remplie est
+         laissée telle quelle, sauf si l'on coche « remplacer ».
+     ========================================================================== */
+
+  const DEMO_NOMS = [
+    ['Elena Marlowe', 'Patron'], ['Diego Marlowe', 'Co-Patron'],
+    ['Solène Bardot', 'DRH'], ['Victor Ansaldi', 'Responsable Commercial'],
+    ['Nina Kovacs', 'Responsable magasin'], ['Tomas Ferreira', 'Responsable runner'],
+    ['Camille Ruiz', 'RH'], ['Jonas Weiss', 'Commercial'],
+    ['Alba Moreno', 'Vendeur'], ['Rémi Castel', 'Vendeur'],
+    ['Iris Delaunay', 'Chef de Culture'], ['Malik Ferrand', 'Chef de Culture'],
+    ['Nora Sylvain', 'Ouvrier Viticole'], ['Ugo Pereira', 'Ouvrier Viticole'],
+    ['Léa Chabert', 'Ouvrier Viticole'], ['Sacha Bellini', 'Saisonnier'],
+    ['Bruno Sacchi', 'Saisonnier'], ['Anna Vidal', 'Saisonnier'],
+  ];
+
+  /* Un tirage reproductible : deux chargements donnent les mêmes chiffres, ce
+     qui rend une comparaison d'écran à écran possible. */
+  function demoHasard(graine) {
+    let x = graine;
+    return () => { x = (x * 1103515245 + 12345) & 0x7fffffff; return x / 0x7fffffff; };
+  }
+
+  function demoInitiales(nom) {
+    return nom.split(/\s+/).map(m => m[0]).join('').slice(0, 2).toUpperCase();
+  }
+
+  function demoSceau(poste) {
+    const k = clefPoste(poste);
+    if (['patron', 'co patron', 'resp generale'].includes(k)) return 'gold';
+    if (k.startsWith('resp') || k === 'drh' || k === 'rh') return 'silver';
+    if (k === 'chef de culture' || k === 'commercial' || k === 'commerciale') return 'bronze';
+    return 'clay';
+  }
+
+  function demoDate(joursEnArriere) {
+    const d = new Date();
+    d.setDate(d.getDate() - joursEnArriere);
+    const p = n => String(n).padStart(2, '0');
+    return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()}`;
+  }
+
+  const DEMO_JEUX = [
+    { id: 'rh',       label: 'Employés, recruteurs, départs, absences, blacklist',
+      cles: ['rhRoster', 'rhRecruiters', 'rhDeparts', 'rhAbsences', 'blacklist'] },
+    { id: 'quotas',   label: 'Production de la semaine, effectif, éligibilité',
+      cles: ['effectif', 'dash'] },
+    { id: 'commerce', label: 'Clients et factures reçues',
+      cles: ['clients', 'facturesRecues'] },
+    { id: 'perso',    label: 'Prises de service et agenda',
+      cles: ['serviceHistory', 'agenda'] },
+  ];
+
+  function demoRemplir(id) {
+    const al = demoHasard(id === 'rh' ? 7 : id === 'quotas' ? 21 : id === 'commerce' ? 43 : 61);
+    const entier = (a, b) => a + Math.floor(al() * (b - a + 1));
+
+    if (id === 'rh') {
+      const roster = D().ref('rhRoster');
+      roster.length = 0;
+      DEMO_NOMS.forEach(([nom, poste], i) => {
+        const absent = i === 5 || i === 13;
+        roster.push({
+          id: 1000 + i * 7, name: nom, poste, init: demoInitiales(nom),
+          tier: demoSceau(poste), rec: DEMO_NOMS[Math.max(0, i - 3)][0],
+          date: demoDate(entier(20, 300)),
+          status: absent ? 'absent' : 'actif',
+          absence: absent ? 'congés' : '',
+        });
+      });
+
+      const rec = D().ref('rhRecruiters');
+      rec.length = 0;
+      [['Solène Bardot', 6], ['Camille Ruiz', 4], ['Diego Marlowe', 3], ['Victor Ansaldi', 2]]
+        .forEach(([name, n]) => rec.push({ name, n }));
+
+      const dep = D().ref('rhDeparts');
+      dep.length = 0;
+      dep.push({ name: 'Paul Estève', poste: 'Vendeur', date: demoDate(12), reason: 'Démission', cls: 'demission' });
+      dep.push({ name: 'Marta Ilic', poste: 'Saisonnier', date: demoDate(31), reason: 'Licenciement', cls: 'licenciement' });
+
+      const abs = D().ref('rhAbsences');
+      abs.length = 0;
+      abs.push({ name: 'Tomas Ferreira', range: `${demoDate(3)} → ${demoDate(-4)}`, indef: false });
+      abs.push({ name: 'Ugo Pereira', range: `depuis le ${demoDate(9)}`, indef: true });
+
+      const bl = D().ref('blacklist');
+      bl.length = 0;
+      bl.push({ uid: '350507', name: 'Kevin Doriot', reason: 'Vol dans la cave', date: demoDate(58), by: 'Diego Marlowe' });
+      return;
+    }
+
+    if (id === 'quotas') {
+      const eff = D().ref('effectif');
+      const dsh = D().ref('dash');
+      eff.length = 0; dsh.length = 0;
+
+      DEMO_NOMS.forEach(([nom, poste], i) => {
+        /* Les runs commandent tout le reste : le quota effectué, la part,
+           les tickets. On les tire d'abord, on en déduit le reste — sinon les
+           chiffres ne se répondraient pas d'un tableau à l'autre. */
+        const runs = i < 3 ? 0 : entier(4, 46) * 2500;
+        const factures = i < 3 ? 0 : entier(0, 14) * 900;
+        const barils = Math.round(runs / 5);
+        const grade = poste;
+        const quota = ['Saisonnier'].includes(poste) ? 3000
+                    : ['Ouvrier Viticole'].includes(poste) ? 3000
+                    : ['Chef de Culture'].includes(poste) ? 10000 : 10000;
+
+        eff.push({
+          name: nom, grade, active: i !== 5 && i !== 13,
+          barils, quota,
+          nextGrade: poste === 'Saisonnier' ? 'Ouvrier Viticole'
+                   : poste === 'Ouvrier Viticole' ? 'Chef de Culture' : null,
+          promoTarget: 24000, isFinal: !['Saisonnier', 'Ouvrier Viticole'].includes(poste),
+          distributed: barils >= quota && al() > 0.55,
+        });
+
+        if (runs || factures) {
+          dsh.push({
+            name: nom, rank: grade, factures, runs, ventes: entier(0, 26),
+            part: factures + runs, tickets: 0, heures: entier(2, 19),
+          });
+        }
+      });
+      return;
+    }
+
+    if (id === 'commerce') {
+      const cl = D().ref('clients');
+      cl.length = 0;
+      [['Bar Le Vespucci', '555-0142', 'Vespucci Beach, quai 3', 'FR76 3000 1007 1600'],
+       ['Restaurant Casa Nostra', '555-0187', 'Rockford Hills, Eclipse Blvd', 'FR76 3000 4402 9931'],
+       ['Traiteur Sandy Shores', '555-0211', 'Sandy Shores, route 68', 'FR76 3000 8815 0042'],
+       ['Hôtel Von Crastenburg', '555-0299', 'Del Perro, front de mer', 'FR76 3000 2276 5518'],
+       ['Épicerie Paleto', '555-0330', 'Paleto Bay, grand-rue', 'FR76 3000 9903 7724']]
+        .forEach(([name, phone, addr, rib]) => cl.push({ name, phone, addr, rib }));
+
+      const fr = D().ref('facturesRecues');
+      fr.length = 0;
+      fr.push({ supplier: 'Tonnellerie Ansaldi', items: [
+        { date: demoDate(6),  montant: 42000, note: 'Fûts de chêne ×12', by: 'Victor Ansaldi' },
+        { date: demoDate(27), montant: 18500, note: 'Douelles de rechange', by: 'Victor Ansaldi' },
+      ]});
+      fr.push({ supplier: 'Verrerie de Blaine', items: [
+        { date: demoDate(11), montant: 26400, note: 'Bouteilles 75 cl ×2000', by: 'Nina Kovacs' },
+      ]});
+      return;
+    }
+
+    if (id === 'perso') {
+      const sh = D().ref('serviceHistory');
+      sh.length = 0;
+      for (let j = 9; j >= 0; j--) {
+        const debut = entier(17, 21);
+        sh.push({
+          date: demoDate(j),
+          start: `${String(debut).padStart(2, '0')}:${String(entier(0, 59)).padStart(2, '0')}`,
+          end: j === 0 ? '' : `${String(debut + entier(2, 4)).padStart(2, '0')}:${String(entier(0, 59)).padStart(2, '0')}`,
+        });
+      }
+
+      const ag = D().ref('agenda');
+      ag.length = 0;
+      ag.push({ date: demoDate(-1), heure: '20:00', heure_fin: '23:00', title: 'Vendanges de nuit',
+                desc: 'Coteau Nord — prévoir les lampes', vis: 'tous' });
+      ag.push({ date: demoDate(-3), heure: '19:30', heure_fin: '21:00', title: 'Réunion des responsables',
+                desc: 'Bilan de la semaine et quotas', vis: 'direction' });
+      ag.push({ date: demoDate(-5), heure: '21:00', heure_fin: '00:00', title: 'Location — mariage Ansaldi',
+                desc: 'Villa privatisée, zone VIP', vis: 'tous' });
+      return;
+    }
+  }
+
+  async function chargerDemo() {
+    ensureDialog();
+    dlg.querySelector('.mv-dlg').innerHTML = `
+      <h3>Charger un jeu de démonstration</h3>
+      <p>Remplit le panel de données inventées mais cohérentes, pour voir ce que
+         donnent les écrans une fois pleins.</p>
+      ${DEMO_JEUX.map(g => `
+        <label class="mv-reset-l">
+          <input type="checkbox" id="dm-${g.id}" checked>
+          <span>${esc(g.label)}</span>
+        </label>`).join('')}
+      <p class="mv-reset-n"><b>Ces données partent sur le serveur comme les vraies :
+         toute l'équipe les verra.</b> Elles écrasent ce que contiennent déjà les
+         collections cochées. Le vidage juste en dessous les retire.</p>
+      <div class="mv-dlg-btns">
+        <button data-no>Annuler</button>
+        <button data-yes class="go">Charger</button>
+      </div>`;
+    dlg.style.display = 'flex';
+
+    const choix = await new Promise(r => {
+      resolver = r;
+      dlg.querySelector('[data-no]').onclick = () => close(null);
+      dlg.querySelector('[data-yes]').onclick = () =>
+        close(DEMO_JEUX.filter(g => { const c = $('dm-' + g.id); return c && c.checked; }));
+    });
+    if (!choix || !choix.length) return;
+
+    choix.forEach(g => demoRemplir(g.id));
+
+    const cles = choix.flatMap(g => g.cles);
+    D().note(`a chargé un jeu de démonstration (${choix.map(g => g.id).join(', ')})`);
+    D().saveMany(cles);
+    D().redrawAll();
+    toast(`Démonstration chargée — ${cles.length} collections remplies.`);
+  }
+
   async function repartirDeZero() {
     ensureDialog();
     dlg.querySelector('.mv-dlg').innerHTML = `
@@ -6172,7 +6394,7 @@
     verifierVersion, battementPresence, renderPresence, setZoom, toggleFullscreen,
     renderQuotas3, renderJournal, appliquerLectureSeule, remplirVides, repartirDeZero,
     renderVitrine, renderCatalogues, appliquerAccesService, renderAvertissements, compteAvertissements,
-    openInvoiceDoc, renderRegles, renderMagasin, renderCommandes, renderStock, renderMagRecap,
+    openInvoiceDoc, renderRegles, chargerDemo, renderMagasin, renderCommandes, renderStock, renderMagRecap,
     renderComRunner, testerDiscord, renderQuotaService, renderPrimeRecrutement,
     renderTombola, ticketsDe, renderEntretien, renderDocuments,
     railConstruire, railSynchroniser, allerA,

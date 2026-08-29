@@ -1110,7 +1110,7 @@
         <h1>Tableau de bord</h1>
       </div>
       <div class="headmetric">
-        <div class="n">7</div>
+        <div class="n" id="dashCount">0</div>
         <div class="l">Employés suivis</div>
       </div>
     </div>
@@ -1652,6 +1652,11 @@ const dash = [];
 function fmt(n){ return n.toLocaleString('fr-FR') + '$'; }
 
 function renderDash(list){
+  /* Le compteur était écrit en dur dans la maquette d'origine et n'avait
+     jamais bougé depuis. */
+  const cpt = document.getElementById('dashCount');
+  if (cpt) cpt.textContent = list.length;
+
   document.getElementById('dashBody').innerHTML = list.map(e => {
     const total = e.factures + e.runs;
     const quota = Math.round(e.runs / 5);
@@ -1665,7 +1670,9 @@ function renderDash(list){
       <td class="num">${fmt(total)}</td>
       <td class="num">${fmt(e.part)}</td>
       <td class="num quota-mono">${quota}</td>
-      <td class="num" style="color:var(--or-soft);">${e.tickets}</td>
+      <td class="num" style="color:var(--or-soft);">${
+        (window.MarloweActions && window.MarloweActions.ticketsDe)
+          ? window.MarloweActions.ticketsDe(e).total : (e.tickets || 0)}</td>
       <td class="num dim">${e.heures}</td>
       <td class="action"><button class="btn-reset" data-dash-del="${e.name}" title="Retirer cette ligne">×</button></td>
     </tr>`;

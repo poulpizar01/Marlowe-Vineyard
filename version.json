@@ -1,4 +1,4 @@
 {
-  "v": "1.14.2",
-  "note": "le repli des sections du menu est retire : avec le rail il vidait la colonne, et l'etat memorise dans le navigateur est efface."
+  "v": "1.15.0",
+  "note": "jeu de demonstration chargeable depuis Parametres, compteur d'employes suivis rendu vivant et tickets calcules dans le tableau de bord."
 }

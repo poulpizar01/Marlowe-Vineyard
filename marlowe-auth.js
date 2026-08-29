@@ -1064,6 +1064,16 @@
 
       <div class="panel" id="mvInvites"></div>
 
+      <div class="panel">
+        <h3>Jeu de démonstration</h3>
+        <p>Remplit RH, Commerce et Quotas de données inventées mais cohérentes —
+           les mêmes personnes d'un tableau à l'autre, des chiffres qui s'additionnent
+           juste. De quoi juger les écrans pleins plutôt que vides.
+           <b>Ces données partent sur le serveur comme les vraies : toute l'équipe les verra.</b>
+           Le bouton juste en dessous les retire.</p>
+        <button class="btn" id="mvDemo">Charger un jeu de démonstration…</button>
+      </div>
+
       <div class="panel mv-danger">
         <h3>Repartir de zéro</h3>
         <p>Vide les données du panel pour démarrer proprement — employés, factures, production,
@@ -1129,6 +1139,12 @@
         c.className = 'mv-cell mv-' + c.dataset.etat;
         c.textContent = tout ? '·' : '✓';
       });
+    });
+
+    const demo = page.querySelector('#mvDemo');
+    if (demo) demo.addEventListener('click', () => {
+      const a = window.MarloweActions;
+      if (a && a.chargerDemo) a.chargerDemo();
     });
 
     const wipe = page.querySelector('#mvWipe');
