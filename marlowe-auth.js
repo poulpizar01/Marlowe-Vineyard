@@ -119,6 +119,7 @@
     { id: 'journal',        label: 'Journal',         group: 'Gestion' },
     { id: 'histo',          label: 'Historique',      group: 'Gestion' },
 
+    { id: 'documents',      label: 'Documents',       group: 'Personnel' },
     { id: 'comrunner',      label: 'Com Runner',      group: 'Personnel' },
     { id: 'masemaine',      label: 'Ma semaine',      group: 'Personnel' },
     { id: 'agenda',         label: 'Agenda',          group: 'Personnel' },
@@ -136,7 +137,10 @@
 
   /* Répartition de départ — modifiable ensuite dans Paramètres.
      Le patron a tout, il n'a pas besoin d'être listé.                        */
-  const PERSONNEL = ['masemaine', 'agenda', 'tombola'];
+  /* « documents » est la vue en lecture seule du kit d'entretien : tout le
+     monde la voit, personne n'y modifie quoi que ce soit. La page « entretien »
+     du groupe RH reste, elle, celle où l'on range les documents. */
+  const PERSONNEL = ['masemaine', 'agenda', 'tombola', 'documents'];
   const GESTION   = ['histo', 'cloture', 'quotas3'];   /* le journal reste à la direction */
   const RH_PAGES  = ['rhemployes', 'rhrecrutement', 'entretien', 'blacklist'];
   const COMMERCE  = ['facturation', 'catalogue', 'bilan', 'facturesrecues'];
@@ -349,8 +353,18 @@
       const ok = new Set(session.invite.pages || []);
       return PAGES.filter(p => ok.has(p.id)).map(p => p.id);
     }
+    /* Une page ajoutée après le dernier réglage de la matrice n'y figure pas :
+       la traiter comme « interdite à tous » la rendrait invisible jusqu'à ce
+       que quelqu'un pense à rouvrir Paramètres. Les pages du groupe Personnel
+       sont ouvertes à tous par nature — on retombe donc sur cette règle plutôt
+       que sur le silence. Toutes les autres restent fermées par défaut :
+       s'ouvrir toute seule serait le mauvais côté sur lequel se tromper. */
+    const ouverteParDefaut = id => PERSONNEL.includes(id);
+
     return PAGES
-      .filter(p => (perms[p.id] || []).some(r => session.roles.includes(r)))
+      .filter(p => (p.id in perms)
+        ? (perms[p.id] || []).some(r => session.roles.includes(r))
+        : ouverteParDefaut(p.id))
       .map(p => p.id);
   }
 
@@ -592,6 +606,11 @@
   .mv-cat-vue iframe{position:absolute;inset:0;width:100%;height:100%;border:none;}
   .mv-cat-bar{display:flex;align-items:center;gap:12px;margin-top:12px;}
   .mv-cat-n{font-size:12.5px;color:var(--muted,#9C9384);font-variant-numeric:tabular-nums;min-width:60px;text-align:center;}
+  .mv-temoin{margin:7px 0 0;font-size:11.5px;line-height:1.6;color:var(--stone,#9C9384);}
+  .mv-temoin.est-ok{color:#7FA97F;}
+  .mv-temoin code{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--or-soft,#B8A47C);
+    word-break:break-all;}
+
   /* --- Kit d'entretien --- */
   .ent-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;}
   .ent-head h3{margin:0;}

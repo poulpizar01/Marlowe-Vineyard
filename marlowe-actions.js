@@ -3435,6 +3435,7 @@
     renderRegles();
     renderTombola();
     renderEntretien();
+    renderDocuments();
     appliquerLectureSeule();
     remplirVides();
     D().redraw('rhRecruiters');
@@ -3488,6 +3489,30 @@
     entTitre: '', entDesc: '', entPdf: '', entEmbed: '', entPages: [],
   };
   const NOUV_MAX = 5;
+
+  /* Les données venues du serveur REMPLACENT le contenu de cet objet, clé pour
+     clé. Un enregistrement fait avant l'ajout d'un champ ne contient donc pas
+     ce champ — et `vitrine.entPages.length` cesse d'exister, ce qui interrompt
+     tout l'affichage de la page sans le moindre message visible.
+
+     Deux lignes ici valent mieux qu'une chasse au fantôme : après chaque
+     lecture, les champs absents retrouvent leur valeur par défaut. */
+  const VITRINE_DEFAUTS = {
+    nouveautes: [], catTitre: '', catDesc: '', catPdf: '', catEmbed: '', catPages: [],
+    entTitre: '', entDesc: '', entPdf: '', entEmbed: '', entPages: [],
+  };
+
+  function normaliserVitrine() {
+    Object.keys(VITRINE_DEFAUTS).forEach(k => {
+      const attendu = VITRINE_DEFAUTS[k];
+      if (Array.isArray(attendu)) {
+        if (!Array.isArray(vitrine[k])) vitrine[k] = [];
+      } else if (typeof vitrine[k] !== 'string') {
+        vitrine[k] = vitrine[k] == null ? '' : String(vitrine[k]);
+      }
+    });
+    return vitrine;
+  }
 
   /* Un lien copié depuis le bouton « Partager » de Canva ne s'affiche PAS dans
      une page : Canva l'interdit, et le cadre reste blanc. Seule la forme
@@ -3594,9 +3619,19 @@
     return cfg.API_BASE + data.url;
   }
 
+  /* Ce que le champ contient et ce qui est enregistré ne sont pas la même
+     chose : le lien est remis en forme au moment d'enregistrer. Afficher
+     l'adresse réellement retenue évite de se demander si ça a pris. */
+  function temoinLien(url) {
+    return url
+      ? `<p class="mv-temoin est-ok">✓ Enregistré : <code>${esc(url)}</code></p>`
+      : `<p class="mv-temoin">Aucun lien enregistré — le catalogue s'affichera à partir des pages déposées, ou restera vide.</p>`;
+  }
+
   function renderVitrine() {
     const box = document.getElementById('mvVitrine');
     if (!box) return;
+    normaliserVitrine();
 
     const n = vitrine.nouveautes;
     const cartes = n.length ? n.map((x, i) => `
@@ -3658,6 +3693,7 @@
         <input type="text" id="mvCatEmbed" class="mv-large"
                placeholder="Lien Canva ou Google (facultatif) — collez l'adresse telle quelle"
                value="${esc(vitrine.catEmbed || '')}">
+        ${temoinLien(vitrine.catEmbed)}
         <p class="mv-hint">Avec un lien, le catalogue s'affiche directement : rien à exporter.
           Acceptés : Canva, Google Slides, Docs, Sheets et Drive.
           Le document doit être <b>lisible par toute personne disposant du lien</b>, sinon vos visiteurs verront une page vide.
@@ -3686,6 +3722,7 @@
         <input type="text" id="mvEntEmbed" class="mv-large"
                placeholder="Lien Canva ou Google, catalogue entreprise (facultatif)"
                value="${esc(vitrine.entEmbed || '')}">
+        ${temoinLien(vitrine.entEmbed)}
         <p class="mv-hint">Celui-ci <b>ne part pas sur le site public</b> : il n'apparaît que dans
           Commerce ▸ Catalogue ▸ Catalogue Entreprise, pour les membres connectés.</p>
         ${vitrine.entPdf ? `<p class="mv-pdf-ok">PDF joint.
@@ -4249,6 +4286,7 @@
   }
 
   function renderCatalogues() {
+    normaliserVitrine();
     vueCatalogue('catCitoyens', {
       titre: vitrine.catTitre, desc: vitrine.catDesc,
       embed: vitrine.catEmbed, pdf: vitrine.catPdf, pages: vitrine.catPages,
@@ -4344,6 +4382,62 @@
         </div>` : `<p class="empty-note" style="margin-top:12px;">Rubrique vide — déposez-y un visuel ou un lien.</p>`}
       </div>`).join('');
   }
+
+  /* La même bibliothèque, vue par ceux qui la consultent
+     --------------------------------------------------------------------------
+     Aucun bouton, aucune poignée : ni ajout, ni retrait, ni renommage. Ce n'est
+     pas une question de confiance, c'est une question de clarté — un employé
+     qui vient relire le règlement n'a pas à se demander ce que fait la croix
+     rouge à côté du document. */
+  function renderDocuments() {
+    const box = $('documentsBox');
+    if (!box) return;
+    const kit = entKit().filter(r => (r.items || []).length);
+
+    if (!kit.length) {
+      box.innerHTML = `<div class="panel"><p class="empty-note">
+        Aucun document publié pour l'instant. Les ressources présentées en entretien
+        apparaîtront ici dès que les RH les auront déposées.</p></div>`;
+      return;
+    }
+
+    box.innerHTML = kit.map((r, ri) => `
+      <div class="panel ent-rub">
+        <div class="ent-head">
+          <div>
+            <h3>${esc(r.titre || 'Sans titre')} <span class="mv-cpt">${r.items.length}</span></h3>
+            ${r.note ? `<p class="ent-note">${esc(r.note)}</p>` : ''}
+          </div>
+        </div>
+        <div class="ent-grille">
+          ${r.items.map((it, ii) => it.type === 'lien'
+            ? `<a class="ent-vig est-lien" href="${esc(it.url)}" target="_blank" rel="noopener"
+                  title="${esc(it.titre || it.url)}">
+                 <span class="ent-lien-ic">🔗</span>
+                 <span class="ent-vig-nom">${esc(it.titre || it.url)}</span>
+               </a>`
+            : `<div class="ent-vig" data-doc="voir" data-ri="${ri}" data-ii="${ii}"
+                    title="${esc(it.titre || 'Afficher en grand')}">
+                 <img src="${esc(it.url)}" alt="${esc(it.titre || '')}" loading="lazy">
+                 ${it.titre ? `<span class="ent-vig-nom">${esc(it.titre)}</span>` : ''}
+               </div>`).join('')}
+        </div>
+      </div>`).join('');
+  }
+
+  /* La vue de consultation masque les rubriques vides : ses indices ne
+     correspondent donc pas à ceux du kit complet, et il faut retrouver la
+     bonne rubrique avant d'ouvrir le plein écran. */
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-doc="voir"]');
+    if (!b) return;
+    const visibles = entKit().filter(r => (r.items || []).length);
+    const rub = visibles[+b.dataset.ri];
+    if (!rub) return;
+    const vraiIndex = entKit().indexOf(rub);
+    const item = rub.items[+b.dataset.ii];
+    ouvrirEntretien(vraiIndex, item ? rub.items.indexOf(item) : -1);
+  });
 
   /* --- L'affichage plein écran ---------------------------------------------
      Volontairement nu : pas de cadre, pas de titre par-dessus le document. Ce
@@ -5886,7 +5980,7 @@
     renderVitrine, renderCatalogues, appliquerAccesService, renderAvertissements, compteAvertissements,
     openInvoiceDoc, renderRegles, renderMagasin, renderCommandes, renderStock, renderMagRecap,
     renderComRunner, testerDiscord, renderQuotaService, renderPrimeRecrutement,
-    renderTombola, ticketsDe, renderEntretien,
+    renderTombola, ticketsDe, renderEntretien, renderDocuments,
     totalPrimeRecrutement,
   };
 

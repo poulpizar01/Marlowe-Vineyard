@@ -77,7 +77,9 @@ window.MarloweData = (function () {
     agenda:          { ref: () => agendaData,          render: [call('renderAgendaList'), call('renderWeekGrid')] },
     entretien:       { ref: () => entretienKit,
                        render: [() => { const a = window.MarloweActions;
-                                        if (a) a.renderEntretien(); }] },
+                                        /* la page RH où l'on range, et la page
+                                           Personnel où l'on consulte */
+                                        if (a) { a.renderEntretien(); a.renderDocuments(); } }] },
     tombola:         { ref: () => tombolaParticipants,
                        render: [() => { const a = window.MarloweActions;
                                         if (a) a.renderTombola(); }] },
