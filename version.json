@@ -1,4 +1,4 @@
 {
-  "v": "1.15.0",
-  "note": "jeu de demonstration chargeable depuis Parametres, compteur d'employes suivis rendu vivant et tickets calcules dans le tableau de bord."
+  "v": "1.16.0",
+  "note": "import d'un registre d'employes colle depuis un tableur, avec rapport avant enregistrement ; cases a cocher des boites de dialogue corrigees."
 }

@@ -611,6 +611,28 @@
   .mv-temoin code{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--or-soft,#B8A47C);
     word-break:break-all;}
 
+  /* --- Import d'une liste d'employés --- */
+  .mv-imp-txt{width:100%;height:190px;resize:vertical;background:rgba(0,0,0,.28);
+    border:1px solid var(--band,#3D372C);border-radius:9px;padding:11px 12px;
+    color:var(--parchment,#EDE3CF);font-family:'IBM Plex Mono',monospace;font-size:11.5px;
+    line-height:1.7;white-space:pre;overflow:auto;}
+  .mv-imp-txt:focus{outline:none;border-color:var(--or,#C9A961);}
+  .mv-imp-c{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--or-soft,#B8A47C);}
+  .mv-imp-rap{display:flex;flex-direction:column;gap:7px;margin:0 0 16px;font-size:12.5px;
+    color:var(--parchment,#EDE3CF);}
+  .mv-imp-rap b{color:var(--or,#C9A961);}
+  .mv-imp-warn{color:var(--muted,#9C9384);border-left:2px solid #8A3540;padding-left:10px;
+    line-height:1.6;}
+  .mv-imp-apercu{border:1px solid var(--band,#3D372C);border-radius:9px;overflow:hidden;margin-bottom:16px;}
+  .mv-imp-apercu table{width:100%;border-collapse:collapse;font-size:11.5px;}
+  .mv-imp-apercu th{text-align:left;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--muted,#9C9384);padding:8px 10px;border-bottom:1px solid var(--band,#3D372C);}
+  .mv-imp-apercu td{padding:7px 10px;border-bottom:1px solid rgba(61,55,44,.5);
+    color:var(--parchment,#EDE3CF);}
+  .mv-imp-apercu tr:last-child td{border-bottom:none;}
+  .mv-imp-reste{padding:8px 10px;font-size:11.5px;color:var(--muted,#9C9384);
+    background:rgba(0,0,0,.18);}
+
   /* --- Kit d'entretien --- */
   .ent-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;}
   .ent-head h3{margin:0;}

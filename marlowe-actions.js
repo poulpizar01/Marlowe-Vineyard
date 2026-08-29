@@ -255,6 +255,221 @@
     if (label) label.textContent = 'Recruteurs de la semaine';
   }
 
+  /* ==========================================================================
+     IMPORT D'UNE LISTE D'EMPLOYÉS
+     --------------------------------------------------------------------------
+     Le registre se tient ailleurs — un tableur partagé — et se recopiait à la
+     main, ligne par ligne. Quatre-vingt-dix fiches saisies une par une, ce sont
+     quatre-vingt-dix occasions de se tromper de chiffre.
+
+     On colle le tableau tel quel. Les colonnes attendues, dans l'ordre :
+
+         rang · nom · poste · date · n° civil · téléphone · RIB · Discord · recruteur
+
+     Le rang en tête est facultatif : s'il est là on l'ignore, il se déduit déjà
+     du poste. Les colonnes se séparent par des tabulations — ce que produit une
+     copie depuis un tableur — ou à défaut par deux espaces ou plus.
+
+     Rien n'est enregistré sans un rapport préalable : combien de fiches, quels
+     doublons, quels postes non reconnus. Une importation qui se contenterait de
+     dire « c'est fait » ne serait pas vérifiable.
+     ========================================================================== */
+
+  /* Les postes s'écrivent d'une main à l'autre : « Ouvrier Viticole »,
+     « Responsable Commercial », « Assistants de Magasin ». Le panel, lui, a une
+     orthographe unique par poste — sinon les primes, les quotas et les droits
+     ne retrouvent plus leurs petits. */
+  const POSTE_SYNONYMES = {
+    'patron': 'Patron',
+    'co patron': 'Co-Patron',
+    'resp general': 'Responsable Général', 'resp generale': 'Responsable Général',
+    'drh': 'DRH',
+    'resp commercial': 'Resp. Commercial', 'resp commerciale': 'Resp. Commercial',
+    'resp magasin': 'Resp. Magasin',
+    'resp runner': 'Resp. Runner',
+    'rh': 'RH',
+    'commercial': 'Commercial', 'commerciale': 'Commercial',
+    'assistant e magasin': 'Assistant(e) magasin',
+    'assistant magasin': 'Assistant(e) magasin',
+    'assistants de magasin': 'Assistant(e) magasin',
+    'assistante de magasin': 'Assistant(e) magasin',
+    'assistant de magasin': 'Assistant(e) magasin',
+    'vendeur': 'Vendeur', 'vendeuse': 'Vendeuse',
+    'runner': 'Runner',
+    'saisonnier': 'Saisonnier', 'saisonniere': 'Saisonnier',
+    'ouvrier viticole': 'Ouvrier viticole', 'ouvriere viticole': 'Ouvrier viticole',
+    'chef de culture': 'Chef de culture',
+  };
+
+  function posteCanonique(brut) {
+    const k = clefPoste(brut);
+    return POSTE_SYNONYMES[k] || null;
+  }
+
+  function decouperLigne(ligne) {
+    /* Une copie de tableur sépare par tabulations. Un copier-coller depuis un
+       document mis en forme peut n'avoir que des espaces : on l'accepte, mais
+       seulement à partir de deux, sinon « Chef de culture » se couperait en
+       trois colonnes. */
+    let parts = ligne.split('\t').map(x => x.trim());
+    if (parts.length < 5) parts = ligne.trim().split(/ {2,}/).map(x => x.trim());
+    return parts;
+  }
+
+  function analyserListeRH(texte) {
+    const lignes = String(texte || '').split(/\r?\n/);
+    const fiches = [], rejets = [], postesInconnus = new Set();
+    const vus = new Set();
+
+    lignes.forEach((brut, n) => {
+      if (!brut.trim()) return;
+      let p = decouperLigne(brut);
+
+      /* Le rang en tête : un ou deux chiffres seuls. On le retire — mais
+         seulement s'il reste assez de colonnes derrière, sinon on aurait
+         mangé le numéro civil de quelqu'un. */
+      if (/^\d{1,2}$/.test(p[0]) && p.length >= 8) p = p.slice(1);
+
+      const [nom, poste, date, civil, tel, rib, discord, rec] = p;
+      if (!nom || !poste) { rejets.push({ n: n + 1, brut, raison: 'nom ou poste manquant' }); return; }
+
+      const canon = posteCanonique(poste);
+      if (!canon) postesInconnus.add(poste);
+
+      const id = String(civil || '').trim() || String(Math.floor(100000 + Math.random() * 900000));
+      if (vus.has(id)) { rejets.push({ n: n + 1, brut, raison: `n° civil ${id} déjà dans la liste` }); return; }
+      vus.add(id);
+
+      fiches.push({
+        id, name: nom.trim(),
+        poste: canon || poste.trim(),
+        init: initialsOf(nom.trim()),
+        tier: TIER_BY_POSTE[canon] || 'clay',
+        dept: DEPT_BY_POSTE[canon] || 'terrain',
+        rec: (rec || '—').trim(),
+        date: /^\d{2}\/\d{2}\/\d{4}$/.test(String(date || '').trim()) ? date.trim() : todayFR(),
+        status: 'actif',
+        phone: (tel || '').trim(),
+        rib: (rib || '').trim(),
+        discord: (discord || '').trim(),
+      });
+    });
+
+    return { fiches, rejets, postesInconnus: [...postesInconnus] };
+  }
+
+  async function importerListeRH() {
+    ensureDialog();
+    const d = dlg.querySelector('.mv-dlg');
+    d.style.maxWidth = '720px';
+    d.innerHTML = `
+      <h3>Importer une liste d'employés</h3>
+      <p>Collez le tableau tel qu'il sort de votre registre. Colonnes attendues, dans l'ordre :<br>
+         <code class="mv-imp-c">rang · nom · poste · date · n° civil · téléphone · RIB · Discord · recruteur</code><br>
+         Le rang en tête est facultatif. Les lignes vides sont ignorées.</p>
+      <textarea id="mvImpTxt" class="mv-imp-txt" spellcheck="false"
+        placeholder="16&#9;Miguel Raconter&#9;Saisonnier&#9;29/08/2026&#9;349438&#9;555-037-040&#9;520926&#9;1043821595245940756&#9;Julio cortes"></textarea>
+      <div class="mv-dlg-btns">
+        <button data-no>Annuler</button>
+        <button data-yes class="go">Analyser</button>
+      </div>`;
+    dlg.style.display = 'flex';
+
+    const texte = await new Promise(r => {
+      resolver = r;
+      d.querySelector('[data-no]').onclick = () => close(null);
+      d.querySelector('[data-yes]').onclick = () => close(($('mvImpTxt') || {}).value || '');
+    });
+    if (texte === null) { d.style.maxWidth = ''; return; }
+
+    const { fiches, rejets, postesInconnus } = analyserListeRH(texte);
+    if (!fiches.length) {
+      d.style.maxWidth = '';
+      alert("Aucune fiche n'a pu être lue.\n\nVérifiez que les colonnes sont séparées par des tabulations "
+          + "— c'est ce que produit une copie depuis un tableur.");
+      return;
+    }
+
+    const existants = new Set(rhRosterData.map(e => String(e.id)));
+    const dejaLa = fiches.filter(f => existants.has(String(f.id))).length;
+
+    /* La première étape a refermé la boîte en se résolvant : il faut la
+       rouvrir pour la seconde, sinon le rapport se construit dans le vide et
+       le bouton « Analyser » semble ne rien faire. */
+    ensureDialog();
+    const d2 = dlg.querySelector('.mv-dlg');
+    d2.style.maxWidth = '720px';
+    dlg.style.display = 'flex';
+    d2.innerHTML = `
+      <h3>${fiches.length} fiche${fiches.length > 1 ? 's' : ''} lue${fiches.length > 1 ? 's' : ''}</h3>
+      <p>Vérifiez avant d'enregistrer.</p>
+      <div class="mv-imp-rap">
+        <div><b>${fiches.length}</b> fiche(s) reconnue(s)</div>
+        ${rejets.length ? `<div class="mv-imp-warn"><b>${rejets.length}</b> ligne(s) écartée(s) —
+           ${esc(rejets.slice(0, 4).map(r => `ligne ${r.n} : ${r.raison}`).join(' · '))}${
+           rejets.length > 4 ? ' …' : ''}</div>` : ''}
+        ${postesInconnus.length ? `<div class="mv-imp-warn">Poste(s) non reconnu(s), gardé(s) tels quels :
+           ${esc(postesInconnus.join(', '))}</div>` : ''}
+        ${dejaLa ? `<div class="mv-imp-warn"><b>${dejaLa}</b> n° civil déjà présent(s) dans le registre</div>` : ''}
+      </div>
+      <div class="mv-imp-apercu">
+        <table>
+          <thead><tr><th>Nom</th><th>Poste</th><th>Arrivée</th><th>Civil</th><th>Recruteur</th></tr></thead>
+          <tbody>${fiches.slice(0, 6).map(f => `<tr>
+            <td>${esc(f.name)}</td><td>${esc(f.poste)}</td><td>${esc(f.date)}</td>
+            <td>${esc(f.id)}</td><td>${esc(f.rec)}</td></tr>`).join('')}</tbody>
+        </table>
+        ${fiches.length > 6 ? `<div class="mv-imp-reste">…et ${fiches.length - 6} autre(s)</div>` : ''}
+      </div>
+      <label class="mv-reset-l"><input type="radio" name="mvImpMode" value="remplacer" checked>
+        <span>Remplacer le registre (${rhRosterData.length} fiche(s) actuelle(s) effacée(s))</span></label>
+      <label class="mv-reset-l"><input type="radio" name="mvImpMode" value="ajouter">
+        <span>Ajouter au registre, en sautant les n° civils déjà connus</span></label>
+      <div class="mv-dlg-btns">
+        <button data-no>Annuler</button>
+        <button data-yes class="go">Enregistrer</button>
+      </div>`;
+
+    const mode = await new Promise(r => {
+      resolver = r;
+      d2.querySelector('[data-no]').onclick = () => close(null);
+      d2.querySelector('[data-yes]').onclick = () => {
+        const c = d2.querySelector('input[name="mvImpMode"]:checked');
+        close(c ? c.value : 'remplacer');
+      };
+    });
+    d2.style.maxWidth = '';
+    if (!mode) return;
+
+    let ajoutees = 0;
+    if (mode === 'remplacer') {
+      rhRosterData.length = 0;
+      fiches.forEach(f => rhRosterData.push(f));
+      ajoutees = fiches.length;
+    } else {
+      const connus = new Set(rhRosterData.map(e => String(e.id)));
+      fiches.forEach(f => {
+        if (connus.has(String(f.id))) return;
+        rhRosterData.push(f);
+        connus.add(String(f.id));
+        ajoutees++;
+      });
+    }
+
+    /* Le registre arrive dans l'ordre du tableur ; on le range par date
+       d'arrivée, du plus récent au plus ancien, comme le reste du panel. */
+    rhRosterData.sort((a, b) => {
+      const da = parseFR(a.date), db = parseFR(b.date);
+      return (db ? db.getTime() : 0) - (da ? da.getTime() : 0);
+    });
+
+    recomputeRecruiters();
+    refreshEffectifCount();
+    D().note(`a importé ${ajoutees} fiche(s) employé`);
+    D().saveMany(['rhRoster', 'rhRecruiters']);
+    toast(`${ajoutees} fiche(s) enregistrée(s).`);
+  }
+
   async function addEmployee() {
     const name = val('newEmpName');
     if (!name) { toast('Indiquez le nom de l\'employé.'); $('newEmpName') && $('newEmpName').focus(); return; }
@@ -3527,9 +3742,20 @@
       .j-txt b{color:var(--parchment,#EDE3CF);font-weight:600;}
       .j-time{font-size:11px;color:var(--or-soft,#8E7C4E);white-space:nowrap;}
 
-      .mv-reset-l{display:flex;align-items:center;gap:10px;padding:7px 0;font-size:13px;
+      /* La règle générale « .mv-dlg label » met les libellés en petites
+         capitales espacées, empilées — parfait pour un champ de saisie, illisible
+         pour une case à cocher. Elle est plus spécifique que .mv-reset-l seule :
+         il faut donc nommer les deux pour reprendre la main. */
+      .mv-dlg label.mv-reset-l, .mv-reset-l{display:flex;align-items:center;gap:10px;
+        padding:7px 0;margin:0;font-size:13px;letter-spacing:normal;text-transform:none;
         color:var(--parchment,#EDE3CF);cursor:pointer;}
-      .mv-reset-l input{width:15px;height:15px;accent-color:var(--or,#C9A961);flex-shrink:0;}
+      /* Même combat pour la case elle-même : « .mv-dlg input » lui donne
+         width:100%, ce qui la fait occuper toute la ligne et rejette le texte
+         hors de la boîte. À spécificité égale c'est la feuille la plus récente
+         qui gagne — et c'est la sienne. On monte donc d'un cran. */
+      .mv-dlg label.mv-reset-l input, .mv-reset-l input{
+        width:15px;height:15px;min-width:15px;accent-color:var(--or,#C9A961);
+        flex-shrink:0;margin:0;}
       .mv-reset-n{font-size:11.5px;color:var(--muted,#9C9384);line-height:1.6;
         margin-top:14px;padding-top:12px;border-top:1px solid var(--band,#3D372C);}
 
@@ -3605,6 +3831,7 @@
 
     const on = (id, fn) => { const e = $(id); if (e) e.addEventListener('click', fn); };
     on('addEmpBtn', addEmployee);
+    on('impEmpBtn', importerListeRH);
     on('absBtn', declareAbsence);
     on('blAddBtn', addBlacklist);
     on('addClientBtn', addClient);
@@ -6394,7 +6621,7 @@
     verifierVersion, battementPresence, renderPresence, setZoom, toggleFullscreen,
     renderQuotas3, renderJournal, appliquerLectureSeule, remplirVides, repartirDeZero,
     renderVitrine, renderCatalogues, appliquerAccesService, renderAvertissements, compteAvertissements,
-    openInvoiceDoc, renderRegles, chargerDemo, renderMagasin, renderCommandes, renderStock, renderMagRecap,
+    openInvoiceDoc, renderRegles, chargerDemo, importerListeRH, analyserListeRH, renderMagasin, renderCommandes, renderStock, renderMagRecap,
     renderComRunner, testerDiscord, renderQuotaService, renderPrimeRecrutement,
     renderTombola, ticketsDe, renderEntretien, renderDocuments,
     railConstruire, railSynchroniser, allerA,
