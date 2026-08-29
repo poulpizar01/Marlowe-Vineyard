@@ -331,45 +331,84 @@
     return String(texte || '').split(/[\t\r\n]+/).map(x => x.trim()).filter(x => x !== '');
   }
 
-  function estFormatColle(texte) {
-    const t = jetonsPlats(texte);
-    if (t.length < 6) return false;
-    let testes = 0, reconnus = 0;
-    for (let i = 2; i < t.length; i += 3) {
-      testes++;
-      const m = t[i].match(RX_POSTE_DATE);
-      if (m && posteCanonique(m[1])) reconnus++;
-    }
-    return testes >= 2 && reconnus / testes >= 0.6;
+  /* Ce format arrive dans le presse-papier sous des habillages très variables :
+     le n° civil et le nom parfois sur la même ligne séparés par une tabulation,
+     parfois par une simple espace ; le poste sur sa propre ligne ; la date
+     encore après, ou collée au poste. Compter les colonnes ne mène nulle part.
+
+     Ce qui, en revanche, ne varie jamais : le n° civil. C'est un nombre nu de
+     quatre à sept chiffres, et rien d'autre dans ce tableau n'y ressemble — ni
+     un nom, ni un poste, ni une date. On s'en sert donc comme repère : chaque
+     n° civil ouvre une fiche, et tout ce qui suit lui appartient jusqu'au
+     suivant. Le lecteur devient insensible à la mise en page. */
+  const RX_ID = /^\d{4,7}$/;
+  const RX_DATE_SEULE = /^(\d{2}\/\d{2}\/\d{4}|-|—)$/;
+
+  function jetonsRegistre(texte) {
+    return jetonsPlats(texte).flatMap(x => {
+      /* « 378084 Antonio Gonzalez » sur une seule ligne : on détache le
+         numéro, puisqu'un nom ne commence jamais par sept chiffres. */
+      const m = x.match(/^(\d{4,7})\s+(\S.*)$/);
+      return m ? [m[1], m[2]] : [x];
+    });
   }
 
-  function analyserColle(texte) {
-    const t = jetonsPlats(texte);
+  function estFormatRegistre(texte) {
+    const t = jetonsRegistre(texte);
+    const ids = t.filter(x => RX_ID.test(x)).length;
+    const postes = t.filter(x => posteCanonique(x) || (x.match(RX_POSTE_DATE)
+                      && posteCanonique(x.match(RX_POSTE_DATE)[1]))).length;
+    /* Autant de postes reconnus que de numéros, et au moins deux de chaque :
+       aucune autre disposition ne produit cet équilibre. */
+    return ids >= 2 && postes >= 2 && Math.abs(ids - postes) <= Math.max(1, ids * 0.2);
+  }
+
+  function analyserRegistre(texte) {
+    const t = jetonsRegistre(texte);
     const fiches = [], rejets = [], postesInconnus = new Set();
     const vus = new Set();
 
-    for (let i = 0; i + 2 < t.length; i += 3) {
-      const civil = t[i], nom = t[i + 1], reste = t[i + 2];
-      const rang = Math.floor(i / 3) + 1;
+    const debuts = [];
+    t.forEach((x, i) => { if (RX_ID.test(x)) debuts.push(i); });
 
-      if (!/^\d+$/.test(civil)) {
-        rejets.push({ n: rang, brut: `${civil} · ${nom} · ${reste}`,
-                      raison: `« ${civil} » n'est pas un n° civil` });
-        continue;
+    debuts.forEach((d, k) => {
+      const fin = k + 1 < debuts.length ? debuts[k + 1] : t.length;
+      const civil = t[d];
+      const suite = t.slice(d + 1, fin);
+      const rang = k + 1;
+
+      if (!suite.length) {
+        rejets.push({ n: rang, brut: civil, raison: 'aucun nom après le n° civil' });
+        return;
       }
 
-      const m = reste.match(RX_POSTE_DATE);
-      const poste = m ? m[1].trim() : reste.trim();
-      /* Un tiret veut dire « on ne sait pas ». Mettre la date du jour serait
-         inventer une information — on laisse la case parlante et vide. */
-      const date = (m && m[2] !== '-') ? m[2] : '—';
+      const nom = suite[0];
+      const reste = suite.slice(1);
+
+      let poste = '', date = '—';
+      if (reste.length) {
+        const colle = reste[0].match(RX_POSTE_DATE);
+        if (colle && posteCanonique(colle[1])) {
+          poste = colle[1].trim();
+          date = colle[2] === '-' ? '—' : colle[2];
+        } else {
+          poste = reste[0].trim();
+          const suivant = reste.find(x => RX_DATE_SEULE.test(x));
+          if (suivant) date = (suivant === '-' ? '—' : suivant);
+        }
+      }
+
+      if (!poste) {
+        rejets.push({ n: rang, brut: `${civil} · ${nom}`, raison: 'poste manquant' });
+        return;
+      }
 
       const canon = posteCanonique(poste);
       if (!canon) postesInconnus.add(poste);
 
       if (vus.has(civil)) {
         rejets.push({ n: rang, brut: nom, raison: `n° civil ${civil} déjà dans la liste` });
-        continue;
+        return;
       }
       vus.add(civil);
 
@@ -382,28 +421,30 @@
         rec: '—', date, status: 'actif',
         phone: '', rib: '', discord: '',
       });
-    }
-
-    /* Un reliquat de un ou deux champs signale un tableau tronqué. */
-    const reste = t.length % 3;
-    if (reste) rejets.push({ n: Math.floor(t.length / 3) + 1, brut: t.slice(-reste).join(' · '),
-                             raison: 'fiche incomplète en fin de collage' });
+    });
 
     return { fiches, rejets, postesInconnus: [...postesInconnus] };
   }
 
   function decouperLigne(ligne) {
-    /* Une copie de tableur sépare par tabulations. Un copier-coller depuis un
-       document mis en forme peut n'avoir que des espaces : on l'accepte, mais
-       seulement à partir de deux, sinon « Chef de culture » se couperait en
-       trois colonnes. */
-    let parts = ligne.split('\t').map(x => x.trim());
-    if (parts.length < 5) parts = ligne.trim().split(/ {2,}/).map(x => x.trim());
-    return parts;
+    /* La tabulation fait foi dès qu'elle sépare quoi que ce soit : la version
+       précédente exigeait cinq colonnes avant de la croire, et retombait sinon
+       sur les espaces — qui ne séparent rien dans « 378084⇥Antonio Gonzalez ».
+       Deux colonnes tabulées sont deux colonnes. */
+    const parTab = ligne.split('\t');
+    if (parTab.length >= 2) return parTab.map(x => x.trim());
+    /* Sans tabulation, on accepte deux espaces ou plus — jamais une seule,
+       sinon « Chef de culture » se couperait en trois. */
+    return ligne.trim().split(/ {2,}/).map(x => x.trim());
   }
 
+  /* L'ordre de ces deux essais compte. Le lecteur à repères est le plus
+     tolérant : il passe en premier, et il a été vérifié qu'il ne revendique
+     PAS le format long à neuf colonnes — dans celui-là, les RIB font autant de
+     nombres à six chiffres que les n° civils, et l'équilibre entre repères et
+     postes se rompt franchement. C'est ce déséquilibre qui l'écarte. */
   function analyserListeRH(texte) {
-    if (estFormatColle(texte)) return analyserColle(texte);
+    if (estFormatRegistre(texte)) return analyserRegistre(texte);
 
     const lignes = String(texte || '').split(/\r?\n/);
     const fiches = [], rejets = [], postesInconnus = new Set();
@@ -6778,7 +6819,7 @@
     verifierVersion, battementPresence, renderPresence, setZoom, toggleFullscreen,
     renderQuotas3, renderJournal, appliquerLectureSeule, remplirVides, repartirDeZero,
     renderVitrine, renderCatalogues, appliquerAccesService, renderAvertissements, compteAvertissements,
-    openInvoiceDoc, renderRegles, chargerDemo, importerListeRH, analyserListeRH, modifierEmploye, renderMagasin, renderCommandes, renderStock, renderMagRecap,
+    openInvoiceDoc, renderRegles, chargerDemo, importerListeRH, analyserListeRH, modifierEmploye, estFormatRegistre, renderMagasin, renderCommandes, renderStock, renderMagRecap,
     renderComRunner, testerDiscord, renderQuotaService, renderPrimeRecrutement,
     renderTombola, ticketsDe, renderEntretien, renderDocuments,
     railConstruire, railSynchroniser, allerA,
