@@ -229,6 +229,11 @@
   .page-head-row{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap;margin-bottom:22px;}
   .prod-switcher{display:flex;align-items:center;gap:10px;}
   .prod-switcher label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;}
+  .prod-switcher[hidden]{display:none;}
+  .mag-ligne-emp{cursor:pointer;transition:background .15s;}
+  .mag-ligne-emp:hover{background:rgba(201,169,97,.07);}
+  .service-pied{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:12px;flex-wrap:wrap;}
+  .service-pied button[hidden]{display:none;}
   .prod-switcher select{background:var(--oak);border:1px solid var(--band);border-radius:9px;padding:9px 12px;color:var(--parchment);font-family:'Inter';font-size:12.5px;backdrop-filter:blur(6px);}
 
   .prod-hero{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;}
@@ -1330,7 +1335,7 @@
           <h1 class="page-title">Ma semaine</h1>
           <p class="page-sub">Espace personnel — ton quota, ta récompense, ton prochain palier.</p>
         </div>
-        <div class="prod-switcher">
+        <div class="prod-switcher" id="prodSwitcher" hidden>
           <label>Voir en tant que</label>
           <select id="prodEmployeeSelect"></select>
         </div>
@@ -1346,7 +1351,10 @@
           <thead><tr><th>Date</th><th>Heure de prise de service</th><th>Heure de fin de service</th><th class="num">Durée</th></tr></thead>
           <tbody id="serviceHistoryBody"></tbody>
         </table>
-        <p class="empty-note" style="margin-top:12px;">Total heures cette semaine : <b id="serviceTotal" style="color:var(--or);">0h00</b></p>
+        <div class="service-pied">
+          <p class="empty-note" style="margin:0;">Total heures cette semaine : <b id="serviceTotal" style="color:var(--or);">0h00</b></p>
+          <button class="btn" id="serviceReset" hidden>↺ Remettre à zéro</button>
+        </div>
       </div>
 
       <div class="panel prod-hero">
@@ -1357,7 +1365,7 @@
             <div class="prod-grade"><span class="grade-pill" id="prodGradePill">—</span></div>
           </div>
         </div>
-        <div class="prod-week">Semaine 34 · du 17 au 23 août</div>
+        <div class="prod-week" id="prodWeek">—</div>
       </div>
 
       <div class="panel prod-progress-card">
@@ -1379,7 +1387,7 @@
         </div>
       </div>
 
-      <div class="panel">
+      <div class="panel" id="prodHisto">
         <h3>Historique personnel</h3>
         <p class="empty-note">Aucune semaine clôturée pour l'instant. Ton historique de production apparaîtra ici après la première clôture.</p>
       </div>
@@ -2052,7 +2060,11 @@ renderRecruiters();
 
 const rhDeparts = [];
 function renderDeparts(){
-document.getElementById('departCard').innerHTML = rhDeparts.map(w => `
+/* Une entrée sans .rows — vieille donnée écrite à plat — cassait toute la
+   page. On la rattrape au lieu de la laisser tout emporter. */
+document.getElementById('departCard').innerHTML = rhDeparts
+  .map(w => (w && Array.isArray(w.rows)) ? w : {week: (w && w.date) || '—', rows: [w]})
+  .map(w => `
   <div class="week-label">${w.week}</div>
   ${w.rows.map(r => `
     <div class="log-row">

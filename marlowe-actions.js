@@ -3672,10 +3672,17 @@
       [['Solène Bardot', 6], ['Camille Ruiz', 4], ['Diego Marlowe', 3], ['Victor Ansaldi', 2]]
         .forEach(([name, n]) => rec.push({ name, n }));
 
+      /* Les départs sont rangés PAR SEMAINE — {week, rows[]} — et non à plat :
+         le jeu de démonstration écrivait des lignes nues, la page se cassait
+         sur w.rows.map. */
       const dep = D().ref('rhDeparts');
       dep.length = 0;
-      dep.push({ name: 'Paul Estève', poste: 'Vendeur', date: demoDate(12), reason: 'Démission', cls: 'demission' });
-      dep.push({ name: 'Marta Ilic', poste: 'Saisonnier', date: demoDate(31), reason: 'Licenciement', cls: 'licenciement' });
+      dep.push({ week: 'Cette semaine', rows: [
+        { name: 'Paul Estève', poste: 'Vendeur', date: demoDate(12), reason: 'Démission', cls: 'demission' },
+      ] });
+      dep.push({ week: 'Le mois dernier', rows: [
+        { name: 'Marta Ilic', poste: 'Saisonnier', date: demoDate(31), reason: 'Licenciement', cls: 'licenciement' },
+      ] });
 
       const abs = D().ref('rhAbsences');
       abs.length = 0;
@@ -4722,6 +4729,209 @@
   window.MarloweVitrine = vitrine;
 
 
+
+/* ==========================================================================
+   MA SEMAINE — la page ne s'est jamais affichée
+   --------------------------------------------------------------------------
+   Le fichier d'origine construisait la liste des employés UNE FOIS, au moment
+   où le navigateur lisait le script :
+
+       const prodPool = effectifData.filter(e => e.active);
+
+   À cet instant effectifData est vide — il ne se remplit qu'après la réponse
+   du serveur. prodPool restait donc un tableau vide pour toujours : le menu
+   « Voir en tant que » n'avait aucune entrée, renderMaSemaine n'était jamais
+   appelée, et la page affichait « — » quoi qu'il arrive.
+
+   Tout est refait ici, lu au moment de l'affichage et rebranché sur la
+   collection « effectif », qui se redessine à chaque changement.
+
+   Deuxième correction, demandée : le menu « Voir en tant que » ne sert qu'au
+   patron. Un employé arrive directement sur sa propre fiche, sans choix à
+   faire — et sans pouvoir aller lire celle du voisin.
+   ========================================================================== */
+
+  const SEAL_CLASSE = { 'Saisonnier': 'seal-clay', 'Ouvrier Viticole': 'seal-bronze', 'Chef de Culture': 'seal-gold' };
+  const SEAL_ABBR   = { 'Saisonnier': 'SA', 'Ouvrier Viticole': 'OV', 'Chef de Culture': 'CC' };
+
+  /* Comparaison de noms indulgente : la session porte le pseudo Discord, le
+     registre le nom RP. Accents, casse et espaces multiples ne doivent pas
+     empêcher un employé de retrouver sa fiche. */
+  const clefNom = t => String(t || '').toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ').trim();
+
+  function maSemainePatron() {
+    const s = window.MarloweSession;
+    return !s || s.isPatron || s.isOwner;
+  }
+
+  function maSemaineFiches() {
+    return (typeof effectifData !== 'undefined' ? effectifData : []).filter(e => e.active !== false);
+  }
+
+  /* La fiche de la personne connectée, si on arrive à la reconnaître. */
+  function maSemaineMienne() {
+    const s = window.MarloweSession;
+    if (!s || !s.name) return null;
+    const moi = clefNom(s.name);
+    return maSemaineFiches().find(e => clefNom(e.name) === moi) || null;
+  }
+
+  let maSemaineChoix = null;      /* le nom choisi par le patron dans le menu */
+
+  function maSemaineCible() {
+    const fiches = maSemaineFiches();
+    if (!fiches.length) return null;
+    if (!maSemainePatron()) return maSemaineMienne();
+    if (maSemaineChoix) {
+      const f = fiches.find(e => e.name === maSemaineChoix);
+      if (f) return f;
+    }
+    return maSemaineMienne() || fiches[0];
+  }
+
+  function maSemaineVide(message) {
+    const host = $('page-masemaine');
+    if (!host) return;
+    ['prodName', 'prodValue', 'prodLabel', 'prodStatus'].forEach(id => {
+      const el = $(id); if (el) el.textContent = '—';
+    });
+    const bar = $('prodBar'); if (bar) bar.style.width = '0%';
+    const rec = $('prodReward'); if (rec) rec.innerHTML = `<span class="dim">${esc(message)}</span>`;
+    const nxt = $('prodNext'); if (nxt) nxt.innerHTML = '';
+  }
+
+  function renderMaSemaine(nom) {
+    if (!$('prodName')) return;
+    if (nom) maSemaineChoix = nom;
+
+    /* --- le menu, et à qui il s'adresse --- */
+    const wrap = $('prodSwitcher');
+    const sel = $('prodEmployeeSelect');
+    const patron = maSemainePatron();
+    if (wrap) wrap.hidden = !patron;
+    if (sel && patron) {
+      const fiches = maSemaineFiches();
+      const cible = maSemaineCible();
+      sel.innerHTML = fiches.map(e =>
+        `<option value="${esc(e.name)}"${cible && e.name === cible.name ? ' selected' : ''}>${esc(e.name)}</option>`).join('');
+    }
+
+    /* --- la semaine en cours, au lieu d'une date figée dans le fichier --- */
+    const sem = $('prodWeek');
+    if (sem && typeof mondayOf === 'function') {
+      const m = mondayOf(new Date());
+      const d = new Date(m); d.setDate(d.getDate() + 6);
+      sem.textContent = `Semaine ${isoWeek(m)} · du ${frDate(m)} au ${frDate(d)}`;
+    }
+
+    const e = maSemaineCible();
+    if (!e) {
+      maSemaineVide(maSemaineFiches().length
+        ? "Aucune fiche à votre nom dans l'effectif. Demandez aux RH de vérifier l'orthographe de votre nom dans le registre."
+        : "L'effectif est vide : collez la tablette dans Tableau de bord, puis synchronisez l'effectif.");
+      renderMaSemaineHisto(null);
+      return;
+    }
+
+    $('prodName').textContent = e.name;
+    const sealEl = $('prodSeal');
+    if (sealEl) {
+      sealEl.textContent = SEAL_ABBR[e.grade] || '—';
+      sealEl.className = 'prod-seal-big ' + (SEAL_CLASSE[e.grade] || 'seal-clay');
+    }
+    const pill = $('prodGradePill');
+    if (pill) {
+      pill.textContent = e.grade || '—';
+      pill.className = 'grade-pill ' + (typeof gradePillClass === 'function' ? gradePillClass(e.grade) : 'gp-muted');
+    }
+
+    const barils = Number(e.barils) || 0;
+    const quota = Number(e.quota) || 0;
+    const pct = quota > 0 ? Math.min(100, Math.round(barils / quota * 100)) : 0;
+    $('prodValue').innerHTML = `${pct}<span>%</span>`;
+    $('prodLabel').textContent = `${barils.toLocaleString('fr-FR')} / ${quota.toLocaleString('fr-FR')} bouteilles`;
+    const bar = $('prodBar');
+    if (bar) {
+      bar.style.width = pct + '%';
+      bar.className = 'prod-bar-fill' + (pct < 100 && pct >= 50 ? ' warn' : '');
+    }
+
+    const st = $('prodStatus');
+    if (st && typeof statusFor === 'function') {
+      const s = statusFor(e);
+      st.textContent = s.label;
+      st.className = 'status-badge ' + s.cls;
+    }
+
+    const rec = $('prodReward');
+    if (rec) {
+      const lot = (typeof rewardsByGrade === 'object' && rewardsByGrade[e.grade]) || '—';
+      rec.innerHTML = `Si le quota est atteint cette semaine → <b style="color:var(--or);">${esc(lot)}</b>
+        <div class="prod-reward-check ${pct >= 100 ? 'ok' : 'pending'}">${pct >= 100
+          ? '✓ Quota atteint — récompense acquise'
+          : '○ Quota en cours — récompense pas encore débloquée'}</div>`;
+    }
+
+    const nxt = $('prodNext');
+    if (nxt) {
+      if (e.isFinal || !e.promoTarget) {
+        nxt.innerHTML = `<p class="prod-next-title">Vous êtes au <b>grade final</b> de la filière viticole.
+          Continuez de dépasser votre quota pour rester dans le Top 5 de la semaine.</p>`;
+      } else {
+        const reste = Math.max(0, e.promoTarget - barils);
+        nxt.innerHTML = `
+          <p class="prod-next-title">Passage à <b>${esc(e.nextGrade || '—')}</b> à partir de
+            <b>${Number(e.promoTarget).toLocaleString('fr-FR')}</b> bouteilles.</p>
+          ${reste > 0
+            ? `<div class="prod-reward-check pending">○ Encore ${reste.toLocaleString('fr-FR')} bouteilles avant la promotion</div>`
+            : `<div class="prod-reward-check ok">✓ Seuil de promotion dépassé — bascule à la prochaine clôture</div>`}`;
+      }
+    }
+
+    renderMaSemaineHisto(e);
+  }
+
+  /* Le panneau « Historique personnel » affichait une phrase figée qui ne
+     changeait jamais, même une fois des semaines clôturées. Il se remplit
+     maintenant depuis les photographies de clôture. */
+  function renderMaSemaineHisto(e) {
+    const box = $('prodHisto');
+    if (!box) return;
+
+    const semaines = (clotures.weeks || [])
+      .map(w => ({ w, p: (w.production || []).find(x => e && clefNom(x.name) === clefNom(e.name)) }))
+      .filter(x => x.p);
+
+    box.innerHTML = `<h3>Historique personnel</h3>` + (semaines.length ? `
+      <table class="gtable" style="margin-top:12px;">
+        <thead><tr><th>Semaine</th><th>Période</th><th>Grade</th>
+          <th class="num">Production</th><th class="num">Quota</th><th class="num">Atteint</th></tr></thead>
+        <tbody>${semaines.map(({ w, p }) => {
+          const q = Number(p.quota) || 0;
+          const b = Number(p.barils) || 0;
+          const pc = q > 0 ? Math.round(b / q * 100) : 0;
+          return `<tr>
+            <td><b>${esc(w.label)}</b></td>
+            <td class="mono dim">${esc(w.du)} → ${esc(w.au)}</td>
+            <td class="dim">${esc(p.grade || '—')}</td>
+            <td class="num">${b.toLocaleString('fr-FR')}</td>
+            <td class="num dim">${q.toLocaleString('fr-FR')}</td>
+            <td class="num" style="color:${pc >= 100 ? 'var(--vine,#6E8B5D)' : 'var(--muted)'};">${pc} %</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>`
+      : `<p class="empty-note" style="margin-top:10px;">Aucune semaine clôturée pour l'instant.
+           Votre historique de production apparaîtra ici après la première clôture du lundi.</p>`);
+  }
+
+  document.addEventListener('change', e => {
+    if (e.target && e.target.id === 'prodEmployeeSelect') renderMaSemaine(e.target.value);
+  });
+
+  window.renderMaSemaine = renderMaSemaine;
+
 /* ==========================================================================
    PRISE DE SERVICE — réservée aux postes de vente
    --------------------------------------------------------------------------
@@ -4762,6 +4972,35 @@
     const ok = peutPointer();
     panel.hidden = !ok;
     panel.style.display = ok ? '' : 'none';
+
+    /* La remise à zéro est réservée au patron : un employé pourrait sinon
+       effacer ses heures juste avant la clôture, qui est précisément ce qui
+       les compte. La clôture du lundi, elle, remet le compteur à zéro toute
+       seule — ce bouton ne sert qu'aux corrections en cours de semaine. */
+    const btn = $('serviceReset');
+    if (btn) {
+      const s = window.MarloweSession;
+      btn.hidden = !!(s && !s.isPatron && !s.isOwner);
+    }
+  }
+
+  async function reinitialiserService() {
+    const n = (typeof serviceHistory !== 'undefined' ? serviceHistory : []).length;
+    if (!n) { toast('Aucun pointage à effacer.'); return; }
+
+    const ok = await confirmAction('Remettre les heures à zéro',
+      `${n} pointage${n > 1 ? 's' : ''} de la semaine ${n > 1 ? 'seront effacés' : 'sera effacé'}, `
+      + `y compris un service en cours. Le total repart de 0h00.\n\n`
+      + `La clôture du lundi fait déjà cette remise à zéro : ce bouton n'est là que `
+      + `pour corriger une semaine en cours. L'opération ne s'annule pas.`, true);
+    if (!ok) return;
+
+    serviceHistory.length = 0;
+    serviceActive = false;
+    resetServiceButton();
+    D().note('a remis les heures de service à zéro');
+    D().save('serviceHistory');
+    toast('Heures de service remises à zéro.');
   }
 
 /* ==========================================================================
@@ -5038,6 +5277,10 @@
         <span class="mv-saved" id="mvRegSaved">Enregistré ✓</span>
       </div>`;
   }
+
+  document.addEventListener('click', e => {
+    if (e.target.closest('#serviceReset')) { reinitialiserService(); return; }
+  });
 
   document.addEventListener('click', e => {
     if (!e.target.closest('#mvRegSave')) return;
@@ -5894,6 +6137,74 @@
   const commandes = [];   /* {id, date, employe, grade, lignes, total, statut} */
   const stockData = [];   /* {ref, nom, qte, seuil} */
 
+  /* ------------------------------------------------------------------------
+     QUI TIENT LE MAGASIN
+     Le formulaire de bon proposait TOUT le registre : on pouvait établir une
+     commande au nom d'un saisonnier, qui ne vend rien. Seuls les postes de
+     vente apparaissent désormais.
+
+     Et chacun n'y voit que ses propres chiffres : un vendeur ouvre la page sur
+     ses ventes à lui, pas sur le classement de l'équipe. Le patron, le
+     responsable magasin et le responsable commercial gardent la vue d'ensemble
+     et peuvent passer d'un vendeur à l'autre.
+     ------------------------------------------------------------------------ */
+  const POSTES_VENTE = [
+    'Vendeur', 'Vendeuse', 'Commercial',
+    'Resp. Commercial', 'Responsable Commercial',
+    'Resp. Magasin', 'Responsable Magasin',
+    'Assistant(e) magasin', 'Assistant magasin', 'Assistante magasin',
+  ];
+  const VENTE_OK = POSTES_VENTE.map(clefPoste);
+
+  /* Les responsables du magasin et du commerce : eux voient toute l'équipe. */
+  const POSTES_MAG_CHEF = [
+    'Resp. Magasin', 'Responsable Magasin', 'Resp. Commercial', 'Responsable Commercial',
+  ].map(clefPoste);
+
+  function estPosteVente(poste) { return VENTE_OK.includes(clefPoste(poste)); }
+
+  /* L'équipe de vente, telle que le registre RH la décrit. */
+  function equipeMagasin() {
+    const roster = (typeof rhRosterData !== 'undefined') ? rhRosterData : [];
+    return roster
+      .filter(e => (!e.status || e.status === 'actif') && estPosteVente(e.poste))
+      .map(e => ({ nom: e.name, poste: e.poste }));
+  }
+
+  /* La fiche de la personne connectée dans le registre, si on la reconnaît. */
+  function ficheDeSession() {
+    const s = window.MarloweSession;
+    if (!s || !s.name) return null;
+    const moi = clefNom(s.name);
+    return (typeof rhRosterData !== 'undefined' ? rhRosterData : [])
+      .find(e => clefNom(e.name) === moi) || null;
+  }
+
+  function magPrivilegie() {
+    const s = window.MarloweSession;
+    if (!s) return true;                        /* hors connexion : on n'entrave rien */
+    if (s.isPatron || s.isOwner) return true;
+    if ((s.roles || []).some(r => POSTES_MAG_CHEF.includes(clefPoste(r)))) return true;
+    const f = ficheDeSession();
+    return !!(f && POSTES_MAG_CHEF.includes(clefPoste(f.poste)));
+  }
+
+  /* Le nom sous lequel la personne connectée apparaît dans les bons. */
+  function magMoi() {
+    const f = ficheDeSession();
+    if (f) return f.name;
+    const s = window.MarloweSession;
+    return (s && s.name) || '';
+  }
+
+  /* Les bons que la personne connectée a le droit de voir. */
+  function bonsVisibles(liste) {
+    if (magPrivilegie()) return liste;
+    const moi = clefNom(magMoi());
+    return liste.filter(b => clefNom(b.employe) === moi);
+  }
+
+
   const STATUTS = { attente: 'En attente', validee: 'Validée', annulee: 'Annulée' };
   let magFiltre = 'tous';
 
@@ -5929,17 +6240,28 @@
     const arts = magProduits();
     if (!arts.length) { toast("Le catalogue d'articles est vide."); return; }
 
-    const noms = (typeof rhRosterData !== 'undefined' ? rhRosterData : []).map(e => e.name);
-    const moi = (window.MarloweSession && window.MarloweSession.name) || '';
+    const equipe = equipeMagasin();
+    const moi = magMoi();
+    const chef = magPrivilegie();
+
+    /* Un vendeur ne choisit pas au nom de qui il commande : ce serait la porte
+       ouverte aux bons attribués au voisin. Son nom est figé. */
+    const noms = chef ? equipe.map(e => e.nom) : [moi];
     const choisi = noms.includes(moi) ? moi : (noms[0] || moi);
+
+    if (chef && !equipe.length) {
+      toast("Aucun poste de vente dans le registre RH : ajoutez d'abord un vendeur.");
+      return;
+    }
 
     const html = `
       <div class="mv-bon-form">
         <label class="mv-bon-lab">Employé</label>
-        ${noms.length
+        ${chef && noms.length
           ? `<select id="mvBonEmp">${noms.map(n =>
               `<option value="${esc(n)}"${n === choisi ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select>`
-          : `<input type="text" id="mvBonEmp" value="${esc(moi)}">`}
+          : `<input type="text" id="mvBonEmp" value="${esc(choisi)}" readonly
+               title="Le bon est établi à votre nom.">`}
 
         <label class="mv-bon-lab" style="margin-top:16px;">Articles</label>
         <table class="gtable mv-bon-table">
@@ -6102,15 +6424,26 @@
     if (!box) return;
 
     const q = ($('magSearch') && $('magSearch').value || '').toLowerCase().trim();
-    const semaine = bonsDeLaSemaine();
+    /* Les compteurs du haut portent sur ce que la personne a le droit de voir :
+       un vendeur qui lit « 14 bons en attente » dont 12 ne sont pas les siens
+       ne sait pas quoi en faire. */
+    const mesBons = bonsVisibles(commandes);
+    const semaine = bonsVisibles(bonsDeLaSemaine());
     const validees = semaine.filter(b => b.statut === 'validee');
 
     const set = (id, v) => { const e = $(id); if (e) e.textContent = v; };
-    set('magAttente', commandes.filter(b => b.statut === 'attente').length);
+    set('magAttente', mesBons.filter(b => b.statut === 'attente').length);
     set('magValidees', validees.length);
     set('magCA', validees.reduce((s, b) => s + totalBon(b), 0).toLocaleString('fr-FR') + ' $');
 
-    const liste = commandes.filter(b => {
+    const sub = document.querySelector('#page-magcommandes .page-sub');
+    if (sub) {
+      sub.textContent = magPrivilegie()
+        ? 'Les commandes passées au magasin — en attente, validées, annulées.'
+        : `Vos commandes — en attente, validées, annulées. Vous ne voyez que les bons établis à votre nom.`;
+    }
+
+    const liste = mesBons.filter(b => {
       if (magFiltre !== 'tous' && b.statut !== magFiltre) return false;
       if (!q) return true;
       return (b.employe + b.id + b.lignes.map(l => l.nom).join(' ')).toLowerCase().includes(q);
@@ -6118,7 +6451,9 @@
 
     if (!liste.length) {
       box.innerHTML = `<div class="panel"><p class="empty-note" style="text-align:center;padding:22px;">
-        ${commandes.length ? 'Aucun bon ne correspond à ce filtre.' : 'Aucun bon de commande — créez le premier avec « + Nouveau bon ».'}
+        ${mesBons.length ? 'Aucun bon ne correspond à ce filtre.'
+          : magPrivilegie() ? 'Aucun bon de commande — créez le premier avec « + Nouveau bon ».'
+          : 'Aucun bon à votre nom pour le moment.'}
       </p></div>`;
       return;
     }
@@ -6231,23 +6566,39 @@
 
   /* --- Récap ---------------------------------------------------------------- */
 
-  function renderMagRecap() {
-    const box = $('magRecap');
-    const top = $('magTopProduits');
-    if (!box) return;
+  /* --- Récap : l'équipe, ou une personne ------------------------------------
+     La page ne montrait qu'un classement d'équipe. Un vendeur y cherchait sa
+     ligne au milieu des autres, et n'avait nulle part le détail de SES ventes.
+     Il ouvre maintenant la page sur sa propre fiche ; seuls le patron et les
+     responsables voient l'équipe et peuvent passer d'un vendeur à l'autre.
+     -------------------------------------------------------------------------- */
+  let magRecapChoix = '';        /* '' = toute l'équipe */
 
-    const semaine = bonsDeLaSemaine().filter(b => b.statut === 'validee');
+  function magRecapCible() {
+    if (!magPrivilegie()) return magMoi();
+    return magRecapChoix;
+  }
 
-    if (!semaine.length) {
-      box.innerHTML = `<h3>Cette semaine</h3>
-        <p class="empty-note" style="margin-top:10px;">Aucun bon validé cette semaine.</p>`;
-      if (top) top.style.display = 'none';
-      return;
-    }
+  function magSelecteur() {
+    if (!magPrivilegie()) return '';
+    const equipe = equipeMagasin();
+    const cible = magRecapCible();
+    return `
+      <div class="prod-switcher" style="margin-bottom:16px;">
+        <label>Voir</label>
+        <select id="magQui">
+          <option value=""${cible ? '' : ' selected'}>Toute l'équipe</option>
+          ${equipe.map(e => `<option value="${esc(e.nom)}"${
+            clefNom(e.nom) === clefNom(cible) ? ' selected' : ''}>${esc(e.nom)}</option>`).join('')}
+        </select>
+      </div>`;
+  }
 
+  /* Les chiffres d'un jeu de bons : par personne et par produit. */
+  function magDepouiller(bons) {
     const parEmp = new Map();
     const parProduit = new Map();
-    semaine.forEach(b => {
+    bons.forEach(b => {
       const e = parEmp.get(b.employe) || { nom: b.employe, grade: b.grade, bons: 0, ca: 0, articles: 0 };
       e.bons++; e.ca += totalBon(b);
       e.articles += b.lignes.reduce((s, l) => s + l.qte, 0);
@@ -6259,16 +6610,101 @@
         parProduit.set(l.nom, p);
       });
     });
+    return { parEmp, parProduit };
+  }
 
+  function magTableauProduits(parProduit, titre) {
+    const prods = [...parProduit.values()].sort((a, b) => b.qte - a.qte).slice(0, 10);
+    if (!prods.length) return '';
+    return `
+      <h3>${esc(titre)}</h3>
+      <table class="gtable" style="margin-top:12px;">
+        <thead><tr><th>Produit</th><th class="num">Quantité</th><th class="num">Chiffre</th></tr></thead>
+        <tbody>${prods.map(p => `
+          <tr><td><b>${esc(p.nom)}</b></td>
+            <td class="num">${p.qte.toLocaleString('fr-FR')}</td>
+            <td class="num dim">${p.ca.toLocaleString('fr-FR')} $</td></tr>`).join('')}</tbody>
+      </table>`;
+  }
+
+  function renderMagRecap() {
+    const box = $('magRecap');
+    const top = $('magTopProduits');
+    if (!box) return;
+
+    const chef = magPrivilegie();
+    const cible = magRecapCible();
+    const semaine = bonsDeLaSemaine().filter(b => b.statut === 'validee');
+
+    const sub = document.querySelector('#page-magrecap .page-sub');
+    if (sub) {
+      sub.textContent = chef
+        ? "Ce que chacun a vendu cette semaine, calculé depuis les bons validés."
+        : "Ce que vous avez vendu cette semaine, calculé depuis vos bons validés.";
+    }
+
+    /* ---------- la fiche d'une personne ---------- */
+    if (cible) {
+      const siens = semaine.filter(b => clefNom(b.employe) === clefNom(cible));
+      const { parProduit } = magDepouiller(siens);
+      const ca = siens.reduce((s, b) => s + totalBon(b), 0);
+      const articles = siens.reduce((s, b) => s + b.lignes.reduce((t, l) => t + l.qte, 0), 0);
+      const totalEquipe = semaine.reduce((s, b) => s + totalBon(b), 0);
+      const fiche = equipeMagasin().find(e => clefNom(e.nom) === clefNom(cible));
+
+      box.innerHTML = magSelecteur() + `
+        <h3>${esc(fiche ? fiche.nom : cible)}
+          <span class="mv-unit">${esc(fiche ? fiche.poste : '—')}</span></h3>` + (siens.length ? `
+        <div class="metric-grid-3" style="margin:14px 0 4px;">
+          <div class="metric-card"><div class="metric-label">Bons validés</div>
+            <div class="metric-value">${siens.length}</div><div class="metric-sub">cette semaine</div></div>
+          <div class="metric-card"><div class="metric-label">Articles vendus</div>
+            <div class="metric-value">${articles.toLocaleString('fr-FR')}</div><div class="metric-sub">toutes références</div></div>
+          <div class="metric-card"><div class="metric-label">Chiffre</div>
+            <div class="metric-value">${ca.toLocaleString('fr-FR')} $</div>
+            <div class="metric-sub">${totalEquipe ? Math.round(ca / totalEquipe * 100) : 0} % du magasin</div></div>
+        </div>
+
+        <table class="gtable" style="margin-top:16px;">
+          <thead><tr><th>Bon</th><th>Date</th><th class="num">Articles</th><th class="num">Total</th></tr></thead>
+          <tbody>${siens.map(b => `
+            <tr>
+              <td><b>${esc(b.id)}</b></td>
+              <td class="mono dim">${esc(b.date)}</td>
+              <td class="num dim">${b.lignes.reduce((t, l) => t + l.qte, 0)}</td>
+              <td class="num" style="color:var(--prime,#D4763D);">${totalBon(b).toLocaleString('fr-FR')} $</td>
+            </tr>`).join('')}</tbody>
+        </table>`
+        : `<p class="empty-note" style="margin-top:12px;">Aucun bon validé cette semaine${
+             chef ? ' pour cette personne' : ''}.</p>`);
+
+      if (top) {
+        const html = magTableauProduits(parProduit, chef && cible !== magMoi()
+          ? 'Ce qu\'il ou elle a le plus vendu' : 'Ce que vous vendez le plus');
+        top.style.display = html ? '' : 'none';
+        top.innerHTML = html;
+      }
+      return;
+    }
+
+    /* ---------- l'équipe entière ---------- */
+    if (!semaine.length) {
+      box.innerHTML = magSelecteur() + `<h3>Cette semaine</h3>
+        <p class="empty-note" style="margin-top:10px;">Aucun bon validé cette semaine.</p>`;
+      if (top) top.style.display = 'none';
+      return;
+    }
+
+    const { parEmp, parProduit } = magDepouiller(semaine);
     const emps = [...parEmp.values()].sort((a, b) => b.ca - a.ca);
     const total = emps.reduce((s, e) => s + e.ca, 0);
 
-    box.innerHTML = `
+    box.innerHTML = magSelecteur() + `
       <h3>Cette semaine <span class="mv-unit">${semaine.length} bon${semaine.length > 1 ? 's' : ''} · ${total.toLocaleString('fr-FR')} $</span></h3>
       <table class="gtable" style="margin-top:12px;">
         <thead><tr><th>Employé</th><th>Poste</th><th class="num">Bons</th><th class="num">Articles</th><th class="num">Chiffre</th><th class="num">Part</th></tr></thead>
         <tbody>${emps.map(e => `
-          <tr>
+          <tr class="mag-ligne-emp" data-mag-qui="${esc(e.nom)}" title="Voir le détail de ${esc(e.nom)}">
             <td><b>${esc(e.nom)}</b></td>
             <td class="dim">${esc(e.grade || '—')}</td>
             <td class="num">${e.bons}</td>
@@ -6276,22 +6712,25 @@
             <td class="num" style="color:var(--prime,#D4763D);">${e.ca.toLocaleString('fr-FR')} $</td>
             <td class="num dim">${total ? Math.round(e.ca / total * 100) : 0} %</td>
           </tr>`).join('')}</tbody>
-      </table>`;
+      </table>
+      <p class="empty-note" style="margin-top:10px;">Cliquez sur une ligne pour ouvrir la fiche de la personne.</p>`;
 
     if (top) {
-      const prods = [...parProduit.values()].sort((a, b) => b.qte - a.qte).slice(0, 10);
       top.style.display = '';
-      top.innerHTML = `
-        <h3>Ce qui part le plus</h3>
-        <table class="gtable" style="margin-top:12px;">
-          <thead><tr><th>Produit</th><th class="num">Quantité</th><th class="num">Chiffre</th></tr></thead>
-          <tbody>${prods.map(p => `
-            <tr><td><b>${esc(p.nom)}</b></td>
-              <td class="num">${p.qte.toLocaleString('fr-FR')}</td>
-              <td class="num dim">${p.ca.toLocaleString('fr-FR')} $</td></tr>`).join('')}</tbody>
-        </table>`;
+      top.innerHTML = magTableauProduits(parProduit, 'Ce qui part le plus');
     }
   }
+
+  document.addEventListener('change', e => {
+    if (e.target && e.target.id === 'magQui') { magRecapChoix = e.target.value; renderMagRecap(); }
+  });
+
+  document.addEventListener('click', e => {
+    const l = e.target.closest('[data-mag-qui]');
+    if (!l) return;
+    magRecapChoix = l.dataset.magQui;
+    renderMagRecap();
+  });
 
   function renderMagasin() { renderCommandes(); renderStock(); renderMagRecap(); }
 
@@ -6384,6 +6823,72 @@
     return `${p(d.getDate())}/${p(d.getMonth() + 1)} ${p(d.getHours())}:${p(d.getMinutes())}`;
   }
 
+  /* ------------------------------------------------------------------------
+     LES RÉPONSES
+     Un fil plat oblige à répéter « @Untel, oui » pour savoir de quoi on parle.
+     Chaque message porte donc ses réponses — mais repliées : le fil doit rester
+     une liste qu'on parcourt d'un coup d'œil, pas une conversation qui prend
+     tout l'écran. Le compteur suffit à savoir qu'il y a quelque chose à lire.
+
+     Deux états gardés en mémoire, jamais enregistrés : les fils ouverts et le
+     brouillon en cours de frappe. Le fil se redessine à chaque synchronisation
+     (toutes les quelques secondes) — sans ça, un message d'un collègue fermerait
+     le fil qu'on est en train de lire et effacerait ce qu'on écrit.
+     ------------------------------------------------------------------------ */
+  const crOuverts = new Set();     /* ids des fils dépliés */
+  let crRepondreA = null;          /* id du message dont la zone de réponse est ouverte */
+  let crBrouillon = '';            /* ce qui est déjà tapé dedans */
+
+  const crInitiales = nom => String(nom || '?').split(/\s+/).filter(Boolean)
+    .map(w => w[0]).join('').slice(0, 2).toUpperCase();
+
+  function crReponses(m) {
+    return Array.isArray(m.rep) ? m.rep : [];
+  }
+
+  function crRepHtml(m, moi, patron) {
+    const reps = crReponses(m);
+    const ouvert = crOuverts.has(m.id);
+    const compose = crRepondreA === m.id;
+
+    /* Le pied de message : répondre, et le compteur qui déplie. */
+    const pied = `
+      <div class="cr-pied">
+        <button type="button" class="cr-lien" data-cr-rep="${esc(m.id)}">↩ Répondre</button>
+        ${reps.length ? `<button type="button" class="cr-lien cr-cpt" data-cr-voir="${esc(m.id)}">
+          ${reps.length} réponse${reps.length > 1 ? 's' : ''} ${ouvert ? '▾' : '▸'}</button>` : ''}
+      </div>`;
+
+    if (!ouvert && !compose) return pied;
+
+    const liste = (ouvert && reps.length) ? `
+      <div class="cr-reps">${reps.map(r => `
+        <div class="cr-rep${r.auteur === moi ? ' cr-moi' : ''}">
+          <span class="cr-av cr-av-p">${esc(crInitiales(r.auteur))}</span>
+          <div class="cr-rep-corps">
+            <div class="cr-rep-tete">
+              <span class="cr-nom">${esc(r.auteur)}</span>
+              <span class="cr-quand">${esc(r.quand)}</span>
+              ${(r.auteur === moi || patron)
+                ? `<button class="icon-btn danger cr-x" data-cr-repdel="${esc(m.id)}|${esc(r.id)}"
+                     title="Retirer cette réponse">×</button>` : ''}
+            </div>
+            <div class="cr-rep-texte">${esc(r.texte).replace(/\n/g, '<br>')}</div>
+          </div>
+        </div>`).join('')}</div>` : '';
+
+    const saisie = compose ? `
+      <div class="cr-rep-saisie">
+        <textarea id="crRepTexte" rows="2" placeholder="Répondre à ${esc(m.auteur)}…">${esc(crBrouillon)}</textarea>
+        <div class="btn-row" style="margin:0;">
+          <button type="button" class="btn primary" data-cr-repenv="${esc(m.id)}">Répondre</button>
+          <button type="button" class="btn" data-cr-repann>Annuler</button>
+        </div>
+      </div>` : '';
+
+    return pied + liste + saisie;
+  }
+
   function renderComRunner() {
     const fil = $('crFil');
     if (!fil) return;
@@ -6400,14 +6905,44 @@
     fil.innerHTML = `<div class="panel"><div class="cr-fil">${comRunner.map(m => `
       <div class="cr-msg${m.type === 'retrait' ? ' cr-retrait' : ''}${m.auteur === moi ? ' cr-moi' : ''}">
         <div class="cr-tete">
-          <span class="cr-av">${esc(m.auteur.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase())}</span>
+          <span class="cr-av">${esc(crInitiales(m.auteur))}</span>
           <span class="cr-nom">${esc(m.auteur)}</span>
           <span class="cr-quand">${esc(m.quand)}</span>
           ${(m.auteur === moi || patron)
             ? `<button class="icon-btn danger cr-x" data-cr-del="${esc(m.id)}" title="Retirer">×</button>` : ''}
         </div>
         <div class="cr-texte">${esc(m.texte).replace(/\n/g, '<br>')}</div>
+        ${crRepHtml(m, moi, patron)}
       </div>`).join('')}</div></div>`;
+
+    /* Le champ vient d'être recréé : on lui rend le curseur et le brouillon. */
+    if (crRepondreA) {
+      const t = $('crRepTexte');
+      if (t) { t.focus(); t.setSelectionRange(t.value.length, t.value.length); }
+    }
+  }
+
+  function crEnvoyerReponse(id) {
+    const champ = $('crRepTexte');
+    const texte = (champ ? champ.value : crBrouillon).trim();
+    if (!texte) return;
+
+    const m = comRunner.find(x => x.id === id);
+    if (!m) return;
+    if (!Array.isArray(m.rep)) m.rep = [];
+    m.rep.push({
+      id: 'R' + Date.now().toString(36),
+      auteur: moiSession(), texte: texte.slice(0, 800),
+      quand: quandFR(new Date()),
+    });
+    /* Une réponse ne remonte pas le message en tête du fil : le fil est un
+       journal, pas une messagerie — l'ordre des publications ne bouge pas. */
+
+    crBrouillon = '';
+    crRepondreA = null;
+    crOuverts.add(id);
+    D().note('a répondu dans le Com Runner');
+    D().save('comRunner');
   }
 
   function envoyerMessage() {
@@ -6568,6 +7103,50 @@
     if (e.target.closest('#crEnvoyer')) { envoyerMessage(); return; }
     if (e.target.closest('#crRetrait')) { demanderRetrait(); return; }
 
+    /* --- les réponses --- */
+    const rep = e.target.closest('[data-cr-rep]');
+    if (rep) {
+      const id = rep.dataset.crRep;
+      crRepondreA = (crRepondreA === id) ? null : id;
+      crBrouillon = '';
+      if (crRepondreA) crOuverts.add(id);
+      renderComRunner();
+      return;
+    }
+
+    const voir = e.target.closest('[data-cr-voir]');
+    if (voir) {
+      const id = voir.dataset.crVoir;
+      if (crOuverts.has(id)) { crOuverts.delete(id); if (crRepondreA === id) crRepondreA = null; }
+      else crOuverts.add(id);
+      renderComRunner();
+      return;
+    }
+
+    const env = e.target.closest('[data-cr-repenv]');
+    if (env) { crEnvoyerReponse(env.dataset.crRepenv); return; }
+
+    if (e.target.closest('[data-cr-repann]')) {
+      crRepondreA = null; crBrouillon = '';
+      renderComRunner();
+      return;
+    }
+
+    const rd = e.target.closest('[data-cr-repdel]');
+    if (rd) {
+      const [mid, rid] = rd.dataset.crRepdel.split('|');
+      const m = comRunner.find(x => x.id === mid);
+      if (m && Array.isArray(m.rep)) {
+        const i = m.rep.findIndex(r => r.id === rid);
+        if (i >= 0) {
+          m.rep.splice(i, 1);
+          D().note('a retiré une réponse du Com Runner');
+          D().save('comRunner');
+        }
+      }
+      return;
+    }
+
     const d = e.target.closest('[data-cr-del]');
     if (d) {
       const i = comRunner.findIndex(m => m.id === d.dataset.crDel);
@@ -6575,8 +7154,19 @@
     }
   });
 
+  /* Le brouillon suit la frappe : le fil se redessine tout seul à chaque
+     synchronisation, et sans ça ce qu'on écrit disparaîtrait en cours de route. */
+  document.addEventListener('input', e => {
+    if (e.target && e.target.id === 'crRepTexte') crBrouillon = e.target.value;
+  });
+
   /* Entrée envoie, Maj+Entrée passe à la ligne : le réflexe d'une messagerie. */
   document.addEventListener('keydown', e => {
+    if (e.target.id === 'crRepTexte' && e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (crRepondreA) crEnvoyerReponse(crRepondreA);
+      return;
+    }
     if (e.target.id !== 'crTexte') return;
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); envoyerMessage(); }
   });
@@ -6972,6 +7562,7 @@
     renderCloture, renderEffectifHead, refreshEffectifFilters, applyEffectifFilter,
     verifierVersion, battementPresence, renderPresence, setZoom, toggleFullscreen,
     renderQuotas3, renderJournal, appliquerLectureSeule, remplirVides, repartirDeZero,
+    renderMaSemaine, reinitialiserService,
     renderVitrine, renderCatalogues, appliquerAccesService, renderAvertissements, compteAvertissements,
     openInvoiceDoc, renderRegles, chargerDemo, importerListeRH, analyserListeRH, modifierEmploye, estFormatRegistre,
     synchroniserEffectif, syncEffectifEtEnregistrer, renderMagasin, renderCommandes, renderStock, renderMagRecap,

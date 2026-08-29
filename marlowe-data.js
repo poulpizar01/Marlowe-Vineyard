@@ -41,7 +41,7 @@ window.MarloweData = (function () {
       ref: () => effectifData,
       render: [() => renderEffectif(window.mvEffectifFiltre ? window.mvEffectifFiltre() : effectifData),
                call('renderEligibilite'), call('updateGradeCounts'), call('populateOverview'),
-               call('renderPrimes'),
+               call('renderPrimes'), call('renderMaSemaine'),
                () => { const a = window.MarloweActions; if (a) a.refreshEffectifFilters(); }],
     },
     dash: {
@@ -56,7 +56,11 @@ window.MarloweData = (function () {
                        render: [() => renderRhRoster(rhRosterData),
                                 () => { const a = window.MarloweActions;
                                         if (a) { a.appliquerAccesService(); a.renderAvertissements();
-                                                 a.renderPrimeRecrutement(); } }] },
+                                                 a.renderPrimeRecrutement();
+                                                 /* L'équipe de vente et la fiche de la
+                                                    personne connectée se lisent dans le
+                                                    registre : il change, le magasin suit. */
+                                                 a.renderCommandes(); a.renderMagRecap(); } }] },
     avertissements:  { ref: () => window.MarloweAvertissements,
                        render: [() => { const a = window.MarloweActions; if (a) a.renderAvertissements(); }] },
     rhRecruiters:    { ref: () => rhRecruiters,        render: [call('renderRecruiters')] },
@@ -145,7 +149,7 @@ window.MarloweData = (function () {
       render: [() => { const a = window.MarloweActions;
                        if (a) { a.renderEligibilite(); a.refreshWeekHeaders();
                                 a.renderWeekHistory(); a.renderHistorique();
-                                a.renderQuotas3(); } }],
+                                a.renderQuotas3(); a.renderMaSemaine(); } }],
     },
   };
 

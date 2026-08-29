@@ -628,6 +628,30 @@
   .cr-texte{font-size:13.5px;line-height:1.6;color:var(--parchment,#EDE3CF);opacity:.92;padding-left:34px;}
   .cr-retrait .cr-texte{color:var(--amber,#D6A75C);font-weight:500;}
 
+  /* --- les réponses, repliées par défaut --- */
+  .cr-pied{display:flex;gap:14px;align-items:center;padding-left:34px;margin-top:8px;}
+  .cr-lien{background:none;border:0;padding:0;cursor:pointer;font-family:inherit;font-size:11.5px;
+    color:var(--muted,#9C9384);transition:color .15s;}
+  .cr-lien:hover{color:var(--or,#C9A961);}
+  .cr-cpt{color:var(--or-soft,#B8A47C);}
+  .cr-reps{margin:10px 0 0 34px;padding-left:12px;border-left:2px solid var(--band,#3D372C);
+    display:flex;flex-direction:column;gap:9px;}
+  .cr-rep{display:flex;gap:9px;align-items:flex-start;}
+  .cr-av-p{width:19px;height:19px;font-size:8.5px;margin-top:1px;}
+  .cr-rep-corps{min-width:0;flex:1;}
+  .cr-rep-tete{display:flex;align-items:center;gap:8px;}
+  .cr-rep-tete .cr-nom{font-size:11.5px;}
+  /* .cr-x pousse à droite dans l'en-tête d'un message ; sur une réponse la
+     ligne fait toute la largeur et la croix partait se coller au bord. */
+  .cr-rep-tete .cr-x{margin-left:2px;padding:1px 5px;font-size:11px;line-height:1.2;}
+  .cr-rep-texte{font-size:12.5px;line-height:1.55;color:var(--parchment,#EDE3CF);opacity:.88;margin-top:2px;
+    overflow-wrap:anywhere;}
+  .cr-rep-saisie{margin:10px 0 0 34px;display:flex;flex-direction:column;gap:8px;}
+  .cr-rep-saisie textarea{background:rgba(0,0,0,.22);color:var(--parchment,#EDE3CF);
+    border:1px solid var(--band,#3D372C);border-radius:9px;padding:9px 11px;font-family:'Inter',sans-serif;
+    font-size:12.5px;resize:vertical;width:100%;box-sizing:border-box;}
+  .cr-rep-saisie textarea:focus{outline:none;border-color:var(--or-soft,#8E7C4E);}
+
   /* --- Magasin --- */
   .mag-bon{margin-bottom:14px;}
   .mag-bon-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;

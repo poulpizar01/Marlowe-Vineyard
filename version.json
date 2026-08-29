@@ -1,4 +1,4 @@
 {
-  "v": "1.21.0",
-  "note": "agenda : nouvelle visibilite commercial ; direction et commercial se reglent par role dans Administration > Agenda ; la visibilite filtre reellement les evenements, liste et grille comprises."
+  "v": "1.22.0",
+  "note": "Ma semaine reparee et reservee a soi (selecteur patron uniquement) ; remise a zero des heures de service ; reponses repliables dans le Com Runner ; magasin limite aux postes de vente avec vue personnelle par employe."
 }
