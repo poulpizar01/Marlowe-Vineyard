@@ -910,6 +910,10 @@
       sec.classList.toggle('mv-hidden', !visible);
     });
 
+    /* Le rail est bâti sur ces mêmes sections : une section dont toutes les
+       pages viennent d'être masquées doit disparaître avec elles. */
+    if (window.mvRail) window.mvRail.sync();
+
     /* Si la page ouverte par défaut n'est pas autorisée, on bascule
        sur la première page permise. */
     const active = document.querySelector('.page-content.active');
@@ -956,6 +960,10 @@
     item.textContent = 'Paramètres';
     nav.appendChild(sec);
     nav.appendChild(item);
+
+    /* La section vient d'apparaître après la construction du rail : on le
+       refait, il est idempotent. */
+    if (window.mvRail) window.mvRail.construire();
 
     /* --- la page --- */
     const page = document.createElement('div');

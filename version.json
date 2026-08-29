@@ -1,4 +1,4 @@
 {
-  "v": "1.13.0",
-  "note": "kit d'entretien consultable par tous dans Personnel, temoin du lien reellement enregistre pour les catalogues, champs de vitrine restaures apres chargement."
+  "v": "1.14.0",
+  "note": "navigation a deux niveaux : rail d'icones par section et colonne montrant uniquement les pages de la section ouverte."
 }

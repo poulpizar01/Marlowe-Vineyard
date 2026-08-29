@@ -53,8 +53,49 @@
 
   .app-shell{display:flex;min-height:100vh;}
 
+  /* ===== LE RAIL =====
+     Six ou sept sections, chacune une icône. La liste complète des pages ne
+     s'affiche plus d'un bloc : elle vit dans la colonne d'à côté, qui ne montre
+     que la section ouverte. Fin de l'ascenseur de vingt-cinq entrées. */
+  .mv-rail{width:64px;flex-shrink:0;background:rgba(20,19,16,.94);border-right:1px solid var(--band);
+    position:sticky;top:0;height:100vh;display:flex;flex-direction:column;align-items:center;
+    padding:14px 0;gap:2px;backdrop-filter:blur(8px);z-index:3;}
+  .mv-rail-logo{display:flex;align-items:center;justify-content:center;margin-bottom:12px;
+    text-decoration:none;transition:opacity .16s ease;}
+  .mv-rail-logo:hover{opacity:.75;}
+  .mv-rail-logo .brand-logo{height:34px;width:auto;margin:0;}
+  .mv-rail-liste{display:flex;flex-direction:column;align-items:center;gap:2px;width:100%;
+    overflow-y:auto;overflow-x:hidden;}
+  .mv-rail-btn{width:48px;padding:8px 0 6px;border-radius:10px;border:none;background:transparent;
+    display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;
+    color:var(--muted);font-family:inherit;font-size:8.5px;letter-spacing:.02em;
+    transition:background .15s ease,color .15s ease;position:relative;flex-shrink:0;}
+  .mv-rail-btn svg{width:19px;height:19px;}
+  .mv-rail-btn:hover{background:rgba(201,169,97,.07);color:var(--parchment);}
+  .mv-rail-btn.est-ouvert{background:rgba(201,169,97,.16);color:var(--or);}
+  /* Le point dit où l'on se trouve VRAIMENT ; le fond dit seulement ce que
+     la colonne est en train de montrer. Les deux ne coïncident pas toujours. */
+  .mv-rail-btn.est-courant::after{content:'';position:absolute;top:6px;right:8px;width:6px;height:6px;
+    border-radius:50%;background:var(--or);}
+  .mv-rail-btn.mv-hidden{display:none;}
+
   /* sidebar */
-  .sidebar{width:220px;flex-shrink:0;background:var(--oak-2);border-right:1px solid var(--band);backdrop-filter:blur(8px);padding:24px 16px;position:sticky;top:0;height:100vh;overflow-y:auto;}
+  .sidebar{width:212px;flex-shrink:0;background:var(--oak-2);border-right:1px solid var(--band);backdrop-filter:blur(8px);padding:24px 14px;position:sticky;top:0;height:100vh;overflow-y:auto;}
+  .mv-col-titre{font-family:'Fraunces',serif;font-weight:600;font-size:16.5px;color:var(--parchment);
+    padding:0 8px 16px;border-bottom:1px solid var(--band);margin-bottom:10px;line-height:1.25;}
+  .mv-groupe{display:none;}
+  .mv-groupe.est-ouvert{display:block;}
+  /* L'intitulé de section faisait doublon avec le titre de la colonne. */
+  .mv-groupe .nav-section{display:none;}
+
+  /* Sur un écran étroit, deux colonnes de menu mangent la moitié de la place :
+     le rail garde ses icônes, la colonne se réduit à l'essentiel. */
+  @media(max-width:900px){
+    .mv-rail{width:54px;}
+    .mv-rail-btn{width:44px;font-size:8px;}
+    .sidebar{width:168px;padding:20px 10px;}
+    .content{padding:26px 20px 70px;}
+  }
   .sidebar-brand{display:flex;align-items:center;gap:12px;padding:0 8px 22px;border-bottom:1px solid var(--band);margin-bottom:18px;
     text-decoration:none;color:inherit;position:relative;transition:opacity .16s ease;}
   .sidebar-brand:hover{opacity:.85;}
@@ -509,17 +550,19 @@
 <body>
 <div class="app-shell">
 
-  <aside class="sidebar">
-    <a class="sidebar-brand" href="index.html" title="Retour au site du domaine">
+  <!-- Le rail : une icône par section, jamais plus de sept. Il ne change pas
+       de page — il choisit ce que la colonne d'à côté affiche. -->
+  <aside class="mv-rail" id="mvRail">
+    <a class="mv-rail-logo" href="index.html" title="Retour au site du domaine">
       <img class="brand-logo" src="logo.png" alt="Marlowe Vineyard"
            onerror="this.remove();document.getElementById('brandFallback').hidden=false;">
-      <div class="brand-mark" id="brandFallback" hidden>MV</div>
-      <div>
-        <div class="brand-name">Marlowe Vineyard</div>
-        <div class="brand-sub">Gestion du domaine</div>
-      </div>
-      <span class="brand-sortie" aria-hidden="true">↗</span>
+      <span class="brand-mark" id="brandFallback" hidden>MV</span>
     </a>
+    <div class="mv-rail-liste" id="mvRailListe"></div>
+  </aside>
+
+  <aside class="sidebar">
+    <div class="mv-col-titre" id="mvColTitre">Marlowe Vineyard</div>
     <nav>
       <div class="nav-section">RH</div>
       <div class="nav-item" data-page="rhemployes">Employés</div>

@@ -3436,6 +3436,7 @@
     renderTombola();
     renderEntretien();
     renderDocuments();
+    railConstruire();
     appliquerLectureSeule();
     remplirVides();
     D().redraw('rhRecruiters');
@@ -4312,6 +4313,170 @@
     if (n) n.textContent = `${i + 1} / ${imgs.length}`;
   });
 
+
+  /* ==========================================================================
+     LE RAIL DE NAVIGATION
+     --------------------------------------------------------------------------
+     Le menu comptait vingt-cinq entrées dans une seule colonne : on y cherchait
+     une page en faisant défiler. Il se lit maintenant à deux niveaux — une
+     icône par section dans le rail, et dans la colonne uniquement les pages de
+     la section ouverte.
+
+     Rien n'est réécrit pour autant : les <div class="nav-item" data-page="…">
+     restent exactement les mêmes éléments, aux mêmes endroits. Ils sont
+     simplement regroupés dans des enveloppes. Le filtrage des droits, la
+     gestion des clics et la page Paramètres continuent donc de fonctionner
+     sans savoir que le rail existe.
+
+     Deux états distincts sur une icône, et c'est voulu :
+       · le fond doré  = la section que la colonne est en train de montrer ;
+       · le point doré = la section où se trouve la page réellement ouverte.
+     Consulter le menu d'une autre section ne doit pas donner l'impression
+     d'avoir changé de page.
+     ========================================================================== */
+
+  const RAIL_ICONES = {
+    'rh':        '<path d="M16 21v-2a4 4 0 0 0-8 0v2"/><circle cx="12" cy="8" r="4"/>',
+    'commerce':  '<path d="M3 3h18v5H3zM6 8v13h12V8"/><path d="M10 12h4"/>',
+    'stats':     '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+    'magasin':   '<path d="M3 7h18l-2 12H5Z"/><path d="M8 7a4 4 0 0 1 8 0"/>',
+    'gestion':   '<path d="M4 19V5a2 2 0 0 1 2-2h11l3 3v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><path d="M8 8h7M8 12h7M8 16h4"/>',
+    'personnel': '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18M8 2v4M16 2v4"/>',
+    'parametres':'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3 15a2 2 0 0 1-2-2 2 2 0 0 1 2-2 1.6 1.6 0 0 0 1.1-2.7l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 9 4.6 2 2 0 0 1 11 3a2 2 0 0 1 2 2 1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1A1.6 1.6 0 0 0 21 11a2 2 0 0 1 0 4Z"/>',
+    'defaut':    '<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>',
+  };
+
+  /* Étiquette courte pour le rail : « Stats & Quotas » ne tient pas sous une
+     icône de 48 px, et un mot coupé se lit plus mal qu'un mot choisi. */
+  const RAIL_COURT = {
+    'rh': 'RH', 'commerce': 'Commerce', 'stats': 'Quotas', 'magasin': 'Magasin',
+    'gestion': 'Gestion', 'personnel': 'Perso', 'parametres': 'Réglages',
+  };
+
+  function railSlug(titre) {
+    const k = String(titre || '').toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, ' ').trim();
+    if (k.startsWith('rh')) return 'rh';
+    if (k.startsWith('commerce')) return 'commerce';
+    if (k.startsWith('stats')) return 'stats';
+    if (k.startsWith('magasin')) return 'magasin';
+    if (k.startsWith('gestion')) return 'gestion';
+    if (k.startsWith('personnel')) return 'personnel';
+    if (k.startsWith('parametre') || k.startsWith('administration')) return 'parametres';
+    return k.replace(/\s+/g, '-') || 'defaut';
+  }
+
+  let railEnCours = false;      /* évite que nos propres retouches se rappellent */
+
+  /* Enveloppe chaque section et ses pages dans un .mv-groupe. Les éléments
+     eux-mêmes ne bougent pas : ils changent juste de parent. */
+  function railGrouper(nav) {
+    const enfants = [...nav.children];
+    let groupe = null;
+
+    enfants.forEach(el => {
+      if (el.classList.contains('mv-groupe')) { groupe = null; return; }
+
+      if (el.classList.contains('nav-section')) {
+        groupe = document.createElement('div');
+        groupe.className = 'mv-groupe';
+        groupe.dataset.groupe = railSlug(el.textContent);
+        groupe.dataset.titre = el.textContent.trim();
+        nav.insertBefore(groupe, el);
+        groupe.appendChild(el);
+        return;
+      }
+
+      /* Une page orpheline (aucune section au-dessus) reste où elle est. */
+      if (groupe && el.classList.contains('nav-item')) groupe.appendChild(el);
+    });
+  }
+
+  function railGroupes() {
+    return [...document.querySelectorAll('.sidebar nav .mv-groupe')];
+  }
+
+  function railVisible(g) {
+    return [...g.querySelectorAll('.nav-item[data-page]')]
+      .some(i => !i.classList.contains('mv-hidden'));
+  }
+
+  function railOuvrir(slug) {
+    const groupes = railGroupes();
+    const cible = groupes.find(g => g.dataset.groupe === slug && railVisible(g))
+               || groupes.find(railVisible);
+    if (!cible) return;
+
+    groupes.forEach(g => g.classList.toggle('est-ouvert', g === cible));
+    document.querySelectorAll('.mv-rail-btn').forEach(b =>
+      b.classList.toggle('est-ouvert', b.dataset.groupe === cible.dataset.groupe));
+
+    const titre = $('mvColTitre');
+    if (titre) titre.textContent = cible.dataset.titre || 'Marlowe Vineyard';
+  }
+
+  /* Marque d'un point la section où se trouve la page réellement ouverte. */
+  function railMarquerCourant() {
+    const actif = document.querySelector('.sidebar nav .nav-item.active');
+    const groupe = actif ? actif.closest('.mv-groupe') : null;
+    const slug = groupe ? groupe.dataset.groupe : null;
+    document.querySelectorAll('.mv-rail-btn').forEach(b =>
+      b.classList.toggle('est-courant', !!slug && b.dataset.groupe === slug));
+    return slug;
+  }
+
+  function railConstruire() {
+    const nav = document.querySelector('.sidebar nav');
+    const liste = $('mvRailListe');
+    if (!nav || !liste) return;
+
+    railEnCours = true;
+    railGrouper(nav);
+
+    const groupes = railGroupes();
+    liste.innerHTML = groupes.map(g => {
+      const slug = g.dataset.groupe;
+      const d = RAIL_ICONES[slug] || RAIL_ICONES.defaut;
+      const court = RAIL_COURT[slug] || g.dataset.titre;
+      return `<button type="button" class="mv-rail-btn" data-groupe="${esc(slug)}"
+                title="${esc(g.dataset.titre)}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+                     stroke-linecap="round" stroke-linejoin="round">${d}</svg>
+                <span>${esc(court)}</span>
+              </button>`;
+    }).join('');
+
+    railSynchroniser();
+    railEnCours = false;
+  }
+
+  /* Rejoué après chaque filtrage des droits : une section dont toutes les
+     pages sont interdites disparaît du rail. */
+  function railSynchroniser() {
+    const groupes = railGroupes();
+    document.querySelectorAll('.mv-rail-btn').forEach(b => {
+      const g = groupes.find(x => x.dataset.groupe === b.dataset.groupe);
+      b.classList.toggle('mv-hidden', !g || !railVisible(g));
+    });
+
+    const courant = railMarquerCourant();
+    const ouvert = document.querySelector('.mv-groupe.est-ouvert');
+    /* On suit la page ouverte, sauf si l'on est en train de consulter une
+       autre section — auquel cas on ne s'impose pas. */
+    if (!ouvert || !railVisible(ouvert)) railOuvrir(courant);
+    else railOuvrir(ouvert.dataset.groupe);
+  }
+
+  document.addEventListener('click', e => {
+    const b = e.target.closest('.mv-rail-btn');
+    if (b) { railOuvrir(b.dataset.groupe); return; }
+    /* Un changement de page peut venir d'ailleurs que du menu : on resynchronise
+       après coup plutôt que d'essayer de deviner à l'avance. */
+    if (e.target.closest('.nav-item')) setTimeout(railMarquerCourant, 0);
+  });
+
+  window.mvRail = { construire: railConstruire, sync: railSynchroniser };
 
   /* ==========================================================================
      KIT D'ENTRETIEN — ce qu'on montre au candidat
@@ -5981,6 +6146,7 @@
     openInvoiceDoc, renderRegles, renderMagasin, renderCommandes, renderStock, renderMagRecap,
     renderComRunner, testerDiscord, renderQuotaService, renderPrimeRecrutement,
     renderTombola, ticketsDe, renderEntretien, renderDocuments,
+    railConstruire, railSynchroniser,
     totalPrimeRecrutement,
   };
 
