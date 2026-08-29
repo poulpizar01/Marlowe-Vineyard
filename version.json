@@ -1,4 +1,4 @@
 {
-  "v": "1.14.1",
-  "note": "pied de page enfin mis en forme et remis dans la colonne de contenu (un div en trop le sortait de main), etats vides qui expliquent pourquoi la liste est vide."
+  "v": "1.14.2",
+  "note": "le repli des sections du menu est retire : avec le rail il vidait la colonne, et l'etat memorise dans le navigateur est efface."
 }

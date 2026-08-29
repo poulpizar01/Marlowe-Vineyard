@@ -3113,12 +3113,6 @@
         transition:opacity .18s;}
       #page-statseffectif .legend:hover{opacity:1;}
 
-      /* Sections repliables du menu. */
-      .nav-section{cursor:pointer;user-select:none;display:flex;align-items:center;
-        justify-content:space-between;gap:6px;}
-      .nav-section::after{content:'▾';font-size:9px;opacity:.6;transition:transform .18s;}
-      .nav-section.mv-collapsed::after{transform:rotate(-90deg);}
-      .nav-item.mv-folded{display:none !important;}
 
       /* Barres de défilement discrètes, au lieu des grises par défaut. */
       .sidebar nav, .mv-matrix-wrap, .table-wrap, .content{scrollbar-width:thin;
@@ -3324,38 +3318,22 @@
     document.head.appendChild(st);
   }
 
-  /* Replie une section du menu et retient l'état d'une visite à l'autre. */
-  function setupCollapsibleNav() {
-    const KEY = 'mv.navFolded';
-    let folded = [];
-    try { folded = JSON.parse(localStorage.getItem(KEY) || '[]'); } catch (e) {}
+  /* Le repli des sections du menu a été retiré.
+     ---------------------------------------------------------------------------
+     Il existait pour dompter une liste de vingt-cinq entrées : on pliait ce
+     dont on ne se servait pas. Le rail règle ce problème autrement — la colonne
+     ne montre déjà qu'une section à la fois. Garder les deux était pire que n'en
+     avoir aucun : une section repliée vidait complètement la colonne, et son
+     intitulé, devenu invisible, ne permettait plus de la déplier.
 
-    const itemsOf = (sec) => {
-      const out = [];
-      let n = sec.nextElementSibling;
-      while (n && !n.classList.contains('nav-section')) {
-        if (n.classList.contains('nav-item')) out.push(n);
-        n = n.nextElementSibling;
-      }
-      return out;
-    };
-
-    document.querySelectorAll('.sidebar .nav-section').forEach(sec => {
-      const label = sec.textContent.trim();
-      const apply = (on) => {
-        sec.classList.toggle('mv-collapsed', on);
-        itemsOf(sec).forEach(i => i.classList.toggle('mv-folded', on));
-      };
-      apply(folded.includes(label));
-
-      sec.addEventListener('click', () => {
-        const on = !sec.classList.contains('mv-collapsed');
-        apply(on);
-        folded = folded.filter(l => l !== label);
-        if (on) folded.push(label);
-        try { localStorage.setItem(KEY, JSON.stringify(folded)); } catch (e) {}
-      });
-    });
+     L'état était retenu dans le navigateur : on l'efface, sinon un repli
+     enregistré il y a des semaines continuerait de masquer des pages. */
+  function nettoyerAncienRepli() {
+    try { localStorage.removeItem('mv.navFolded'); } catch (e) {}
+    document.querySelectorAll('.nav-item.mv-folded')
+      .forEach(i => i.classList.remove('mv-folded'));
+    document.querySelectorAll('.nav-section.mv-collapsed')
+      .forEach(s => s.classList.remove('mv-collapsed'));
   }
 
   /* ========================================================================
@@ -3446,7 +3424,7 @@
 
     injectStyles();
     injectAgendaButton();
-    setupCollapsibleNav();
+    nettoyerAncienRepli();
     wire();
 
     /* L'éligibilité doit être lue depuis la dernière semaine clôturée :
