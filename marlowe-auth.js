@@ -731,7 +731,8 @@
 
   .mv-danger{margin-top:24px;border-color:rgba(138,53,64,.45);background:rgba(138,53,64,.07);}
   .mv-danger h3{color:#E08A7A;}
-  .mv-danger p{font-size:12.5px;line-height:1.7;color:var(--muted,#9C9384);margin:8px 0 16px;max-width:760px;}
+  .mv-danger p,
+  .mv-admin-note{font-size:12.5px;line-height:1.7;color:var(--muted,#9C9384);margin:8px 0 16px;max-width:760px;}
   .mv-legende{font-size:11.5px;color:var(--muted,#9C9384);line-height:2.1;margin-top:14px;max-width:820px;}
   .mv-legende .mv-cell{vertical-align:middle;margin:0 2px;cursor:default;}
   .mv-legende .mv-cell:hover{transform:none;}
@@ -971,27 +972,6 @@
      10. PAGE PARAMÈTRES (patron uniquement)
      ========================================================================== */
   function buildSettings(roles, perms, settings) {
-    /* --- entrée de menu --- */
-    const nav = document.querySelector('.sidebar nav');
-    const sec = document.createElement('div');
-    sec.className = 'nav-section';
-    sec.textContent = 'Administration';
-    const item = document.createElement('div');
-    item.className = 'nav-item';
-    item.dataset.page = 'parametres';
-    item.textContent = 'Paramètres';
-    nav.appendChild(sec);
-    nav.appendChild(item);
-
-    /* La section vient d'apparaître après la construction du rail : on le
-       refait, il est idempotent. */
-    if (window.mvRail) window.mvRail.construire();
-
-    /* --- la page --- */
-    const page = document.createElement('div');
-    page.className = 'page-content';
-    page.id = 'page-parametres';
-
     /* Rôles retenus : ceux choisis par le patron, sinon une présélection
        automatique des rôles qui ressemblent à des rôles du domaine. */
     const configured = Array.isArray(settings.visibleRoles) ? settings.visibleRoles : null;
@@ -1023,107 +1003,194 @@
       });
     });
 
-    page.innerHTML = `
-      <h1 class="page-title">Paramètres</h1>
-      <p class="page-sub">Accès aux pages du panel selon les rôles Discord. Cochez une case pour
-         autoriser un rôle à voir une page.</p>
+    const banniereTest = CONFIG.MODE !== 'discord' ? `
+      <div class="mv-demo-banner" style="max-width:760px;">
+        <b>Mode test</b>
+        Les rôles affichés sont une liste d'exemple et les réglages sont enregistrés
+        dans ce navigateur uniquement. Une fois le backend branché, les rôles seront
+        lus directement sur le Discord et les réglages partagés par tout le monde.
+      </div>` : '';
 
-      ${CONFIG.MODE !== 'discord' ? `
-        <div class="mv-demo-banner" style="max-width:760px;">
-          <b>Mode test</b>
-          Les rôles affichés sont une liste d'exemple et les réglages sont enregistrés
-          dans ce navigateur uniquement. Une fois le backend branché, les rôles seront
-          lus directement sur le Discord et les réglages partagés par tout le monde.
-        </div>` : ''}
+    /* ----------------------------------------------------------------------
+       Une seule page « Paramètres » empilait cinq sujets sans rapport : les
+       droits d'accès, la vitrine publique, les règles de prime, les accès
+       extérieurs et le vidage des données. On y descendait à l'aveugle et le
+       bouton « Vider les données » se retrouvait à deux écrans du haut.
+       Chaque sujet a maintenant son entrée dans la colonne Administration.
+       L'identifiant « parametres » reste celui de la première page : c'est
+       lui que connaissent les droits, le rail et les anciens liens.
+       ---------------------------------------------------------------------- */
+    const RUBRIQUES = [
+      {
+        id: 'parametres',
+        menu: 'Accès & rôles',
+        titre: 'Accès & rôles',
+        sub: `Qui voit quoi dans le panel. Chaque case fait tourner trois états :
+              aucun accès, accès complet, lecture seule.`,
+        html: `
+          ${banniereTest}
 
-      <details class="mv-rolepick" ${configured && configured.length ? '' : 'open'}>
-        <summary>Rôles du domaine — <b>${visible.length}</b> retenus sur ${roles.length}</summary>
-        <p class="mv-rolepick-help">
-          Votre serveur compte beaucoup de rôles : partenaires, événements, décorations.
-          Cochez uniquement ceux qui correspondent à un poste au domaine — les autres
-          n'apparaîtront pas dans le tableau des accès.
-          ${configured && configured.length ? '' : '<b>Une présélection a été devinée, vérifiez-la.</b>'}
-        </p>
-        <div class="mv-role-list mv-pick" id="mvPick">
-          ${roles.map(r => `<div class="mv-role-chip${visible.includes(r) ? ' on' : ''}"
-            data-role="${esc(r)}">${esc(r)}</div>`).join('')}
-        </div>
-        <div class="btn-row" style="margin-top:14px;">
-          <button class="btn primary" id="mvApplyRoles">Appliquer</button>
-          <button class="btn" id="mvGuessRoles">Re-deviner</button>
-        </div>
-      </details>
+          <details class="mv-rolepick" ${configured && configured.length ? '' : 'open'}>
+            <summary>Rôles du domaine — <b>${visible.length}</b> retenus sur ${roles.length}</summary>
+            <p class="mv-rolepick-help">
+              Votre serveur compte beaucoup de rôles : partenaires, événements, décorations.
+              Cochez uniquement ceux qui correspondent à un poste au domaine — les autres
+              n'apparaîtront pas dans le tableau des accès.
+              ${configured && configured.length ? '' : '<b>Une présélection a été devinée, vérifiez-la.</b>'}
+            </p>
+            <div class="mv-role-list mv-pick" id="mvPick">
+              ${roles.map(r => `<div class="mv-role-chip${visible.includes(r) ? ' on' : ''}"
+                data-role="${esc(r)}">${esc(r)}</div>`).join('')}
+            </div>
+            <div class="btn-row" style="margin-top:14px;">
+              <button class="btn primary" id="mvApplyRoles">Appliquer</button>
+              <button class="btn" id="mvGuessRoles">Re-deviner</button>
+            </div>
+          </details>
 
-      <div class="mv-matrix-wrap">
-        <table class="mv-matrix">
-          <thead>
-            <tr>
-              <th>Page</th>
-              <th class="mv-patron-col">${esc(CONFIG.PATRON_ROLES.join(' / '))}</th>
-              ${otherRoles.map(r => `<th>${esc(r)}</th>`).join('')}
-            </tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>
+          <div class="mv-matrix-wrap">
+            <table class="mv-matrix">
+              <thead>
+                <tr>
+                  <th>Page</th>
+                  <th class="mv-patron-col">${esc(CONFIG.PATRON_ROLES.join(' / '))}</th>
+                  ${otherRoles.map(r => `<th>${esc(r)}</th>`).join('')}
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
 
-      <p class="mv-legende">
-        <span class="mv-cell mv-non">·</span> aucun accès ·
-        <span class="mv-cell mv-oui">✓</span> accès complet ·
-        <span class="mv-cell mv-ro">👁</span> lecture seule — la page est visible mais rien n'y est modifiable.
-        Cliquez sur une case pour faire tourner les trois états.
-      </p>
+          <p class="mv-legende">
+            <span class="mv-cell mv-non">·</span> aucun accès ·
+            <span class="mv-cell mv-oui">✓</span> accès complet ·
+            <span class="mv-cell mv-ro">👁</span> lecture seule — la page est visible mais rien n'y est modifiable.
+            Cliquez sur une case pour faire tourner les trois états.
+          </p>
 
-      <div class="btn-row" style="margin-top:18px;align-items:center;">
-        <button class="btn primary" id="mvSave">Enregistrer</button>
-        <button class="btn" id="mvReset">Réinitialiser les accès</button>
-        <span class="mv-saved" id="mvSaved">Enregistré ✓</span>
-      </div>
+          <div class="btn-row" style="margin-top:18px;align-items:center;">
+            <button class="btn primary" id="mvSave">Enregistrer</button>
+            <button class="btn" id="mvReset">Réinitialiser les accès</button>
+            <span class="mv-saved" id="mvSaved">Enregistré ✓</span>
+          </div>`,
+      },
+      {
+        id: 'paramvitrine',
+        menu: 'Vitrine publique',
+        titre: 'Vitrine publique',
+        sub: `Ce que voient les visiteurs du site : les nouveautés mises en avant et
+              les deux catalogues, citoyens et entreprises.`,
+        html: `<div class="panel" id="mvVitrine"></div>`,
+      },
+      {
+        id: 'paramregles',
+        menu: 'Règles du domaine',
+        titre: 'Règles du domaine',
+        sub: `Deux règles que vous fixez une fois : le quota de prise de service et
+              la prime de recrutement. Elles s'appliquent ensuite toutes seules,
+              semaine après semaine.`,
+        html: `<div class="panel" id="mvReglages"></div>`,
+      },
+      {
+        id: 'paraminvites',
+        menu: 'Accès extérieurs',
+        titre: 'Accès extérieurs',
+        sub: `Des codes d'accès pour ceux qui ne sont pas sur le Discord — un comptable,
+              un partenaire. Vous choisissez les pages qu'ils voient, et la coupure est
+              immédiate.`,
+        html: `<div class="panel" id="mvInvites"></div>`,
+      },
+      {
+        id: 'paramdonnees',
+        menu: 'Données du panel',
+        titre: 'Données du panel',
+        sub: `Remplir le panel pour l'essayer, ou le vider pour démarrer proprement.
+              Ces deux boutons touchent les données de tout le monde.`,
+        html: `
+          <div class="panel">
+            <h3>Jeu de démonstration</h3>
+            <p class="mv-admin-note">Remplit RH, Commerce et Quotas de données inventées mais cohérentes —
+               les mêmes personnes d'un tableau à l'autre, des chiffres qui s'additionnent
+               juste. De quoi juger les écrans pleins plutôt que vides.
+               <b>Ces données partent sur le serveur comme les vraies : toute l'équipe les verra.</b>
+               Le bouton juste en dessous les retire.</p>
+            <button class="btn" id="mvDemo">Charger un jeu de démonstration…</button>
+          </div>
 
-      <div class="panel" id="mvVitrine"></div>
+          <div class="panel mv-danger">
+            <h3>Repartir de zéro</h3>
+            <p>Vide les données du panel pour démarrer proprement — employés, factures, production,
+               semaines clôturées. Vous choisissez ce qui part. Contrairement à une clôture,
+               <b>rien n'est archivé et l'opération ne s'annule pas</b>.</p>
+            <button class="btn" id="mvWipe">🗑 Vider les données…</button>
+          </div>`,
+      },
+    ];
 
-      <div class="panel" id="mvReglages"></div>
+    /* --- entrées de menu + pages --- */
+    const nav = document.querySelector('.sidebar nav');
+    const sec = document.createElement('div');
+    sec.className = 'nav-section';
+    sec.textContent = 'Administration';
+    nav.appendChild(sec);
 
-      <div class="panel" id="mvInvites"></div>
+    const contenu = document.querySelector('.content');
+    /* Le pied de page fait partie de .content : une page simplement ajoutée à
+       la fin se retrouverait SOUS la citation du domaine. On insère avant. */
+    const pied = contenu.querySelector('.domain-footer');
+    const pages = {};
 
-      <div class="panel">
-        <h3>Jeu de démonstration</h3>
-        <p>Remplit RH, Commerce et Quotas de données inventées mais cohérentes —
-           les mêmes personnes d'un tableau à l'autre, des chiffres qui s'additionnent
-           juste. De quoi juger les écrans pleins plutôt que vides.
-           <b>Ces données partent sur le serveur comme les vraies : toute l'équipe les verra.</b>
-           Le bouton juste en dessous les retire.</p>
-        <button class="btn" id="mvDemo">Charger un jeu de démonstration…</button>
-      </div>
+    RUBRIQUES.forEach(r => {
+      const item = document.createElement('div');
+      item.className = 'nav-item';
+      item.dataset.page = r.id;
+      item.textContent = r.menu;
+      nav.appendChild(item);
 
-      <div class="panel mv-danger">
-        <h3>Repartir de zéro</h3>
-        <p>Vide les données du panel pour démarrer proprement — employés, factures, production,
-           semaines clôturées. Vous choisissez ce qui part. Contrairement à une clôture,
-           <b>rien n'est archivé et l'opération ne s'annule pas</b>.</p>
-        <button class="btn" id="mvWipe">🗑 Vider les données…</button>
-      </div>`;
+      const page = document.createElement('div');
+      page.className = 'page-content';
+      page.id = 'page-' + r.id;
+      page.innerHTML = `
+        <h1 class="page-title">${esc(r.titre)}</h1>
+        <p class="page-sub">${r.sub}</p>
+        ${r.html}`;
+      if (pied) contenu.insertBefore(page, pied); else contenu.appendChild(page);
+      pages[r.id] = page;
 
-    document.querySelector('.content').appendChild(page);
+      /* Le gestionnaire de pages du panel a été posé avant que ces entrées
+         n'existent : chacune ouvre donc la sienne elle-même. */
+      item.addEventListener('click', () => {
+        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        document.querySelectorAll('.page-content').forEach(p => p.classList.remove('active'));
+        item.classList.add('active');
+        page.classList.add('active');
+      });
+    });
 
-    /* Le panneau « Vitrine » est monté par marlowe-actions.js : c'est lui qui
-       tient les données et sait parler au serveur d'images. On le prévient que
-       son point d'accroche existe maintenant. */
-    document.dispatchEvent(new CustomEvent('mv:parametres-pret', { detail: { page } }));
+    /* La section vient d'apparaître après la construction du rail : on le
+       refait, il est idempotent. */
+    if (window.mvRail) window.mvRail.construire();
+
+    const acces = pages.parametres;
+
+    /* Les panneaux « Vitrine », « Règles » et « Accès extérieurs » sont montés
+       par marlowe-actions.js : c'est lui qui tient les données et sait parler
+       au serveur d'images. On le prévient que ses points d'accroche existent. */
+    document.dispatchEvent(new CustomEvent('mv:parametres-pret', { detail: { page: acces, pages } }));
 
     /* --- choix des rôles retenus --- */
-    const pick = page.querySelector('#mvPick');
+    const pick = acces.querySelector('#mvPick');
     pick.addEventListener('click', e => {
       const chip = e.target.closest('[data-role]');
       if (chip) chip.classList.toggle('on');
     });
 
-    page.querySelector('#mvGuessRoles').addEventListener('click', () => {
+    acces.querySelector('#mvGuessRoles').addEventListener('click', () => {
       pick.querySelectorAll('[data-role]').forEach(c =>
         c.classList.toggle('on', looksLikeDomainRole(c.dataset.role)));
     });
 
-    page.querySelector('#mvApplyRoles').addEventListener('click', async () => {
+    acces.querySelector('#mvApplyRoles').addEventListener('click', async () => {
       const chosen = [...pick.querySelectorAll('[data-role].on')].map(c => c.dataset.role);
       if (!chosen.length) {
         alert('Gardez au moins un rôle, sinon le tableau des accès sera vide.');
@@ -1139,7 +1206,7 @@
 
     /* --- cocher / décocher une ligne entière --- */
     /* Un clic sur une cellule fait tourner les trois états. */
-    page.addEventListener('click', e => {
+    acces.addEventListener('click', e => {
       const cell = e.target.closest('[data-cell]');
       if (cell) {
         const suite = { non: 'oui', oui: 'ro', ro: 'non' };
@@ -1154,7 +1221,7 @@
 
       const btn = e.target.closest('[data-toggle-row]');
       if (!btn) return;
-      const cells = page.querySelectorAll(`[data-cell^="${btn.dataset.toggleRow}|"]`);
+      const cells = acces.querySelectorAll(`[data-cell^="${btn.dataset.toggleRow}|"]`);
       const tout = [...cells].every(c => c.dataset.etat !== 'non');
       cells.forEach(c => {
         c.dataset.etat = tout ? 'non' : 'oui';
@@ -1163,24 +1230,24 @@
       });
     });
 
-    const demo = page.querySelector('#mvDemo');
+    const demo = pages.paramdonnees.querySelector('#mvDemo');
     if (demo) demo.addEventListener('click', () => {
       const a = window.MarloweActions;
       if (a && a.chargerDemo) a.chargerDemo();
     });
 
-    const wipe = page.querySelector('#mvWipe');
+    const wipe = pages.paramdonnees.querySelector('#mvWipe');
     if (wipe) wipe.addEventListener('click', () => {
       const a = window.MarloweActions;
       if (a && a.repartirDeZero) a.repartirDeZero();
     });
 
     /* --- enregistrer --- */
-    page.querySelector('#mvSave').addEventListener('click', async () => {
+    acces.querySelector('#mvSave').addEventListener('click', async () => {
       const next = {}, nextRO = {};
       PAGES.forEach(p => { next[p.id] = []; nextRO[p.id] = []; });
 
-      page.querySelectorAll('[data-cell]').forEach(c => {
+      acces.querySelectorAll('[data-cell]').forEach(c => {
         const [pid, role] = c.dataset.cell.split('|');
         if (c.dataset.etat === 'non') return;
         next[pid].push(role);
@@ -1190,7 +1257,7 @@
       try {
         await Store.setSettings(Object.assign({}, settings, { permsRO: nextRO }));
         await Store.setPermissions(next);
-        const tag = page.querySelector('#mvSaved');
+        const tag = acces.querySelector('#mvSaved');
         tag.classList.add('on');
         setTimeout(() => tag.classList.remove('on'), 1800);
       } catch (e) {
@@ -1199,9 +1266,9 @@
     });
 
     /* --- réinitialiser --- */
-    page.querySelector('#mvReset').addEventListener('click', async () => {
+    acces.querySelector('#mvReset').addEventListener('click', async () => {
       const def = defaultPermissions();
-      page.querySelectorAll('[data-cell]').forEach(c => {
+      acces.querySelectorAll('[data-cell]').forEach(c => {
         const [pid, role] = c.dataset.cell.split('|');
         const on = (def[pid] || []).includes(role);
         c.dataset.etat = on ? 'oui' : 'non';
@@ -1210,14 +1277,6 @@
       });
       await Store.setSettings(Object.assign({}, settings, { permsRO: {} }));
       await Store.setPermissions(def);
-    });
-
-    /* --- ouverture de la page (le handler du panel a déjà été posé) --- */
-    item.addEventListener('click', () => {
-      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-      document.querySelectorAll('.page-content').forEach(p => p.classList.remove('active'));
-      item.classList.add('active');
-      page.classList.add('active');
     });
   }
 

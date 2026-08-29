@@ -4952,12 +4952,10 @@
     const box = $('mvReglages');
     if (!box) return;
 
+    /* Le titre et le rappel de la règle sont désormais portés par la page
+       « Règles du domaine » elle-même : les répéter ici ferait doublon. */
     box.innerHTML = `
-      <h3>Règles du domaine</h3>
-      <p class="mv-sub">Deux règles que vous fixez une fois. Elles s'appliquent ensuite toutes seules,
-        semaine après semaine, et survivent aux clôtures.</p>
-
-      <div class="mv-vit-sec">
+      <div class="mv-vit-sec" style="border-top:none;padding-top:0;">
         <h4>Quota de prise de service</h4>
         <p class="mv-hint" style="margin:0 0 12px;">Pour les postes qui pointent — boutique et commerce —
           et qui ne sont donc pas jugés sur les bouteilles produites. Le compte se fait à partir des
