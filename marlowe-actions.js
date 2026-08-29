@@ -1438,13 +1438,55 @@
   /* ========================================================================
      AGENDA — ajouter / supprimer
      ======================================================================== */
+  /* ------------------------------------------------------------------------
+     QUI VOIT QUEL ÉVÉNEMENT
+     La visibilité existait depuis le début mais ne servait à rien : la pastille
+     changeait de couleur et l'événement restait affiché à tout le monde, « privé »
+     compris. Elle filtre maintenant réellement, sur quatre niveaux :
+
+       · public     — tout le monde ;
+       · commercial — les rôles cochés dans Administration ▸ Agenda ;
+       · direction  — les rôles cochés dans la même page, liste séparée ;
+       · privé      — son seul auteur.
+
+     Les deux listes de rôles sont indépendantes : à vous de mettre la direction
+     dans la liste « commercial » si vous voulez qu'elle y ait accès aussi. Le
+     patron voit tout, quelles que soient les listes — sinon il pourrait se
+     verrouiller hors de son propre agenda.
+     ------------------------------------------------------------------------ */
+  const AGENDA_NIVEAUX = ['public', 'commercial', 'direction', 'prive'];
+
+  function agendaVisible(ev) {
+    if (!ev) return false;
+    const vis = String(ev.vis || 'public');
+    if (vis === 'public' || vis === 'tous') return true;
+
+    const S = window.MarloweSession;
+    if (!S) return false;                    /* pas encore connecté : rien de restreint */
+
+    if (vis === 'prive') {
+      /* « Privé » veut dire privé, y compris vis-à-vis du patron : c'est ce que
+         la page a toujours promis. Les événements créés avant que l'auteur ne
+         soit enregistré n'ont pas de « par » — ils restent visibles, plutôt que
+         de disparaître sans prévenir. */
+      if (!ev.par) return true;
+      return String(ev.par) === String(S.id);
+    }
+
+    if (S.isPatron || S.isOwner) return true;
+    if (vis === 'direction')  return !!S.voitDirection;
+    if (vis === 'commercial') return !!S.voitCommercial;
+    return true;
+  }
+
   async function addEvent() {
+    const S = window.MarloweSession || {};
     const r = await askForm('Nouvel événement', [
       { key: 'title', label: 'Titre', value: '' },
       { key: 'date', label: 'Date (jj/mm/aaaa)', value: todayFR() },
       { key: 'heure', label: 'Heure de début', value: '18:00' },
       { key: 'heure_fin', label: 'Heure de fin', value: '19:00' },
-      { key: 'vis', label: 'Visibilité', value: 'public', options: ['public', 'prive', 'direction'] },
+      { key: 'vis', label: 'Visibilité', value: 'public', options: AGENDA_NIVEAUX.slice() },
       { key: 'desc', label: 'Description', value: '' },
     ]);
     if (!r) return;
@@ -1452,7 +1494,9 @@
 
     agendaData.push({
       title: r.title, date: r.date, heure: r.heure, heure_fin: r.heure_fin,
-      vis: r.vis, desc: r.desc,
+      vis: AGENDA_NIVEAUX.includes(r.vis) ? r.vis : 'public', desc: r.desc,
+      /* Sans auteur, « privé » ne veut rien dire : on l'enregistre à la création. */
+      par: S.id || null, parNom: S.name || null,
     });
     agendaData.sort((a, b) => {
       const da = parseFR(a.date), db = parseFR(b.date);
@@ -3717,11 +3761,11 @@
       const ag = D().ref('agenda');
       ag.length = 0;
       ag.push({ date: demoDate(-1), heure: '20:00', heure_fin: '23:00', title: 'Vendanges de nuit',
-                desc: 'Coteau Nord — prévoir les lampes', vis: 'tous' });
+                desc: 'Coteau Nord — prévoir les lampes', vis: 'public' });
       ag.push({ date: demoDate(-3), heure: '19:30', heure_fin: '21:00', title: 'Réunion des responsables',
                 desc: 'Bilan de la semaine et quotas', vis: 'direction' });
       ag.push({ date: demoDate(-5), heure: '21:00', heure_fin: '00:00', title: 'Location — mariage Ansaldi',
-                desc: 'Villa privatisée, zone VIP', vis: 'tous' });
+                desc: 'Villa privatisée, zone VIP', vis: 'commercial' });
       return;
     }
   }
@@ -6935,6 +6979,12 @@
     renderTombola, ticketsDe, renderEntretien, renderDocuments,
     railConstruire, railSynchroniser, allerA,
     totalPrimeRecrutement,
+    agendaVisible, AGENDA_NIVEAUX,
+    /* Rejoué quand le patron change les listes de rôles dans Administration ▸ Agenda. */
+    rafraichirAgenda() {
+      if (typeof renderAgendaList === 'function') renderAgendaList();
+      if (typeof renderWeekGrid === 'function') renderWeekGrid();
+    },
   };
 
   window.MarloweClotureSteps = clotureSteps;

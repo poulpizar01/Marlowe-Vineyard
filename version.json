@@ -1,4 +1,4 @@
 {
-  "v": "1.20.0",
-  "note": "l'ancienne page Parametres est decoupee en cinq rubriques dans la colonne Administration : acces & roles, vitrine publique, regles du domaine, acces exterieurs, donnees du panel."
+  "v": "1.21.0",
+  "note": "agenda : nouvelle visibilite commercial ; direction et commercial se reglent par role dans Administration > Agenda ; la visibilite filtre reellement les evenements, liste et grille comprises."
 }

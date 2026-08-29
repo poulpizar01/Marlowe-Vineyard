@@ -223,6 +223,7 @@
   .vis-public{color:var(--vine);background:rgba(110,139,93,.12);}
   .vis-prive{color:var(--muted);background:rgba(156,147,132,.1);}
   .vis-direction{color:var(--bordeaux-soft);background:rgba(107,31,42,.12);}
+  .vis-commercial{color:var(--or);background:rgba(201,169,97,.13);}
 
   /* ma semaine — vue employé (ex-Productions) */
   .page-head-row{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap;margin-bottom:22px;}
@@ -318,6 +319,7 @@
   .wv-event.vis-public{background:rgba(110,139,93,.22);border-color:var(--vine);color:#CFE0C6;}
   .wv-event.vis-prive{background:rgba(156,147,132,.2);border-color:var(--muted);color:var(--parchment);}
   .wv-event.vis-direction{background:rgba(107,31,42,.26);border-color:var(--bordeaux-soft);color:#F0C9CE;}
+  .wv-event.vis-commercial{background:rgba(201,169,97,.2);border-color:var(--or);color:#F0DFB6;}
 
   /* ---- ported from stats & quotas ---- */
   .week-range{font-size:13px;color:var(--muted);margin-top:6px;}
@@ -1499,7 +1501,10 @@
 
     <div class="page-content" id="page-agenda">
       <h1 class="page-title">Agenda</h1>
-      <p class="page-sub">Planning du domaine — publie un événement public, privé (visible uniquement par toi) ou réservé à la direction.</p>
+      <p class="page-sub">Planning du domaine. Chaque événement porte une visibilité :
+        <b>public</b> pour tout le monde, <b>commercial</b> ou <b>direction</b> pour les rôles
+        désignés dans Administration ▸ Agenda, <b>privé</b> pour vous seul.
+        Vous ne voyez ici que ce à quoi vous avez droit.</p>
 
       <div class="panel">
         <h3>La semaine <span id="weekRange" class="wv-range"></span></h3>
@@ -2643,16 +2648,27 @@ document.getElementById('retraitsBody').innerHTML = retraitsData.length
 
 /* ---------- Agenda ---------- */
 const agendaData = [];
-const visLabel = {public:'Public', prive:'Privé', direction:'Direction'};
+const visLabel = {public:'Public', tous:'Public', commercial:'Commercial', direction:'Direction', prive:'Privé'};
+
+/* La visibilité était purement décorative : la pastille changeait, l'événement
+   restait affiché à tout le monde. Le tri se fait maintenant pour de bon, dans
+   marlowe-actions.js qui connaît la session et les rôles autorisés. Sans lui —
+   au tout premier rendu, avant la connexion — la liste est vide de toute façon. */
+function agendaVisibles(){
+  const A = window.MarloweActions;
+  if (!A || typeof A.agendaVisible !== 'function') return agendaData.map((a, i) => ({a, i}));
+  return agendaData.map((a, i) => ({a, i})).filter(x => A.agendaVisible(x.a));
+}
+
 function renderAgendaList(){
-document.getElementById('agendaList').innerHTML = agendaData.map((a, i) => `
+document.getElementById('agendaList').innerHTML = agendaVisibles().map(({a, i}) => `
   <div class="event-card">
     <div class="event-top">
       <div>
         <div class="event-title">${a.title}</div>
         <div class="event-date">${a.date} · ${a.heure} – ${a.heure_fin}</div>
       </div>
-      <span class="vis-badge vis-${a.vis}">${visLabel[a.vis]}</span>
+      <span class="vis-badge vis-${a.vis === 'tous' ? 'public' : a.vis}">${visLabel[a.vis] || 'Public'}</span>
       <button class="icon-btn danger" data-agenda-del="${i}" title="Supprimer l'événement" style="margin-left:8px;">×</button>
     </div>
     <div class="event-desc">${a.desc}</div>
@@ -2709,7 +2725,7 @@ function renderWeekGrid(){
   const jours = weekDays.map(d => {
     /* Deux événements qui se chevauchent se partagent la largeur au lieu de
        se recouvrir : sinon celui de dessous devient invisible. */
-    const evs = agendaData
+    const evs = agendaVisibles().map(x => x.a)
       .filter(a => a.date === d.date)
       .map(a => ({ a, deb: timeToMinutes(a.heure), fin: Math.max(timeToMinutes(a.heure_fin), timeToMinutes(a.heure) + 30) }))
       .sort((x, y) => x.deb - y.deb);
@@ -2728,7 +2744,7 @@ function renderWeekGrid(){
       const top = (e.deb - DAY_START_HOUR * 60) / 60 * HOUR_H;
       const haut = Math.max(20, (e.fin - e.deb) / 60 * HOUR_H - 2);
       const l = (e.voie / voies) * 100, w = (1 / voies) * 100;
-      return `<div class="wv-event vis-${e.a.vis}"
+      return `<div class="wv-event vis-${e.a.vis === 'tous' ? 'public' : e.a.vis}"
         style="top:${top}px;height:${haut}px;left:calc(${l}% + 3px);width:calc(${w}% - 6px);"
         title="${(e.a.title || '').replace(/"/g,'&quot;')} · ${e.a.heure} – ${e.a.heure_fin}">
         <span class="de-title">${e.a.title || ''}</span>

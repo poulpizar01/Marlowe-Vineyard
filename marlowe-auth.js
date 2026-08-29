@@ -214,6 +214,61 @@
     return ROLE_KEYWORDS.some(k => n === k || n.startsWith(k + ' ') || n.includes(' ' + k));
   }
 
+  /* ==========================================================================
+     VISIBILITÉ DE L'AGENDA
+     --------------------------------------------------------------------------
+     Deux listes de rôles, réglées dans Administration ▸ Agenda : qui voit les
+     événements « direction », et qui voit les événements « commercial ». Elles
+     sont indépendantes l'une de l'autre — c'est volontaire, le patron décide si
+     la direction figure aussi dans la liste commerciale.
+
+     Tant qu'elles n'ont jamais été réglées, une présélection est devinée sur le
+     nom des rôles : mieux vaut une proposition à corriger qu'un agenda muet.
+     ========================================================================== */
+  const AGENDA_NIVEAUX = [
+    { id: 'direction',  label: 'Direction',
+      aide: 'Réunions de responsables, sujets internes. Le niveau le plus fermé.',
+      mots: ['patron', 'direction', 'drh', 'responsable', 'resp'] },
+    { id: 'commercial', label: 'Commercial',
+      aide: 'Locations, livraisons, événements clients — ce que l\'équipe de vente doit voir.',
+      mots: ['patron', 'direction', 'drh', 'responsable', 'resp', 'commercial', 'magasin', 'vendeur', 'caviste'] },
+  ];
+
+  function devinerAgendaRoles(niveau, roles) {
+    return roles.filter(r => {
+      const n = normalizeRole(r);
+      return niveau.mots.some(k => n === k || n.startsWith(k + ' ') || n.includes(' ' + k));
+    });
+  }
+
+  /* Les listes retenues, ou la présélection si rien n'a jamais été enregistré. */
+  function agendaRoles(settings, roles) {
+    const stored = (settings && settings.agendaVis) || {};
+    const liste = Array.isArray(roles) ? roles : [];
+    const out = {};
+    AGENDA_NIVEAUX.forEach(niv => {
+      /* Une liste enregistrée est reprise telle quelle : la filtrer contre la
+         liste des rôles du serveur la viderait si celle-ci n'a pas pu être
+         chargée, et plus personne ne verrait rien. */
+      out[niv.id] = Array.isArray(stored[niv.id]) ? stored[niv.id].slice()
+                                                  : devinerAgendaRoles(niv, liste);
+    });
+    return out;
+  }
+
+  /* Recalcule ce que la session a le droit de voir. Appelé au démarrage, et à
+     nouveau quand le patron enregistre de nouvelles listes — sans rechargement. */
+  function appliquerAgendaVis(session, settings, roles) {
+    const listes = agendaRoles(settings, roles);
+    const a = niveau => session.isPatron || session.isOwner
+      || (listes[niveau] || []).some(r => session.roles.includes(r));
+    if (window.MarloweSession) {
+      window.MarloweSession.voitDirection  = a('direction');
+      window.MarloweSession.voitCommercial = a('commercial');
+    }
+    return listes;
+  }
+
   const ls = {
     get(k, fallback) {
       try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : fallback; }
@@ -972,6 +1027,7 @@
      10. PAGE PARAMÈTRES (patron uniquement)
      ========================================================================== */
   function buildSettings(roles, perms, settings) {
+    /* réassigné après un enregistrement des listes d'agenda */
     /* Rôles retenus : ceux choisis par le patron, sinon une présélection
        automatique des rôles qui ressemblent à des rôles du domaine. */
     const configured = Array.isArray(settings.visibleRoles) ? settings.visibleRoles : null;
@@ -1002,6 +1058,12 @@
         </tr>`;
       });
     });
+
+    /* Rôles proposés pour l'agenda : les mêmes que dans la matrice des accès,
+       patron compris — il figure dans les listes même s'il voit tout de toute
+       façon, pour que ce qui est coché reflète la règle écrite. */
+    const rolesAgenda = visible.slice();
+    const agendaListes = agendaRoles(settings, roles);
 
     const banniereTest = CONFIG.MODE !== 'discord' ? `
       <div class="mv-demo-banner" style="max-width:760px;">
@@ -1072,6 +1134,43 @@
             <button class="btn primary" id="mvSave">Enregistrer</button>
             <button class="btn" id="mvReset">Réinitialiser les accès</button>
             <span class="mv-saved" id="mvSaved">Enregistré ✓</span>
+          </div>`,
+      },
+      {
+        id: 'paramagenda',
+        menu: 'Agenda',
+        titre: 'Visibilité de l\'agenda',
+        sub: `Un événement publié en « direction » ou en « commercial » n'apparaît que
+              pour les rôles cochés ici — ni dans la liste, ni dans la grille de la semaine
+              pour les autres. Le patron voit tous les événements « direction » et
+              « commercial », qu'il soit coché ou non — il ne peut pas se verrouiller
+              hors de son propre agenda. Un événement <b>privé</b> échappe à la règle :
+              seul son auteur le voit, patron compris.`,
+        html: `
+          <div class="panel">
+            ${AGENDA_NIVEAUX.map(niv => `
+              <div class="mv-vit-sec"${niv.id === AGENDA_NIVEAUX[0].id
+                ? ' style="border-top:none;padding-top:0;"' : ''}>
+                <h4>Événements « ${esc(niv.label)} » <span class="mv-cpt"
+                  id="mvAgCpt-${niv.id}">${(agendaListes[niv.id] || []).length} rôle(s)</span></h4>
+                <p class="mv-hint" style="margin:0 0 12px;">${niv.aide}</p>
+                <div class="mv-role-list mv-pick" id="mvAg-${niv.id}">
+                  ${rolesAgenda.map(r => `<div class="mv-role-chip${
+                    (agendaListes[niv.id] || []).includes(r) ? ' on' : ''
+                  }" data-role="${esc(r)}">${esc(r)}</div>`).join('')}
+                </div>
+              </div>`).join('')}
+
+            <p class="mv-hint" style="max-width:760px;">Les deux listes sont indépendantes :
+              si vous voulez que la direction voie aussi les événements commerciaux,
+              cochez-la dans les deux. Le niveau <b>privé</b>, lui, ne se règle pas —
+              un événement privé n'est visible que par celui qui l'a créé.</p>
+
+            <div class="btn-row" style="margin-top:6px;align-items:center;">
+              <button class="btn primary" id="mvAgSave">Enregistrer</button>
+              <button class="btn" id="mvAgGuess">Re-deviner</button>
+              <span class="mv-saved" id="mvAgSaved">Enregistré ✓</span>
+            </div>
           </div>`,
       },
       {
@@ -1230,6 +1329,56 @@
       });
     });
 
+    /* --- visibilité de l'agenda --- */
+    const pageAg = pages.paramagenda;
+    AGENDA_NIVEAUX.forEach(niv => {
+      const box = pageAg.querySelector('#mvAg-' + niv.id);
+      const cpt = pageAg.querySelector('#mvAgCpt-' + niv.id);
+      const recompter = () =>
+        { cpt.textContent = box.querySelectorAll('[data-role].on').length + ' rôle(s)'; };
+      box.addEventListener('click', e => {
+        const chip = e.target.closest('[data-role]');
+        if (!chip) return;
+        chip.classList.toggle('on');
+        recompter();
+      });
+    });
+
+    pageAg.querySelector('#mvAgGuess').addEventListener('click', () => {
+      AGENDA_NIVEAUX.forEach(niv => {
+        const devine = devinerAgendaRoles(niv, rolesAgenda);
+        const box = pageAg.querySelector('#mvAg-' + niv.id);
+        box.querySelectorAll('[data-role]').forEach(c =>
+          c.classList.toggle('on', devine.includes(c.dataset.role)));
+        pageAg.querySelector('#mvAgCpt-' + niv.id).textContent =
+          box.querySelectorAll('[data-role].on').length + ' rôle(s)';
+      });
+    });
+
+    pageAg.querySelector('#mvAgSave').addEventListener('click', async () => {
+      const agendaVis = {};
+      AGENDA_NIVEAUX.forEach(niv => {
+        agendaVis[niv.id] = [...pageAg.querySelectorAll('#mvAg-' + niv.id + ' [data-role].on')]
+          .map(c => c.dataset.role);
+      });
+      try {
+        const next = Object.assign({}, settings, { agendaVis });
+        await Store.setSettings(next);
+        settings = next;
+        /* Appliqué tout de suite, sans rechargement : l'agenda de cet écran
+           doit refléter la règle que l'on vient d'écrire. */
+        const S = window.MarloweSession;
+        if (S) appliquerAgendaVis(S, next, rolesAgenda);
+        const a = window.MarloweActions;
+        if (a && a.rafraichirAgenda) a.rafraichirAgenda();
+        const tag = pageAg.querySelector('#mvAgSaved');
+        tag.classList.add('on');
+        setTimeout(() => tag.classList.remove('on'), 1800);
+      } catch (e) {
+        alert("Impossible d'enregistrer : " + e.message);
+      }
+    });
+
     const demo = pages.paramdonnees.querySelector('#mvDemo');
     if (demo) demo.addEventListener('click', () => {
       const a = window.MarloweActions;
@@ -1323,6 +1472,10 @@
       invite: session.invite || null,
       readOnly,
     };
+
+    /* Ce que cette session a le droit de voir dans l'agenda. Calculé une fois,
+       avant le premier rendu : le tri des événements le lit à chaque affichage. */
+    appliquerAgendaVis(session, settings0, roles);
 
     applyNavFilter(allowedPages(session, perms));
     addUserBadge(session);
