@@ -1,4 +1,4 @@
 {
-  "v": "1.14.0",
-  "note": "navigation a deux niveaux : rail d'icones par section et colonne montrant uniquement les pages de la section ouverte."
+  "v": "1.14.1",
+  "note": "pied de page enfin mis en forme et remis dans la colonne de contenu (un div en trop le sortait de main), etats vides qui expliquent pourquoi la liste est vide."
 }

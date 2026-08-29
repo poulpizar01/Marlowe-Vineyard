@@ -1310,6 +1310,44 @@
      Tant qu'aucune semaine n'a été clôturée, on garde le comportement
      d'origine : la production en cours.
      ------------------------------------------------------------------------ */
+  /* Une liste vide sans explication laisse chercher la panne là où il n'y en a
+     pas. Trois situations très différentes se cachaient derrière la même
+     phrase : la semaine n'a pas encore de chiffres, elle en a mais personne
+     n'a franchi son palier, ou l'on regarde une semaine déjà clôturée. */
+  function videEligibilite(semaine) {
+    if (semaine) {
+      return `<tr><td colspan="6"><div class="mv-vide">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3">
+          <rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18M8 2v4M16 2v4"/></svg>
+        <div class="mv-vide-t">Personne n'était éligible sur cette semaine.</div>
+        <div class="mv-vide-s">La ${esc(semaine.label.toLowerCase())} a bien été clôturée,
+          mais aucun employé n'avait atteint son quota.</div>
+      </div></td></tr>`;
+    }
+
+    const production = effectifData.some(e => e.active && (e.barils || 0) > 0);
+
+    if (!production) {
+      return `<tr><td colspan="6"><div class="mv-vide">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3">
+          <path d="M3 7h18l-2 12H5Z"/><path d="M8 7a4 4 0 0 1 8 0"/><path d="M9 12v4M15 12v4"/></svg>
+        <div class="mv-vide-t">La semaine n'a pas encore de production.</div>
+        <div class="mv-vide-s">Collez la tablette dans <b>Tableau de bord</b> :
+          les barils, les quotas et cette liste se rempliront tout seuls.</div>
+        <button class="btn" data-aller="statsdash">Aller au tableau de bord</button>
+      </div></td></tr>`;
+    }
+
+    return `<tr><td colspan="6"><div class="mv-vide">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3">
+        <path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+      <div class="mv-vide-t">Personne n'a encore atteint son quota cette semaine.</div>
+      <div class="mv-vide-s">La production est bien enregistrée, mais aucun employé n'a
+        franchi son palier. Les paliers se règlent dans <b>Grades &amp; quotas</b>.</div>
+      <button class="btn" data-aller="statsgrades">Voir les quotas</button>
+    </div></td></tr>`;
+  }
+
   function renderEligibilite() {
     const body = $('eligibiliteBody');
     if (!body) return;
@@ -1350,7 +1388,7 @@
           ? `<button class="btn" data-undistribute="${esc(r.name)}" style="padding:7px 12px;font-size:11.5px;" title="Revenir sur cette distribution">↺ Annuler</button>`
           : `<button class="btn" data-distribute="${esc(r.name)}" style="padding:7px 12px;font-size:11.5px;">Marquer distribuée</button>`}</td>
       </tr>`).join('')
-      : `<tr><td colspan="6" class="empty-note" style="padding:22px 0;">Personne n'a atteint son quota sur cette période.</td></tr>`;
+      : videEligibilite(w);
   }
 
   /* Met à jour les en-têtes qui affichaient une semaine figée dans le fichier. */
@@ -4468,7 +4506,20 @@
     else railOuvrir(ouvert.dataset.groupe);
   }
 
+  /* Un bouton d'état vide doit VRAIMENT emmener où il dit. On rejoue le clic
+     sur l'entrée de menu correspondante plutôt que de dupliquer la logique de
+     navigation — comme ça les sous-onglets et le rail suivent aussi. */
+  function allerA(page) {
+    const item = document.querySelector(`.sidebar nav .nav-item[data-page="${page}"]:not(.mv-hidden)`);
+    if (item) { item.click(); return true; }
+    toast("Cette page ne vous est pas accessible.");
+    return false;
+  }
+
   document.addEventListener('click', e => {
+    const go = e.target.closest('[data-aller]');
+    if (go) { allerA(go.dataset.aller); return; }
+
     const b = e.target.closest('.mv-rail-btn');
     if (b) { railOuvrir(b.dataset.groupe); return; }
     /* Un changement de page peut venir d'ailleurs que du menu : on resynchronise
@@ -6146,7 +6197,7 @@
     openInvoiceDoc, renderRegles, renderMagasin, renderCommandes, renderStock, renderMagRecap,
     renderComRunner, testerDiscord, renderQuotaService, renderPrimeRecrutement,
     renderTombola, ticketsDe, renderEntretien, renderDocuments,
-    railConstruire, railSynchroniser,
+    railConstruire, railSynchroniser, allerA,
     totalPrimeRecrutement,
   };
 
