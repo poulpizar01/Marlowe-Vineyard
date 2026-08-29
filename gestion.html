@@ -55,7 +55,13 @@
 
   /* sidebar */
   .sidebar{width:220px;flex-shrink:0;background:var(--oak-2);border-right:1px solid var(--band);backdrop-filter:blur(8px);padding:24px 16px;position:sticky;top:0;height:100vh;overflow-y:auto;}
-  .sidebar-brand{display:flex;align-items:center;gap:12px;padding:0 8px 22px;border-bottom:1px solid var(--band);margin-bottom:18px;}
+  .sidebar-brand{display:flex;align-items:center;gap:12px;padding:0 8px 22px;border-bottom:1px solid var(--band);margin-bottom:18px;
+    text-decoration:none;color:inherit;position:relative;transition:opacity .16s ease;}
+  .sidebar-brand:hover{opacity:.85;}
+  /* La flèche ne se montre qu'au survol : elle dit où mène le clic sans
+     encombrer en permanence l'identité du domaine. */
+  .brand-sortie{margin-left:auto;font-size:13px;color:var(--or-soft);opacity:0;transition:opacity .16s ease;}
+  .sidebar-brand:hover .brand-sortie{opacity:1;}
   .brand-mark{width:34px;height:34px;border:1px solid var(--or-soft);border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Fraunces',serif;font-style:italic;font-weight:600;color:var(--or);font-size:13px;flex-shrink:0;}
   .brand-mark[hidden]{display:none;}
   .brand-logo{height:40px;width:auto;flex-shrink:0;display:block;margin:-5px 0;}
@@ -504,7 +510,7 @@
 <div class="app-shell">
 
   <aside class="sidebar">
-    <div class="sidebar-brand">
+    <a class="sidebar-brand" href="index.html" title="Retour au site du domaine">
       <img class="brand-logo" src="logo.png" alt="Marlowe Vineyard"
            onerror="this.remove();document.getElementById('brandFallback').hidden=false;">
       <div class="brand-mark" id="brandFallback" hidden>MV</div>
@@ -512,7 +518,8 @@
         <div class="brand-name">Marlowe Vineyard</div>
         <div class="brand-sub">Gestion du domaine</div>
       </div>
-    </div>
+      <span class="brand-sortie" aria-hidden="true">↗</span>
+    </a>
     <nav>
       <div class="nav-section">RH</div>
       <div class="nav-item" data-page="rhemployes">Employés</div>
