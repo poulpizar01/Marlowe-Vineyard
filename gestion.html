@@ -1243,6 +1243,8 @@
         <button class="sort-btn" data-sort="nom">Nom</button>
       </div>
       <button class="sort-dir" id="sortDir" title="Inverser l'ordre">↓</button>
+      <button class="btn" id="syncEffectifBtn" style="margin-left:auto;"
+              title="Reprendre les employés du registre RH et leur production de la semaine">⟳ Synchroniser</button>
     </div>
 
     <div id="effectifList"></div>
@@ -1734,6 +1736,7 @@ document.getElementById('mdFusionner').addEventListener('click', () => {
     }
   });
   renderDash(dash);
+  enregistrerTablette(`a fusionné ${rows.length} ligne(s) de la tablette`);
   document.getElementById('dashPasteArea').value = '';
   dashManualForm.style.display = 'none';
 });
@@ -1745,9 +1748,20 @@ document.getElementById('mdRemplacer').addEventListener('click', () => {
   dash.length = 0;
   rows.forEach(row => dash.push({...row, tickets: 0}));
   renderDash(dash);
+  enregistrerTablette(`a remplacé la tablette par ${rows.length} ligne(s)`);
   document.getElementById('dashPasteArea').value = '';
   dashManualForm.style.display = 'none';
 });
+
+/* Le collage de la tablette redessinait le tableau sans jamais l'enregistrer :
+   tout repartait au rechargement suivant. Et comme l'effectif se déduit de
+   cette production, on le remet d'accord dans la foulée. */
+function enregistrerTablette(note){
+  const D = window.MarloweData;
+  const A = window.MarloweActions;
+  if (D) { if (note) D.note(note); D.save('dash'); }
+  if (A && A.syncEffectifEtEnregistrer) A.syncEffectifEtEnregistrer(true);
+}
 
 function updateGradeCounts(){
   const counts = {'Saisonnier':0, 'Ouvrier Viticole':0, 'Chef de Culture':0};
@@ -1877,7 +1891,10 @@ document.getElementById('sortDir').addEventListener('click', (ev) => {
 /* ---- Primes ---- */
 const PLAFOND = 19000;
 const baseQuota = {'Saisonnier':3000, 'Ouvrier Viticole':5000, 'Chef de culture':8000};
-const multiplierFor = {'Saisonnier':1, 'Ouvrier Viticole':2, 'Chef de culture':2.5};
+/* « Chef de culture » avec un c minuscule ne correspondait à aucun grade :
+   rewardsByGrade et gradePillClass écrivent « Chef de Culture ». La prime
+   retombait donc sur le multiplicateur par défaut, ×1 au lieu de ×2,5. */
+const multiplierFor = {'Saisonnier':1, 'Ouvrier Viticole':2, 'Chef de Culture':2.5};
 const recruesData = {'Julio Cortes':2, 'Nella Valmora':1};
 const salaireData = {'Julio Cortes':28000, 'Nella Valmora':44000};
 

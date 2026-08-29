@@ -665,7 +665,11 @@
     refreshEffectifCount();
     D().note(`a importé ${ajoutees} fiche(s) employé`);
     D().saveMany(['rhRoster', 'rhRecruiters']);
-    toast(`${ajoutees} fiche(s) enregistrée(s).`);
+
+    /* Le registre vient de changer : l'effectif de production en découle. */
+    const sync = syncEffectifEtEnregistrer(true);
+    toast(`${ajoutees} fiche(s) enregistrée(s)`
+        + (sync.crees ? ` · ${sync.crees} fiche(s) de production créée(s)` : ''));
   }
 
   async function addEmployee() {
@@ -1476,6 +1480,97 @@
     bar.style.margin = '0 0 16px';
     bar.innerHTML = '<button class="btn primary" id="mvAddEvent">+ Ajouter un événement</button>';
     list.parentNode.insertBefore(bar, list);
+  }
+
+  /* ==========================================================================
+     L'EFFECTIF SE DÉDUIT — il ne se saisissait nulle part
+     --------------------------------------------------------------------------
+     Vue d'ensemble, Effectif, Primes et Éligibilité lisent tous `effectifData`.
+     Or RIEN dans le panel n'y écrivait jamais : la seule ligne qui en créait se
+     trouvait dans l'annulation d'une clôture. Le registre RH pouvait être plein
+     et la tablette collée, ces quatre écrans restaient vides — il n'y avait pas
+     de passerelle entre le personnel et sa production.
+
+     La voici. Elle croise deux sources et n'en invente aucune :
+
+       · QUI travaille — le registre RH, pour les trois grades de production ;
+       · COMBIEN il produit — le tableau de bord de la semaine, où les barils
+         valent runs ÷ 5, exactement comme partout ailleurs.
+
+     Deux prudences délibérées : une fiche déjà présente n'est jamais réécrite
+     dans son grade ni son quota — une promotion accordée à la main survit à la
+     synchronisation ; et personne n'est supprimé — un départ se déclare, il ne
+     se devine pas.
+     ========================================================================== */
+
+  /* Les trois grades du parcours de production, avec leur quota hebdomadaire
+     et le palier qui ouvre la promotion suivante. Indexés par clé normalisée :
+     le registre écrit « Ouvrier viticole », les primes « Ouvrier Viticole ». */
+  const GRADE_PROD = {
+    'saisonnier':       { grade: 'Saisonnier',       quota: 3000, next: 'Ouvrier Viticole', promoTarget: 5000, final: false },
+    'ouvrier viticole': { grade: 'Ouvrier Viticole', quota: 5000, next: 'Chef de Culture',  promoTarget: 8000, final: false },
+    'chef de culture':  { grade: 'Chef de Culture',  quota: 8000, next: null,               promoTarget: null, final: true  },
+  };
+
+  function synchroniserEffectif() {
+    const roster = (typeof rhRosterData !== 'undefined') ? rhRosterData : [];
+    const lignes = (typeof dash !== 'undefined' && Array.isArray(dash)) ? dash : [];
+
+    const production = new Map();
+    lignes.forEach(d => production.set(String(d.name).trim().toLowerCase(),
+                                       Math.round((Number(d.runs) || 0) / 5)));
+
+    const existantes = new Map(effectifData.map(e => [String(e.name).trim().toLowerCase(), e]));
+    let crees = 0, majBarils = 0;
+
+    roster.forEach(emp => {
+      if (emp.status && emp.status !== 'actif') return;
+      const g = GRADE_PROD[clefPoste(emp.poste)];
+      if (!g) return;                       /* hors parcours de production */
+
+      const cle = String(emp.name).trim().toLowerCase();
+      let e = existantes.get(cle);
+
+      if (!e) {
+        e = {
+          name: emp.name, grade: g.grade, active: true,
+          barils: 0, quota: g.quota,
+          nextGrade: g.next, promoTarget: g.promoTarget, isFinal: g.final,
+          distributed: false,
+        };
+        effectifData.push(e);
+        existantes.set(cle, e);
+        crees++;
+      }
+
+      if (production.has(cle)) {
+        const b = production.get(cle);
+        if (e.barils !== b) { e.barils = b; majBarils++; }
+      }
+    });
+
+    /* Les fiches sans correspondance au registre ne sont pas effacées : elles
+       peuvent venir d'une saisie manuelle. On les compte pour le dire. */
+    const nomsRegistre = new Set(roster.map(e => String(e.name).trim().toLowerCase()));
+    const orphelines = effectifData.filter(e => !nomsRegistre.has(String(e.name).trim().toLowerCase())).length;
+
+    return { crees, majBarils, orphelines, total: effectifData.length };
+  }
+
+  function syncEffectifEtEnregistrer(silencieux) {
+    const r = synchroniserEffectif();
+    if (r.crees || r.majBarils) {
+      D().note(`a synchronisé l'effectif (${r.crees} fiche(s) créée(s), ${r.majBarils} production(s) mise(s) à jour)`);
+      D().save('effectif');
+    }
+    if (!silencieux) {
+      const bouts = [];
+      if (r.crees) bouts.push(`${r.crees} fiche(s) créée(s)`);
+      if (r.majBarils) bouts.push(`${r.majBarils} production(s) reprise(s)`);
+      if (r.orphelines) bouts.push(`${r.orphelines} hors registre`);
+      toast(bouts.length ? bouts.join(' · ') : `Rien à reprendre — ${r.total} fiche(s) déjà à jour.`);
+    }
+    return r;
   }
 
   /* ========================================================================
@@ -4030,6 +4125,7 @@
     const on = (id, fn) => { const e = $(id); if (e) e.addEventListener('click', fn); };
     on('addEmpBtn', addEmployee);
     on('impEmpBtn', importerListeRH);
+    on('syncEffectifBtn', () => syncEffectifEtEnregistrer(false));
     on('absBtn', declareAbsence);
     on('blAddBtn', addBlacklist);
     on('addClientBtn', addClient);
@@ -6819,7 +6915,8 @@
     verifierVersion, battementPresence, renderPresence, setZoom, toggleFullscreen,
     renderQuotas3, renderJournal, appliquerLectureSeule, remplirVides, repartirDeZero,
     renderVitrine, renderCatalogues, appliquerAccesService, renderAvertissements, compteAvertissements,
-    openInvoiceDoc, renderRegles, chargerDemo, importerListeRH, analyserListeRH, modifierEmploye, estFormatRegistre, renderMagasin, renderCommandes, renderStock, renderMagRecap,
+    openInvoiceDoc, renderRegles, chargerDemo, importerListeRH, analyserListeRH, modifierEmploye, estFormatRegistre,
+    synchroniserEffectif, syncEffectifEtEnregistrer, renderMagasin, renderCommandes, renderStock, renderMagRecap,
     renderComRunner, testerDiscord, renderQuotaService, renderPrimeRecrutement,
     renderTombola, ticketsDe, renderEntretien, renderDocuments,
     railConstruire, railSynchroniser, allerA,

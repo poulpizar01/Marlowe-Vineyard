@@ -1,4 +1,4 @@
 {
-  "v": "1.17.1",
-  "note": "l'import se repere sur le numero civil au lieu de compter les colonnes : il lit le registre quelle que soit sa mise en page."
+  "v": "1.18.0",
+  "note": "l'effectif se deduit enfin du registre RH et de la tablette ; le collage de la tablette s'enregistre ; multiplicateur de prime du Chef de Culture corrige."
 }
