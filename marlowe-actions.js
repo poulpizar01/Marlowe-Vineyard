@@ -4026,14 +4026,14 @@
       @media print{.mv-online{display:none;}}
 
       /* --- Barre d'affichage --- */
-      /* Barre d'affichage — accordée à la colonne « verre & vigne ». Le fond est
-         opaque : le décor de la colonne passe derrière, jamais à travers. */
-      .mv-viewbar{margin:0 -16px;padding:10px 16px;border-top:1px solid rgba(158,207,124,.16);
-        background:rgba(22,28,20,.82);display:flex;align-items:center;gap:6px;}
-      .mv-vb{width:26px;height:26px;border-radius:7px;border:1px solid rgba(158,207,124,.2);
+      /* Barre d'affichage — accordée à la colonne « coucher de vigne ». Le fond
+         est opaque : le décor de la colonne passe derrière, jamais à travers. */
+      .mv-viewbar{margin:0 -16px;padding:10px 16px;border-top:1px solid rgba(243,208,138,.14);
+        background:rgba(20,16,13,.88);display:flex;align-items:center;gap:6px;}
+      .mv-vb{width:26px;height:26px;border-radius:7px;border:1px solid rgba(243,208,138,.18);
         background:transparent;color:var(--muted,#9C9384);cursor:pointer;font-size:13px;
         line-height:1;display:flex;align-items:center;justify-content:center;transition:.15s;}
-      .mv-vb:hover{color:#C5DCBA;border-color:rgba(158,207,124,.5);}
+      .mv-vb:hover{color:#F3D08A;border-color:rgba(243,208,138,.45);}
       .mv-vb.wide{margin-left:auto;}
       .mv-vb-l{font-size:10.5px;color:var(--muted,#9C9384);min-width:38px;text-align:center;
         font-variant-numeric:tabular-nums;}

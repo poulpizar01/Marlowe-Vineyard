@@ -491,18 +491,18 @@
   /* Le pied suit la colonne « verre & vigne » : un fond vert très sombre,
      opaque, qui referme le dégradé sans laisser passer le décor. */
   .mv-user{flex-shrink:0;margin:0 -16px -24px;padding:14px 16px 18px;
-    border-top:1px solid rgba(158,207,124,.18);background:#1A2018;}
+    border-top:1px solid rgba(243,208,138,.16);background:#17130F;}
   .mv-user-top{display:flex;align-items:center;gap:10px;}
-  .mv-avatar{width:34px;height:34px;border-radius:50%;flex-shrink:0;background:rgba(158,207,124,.14);
-    border:1px solid rgba(158,207,124,.45);display:flex;align-items:center;justify-content:center;
-    font-size:13px;font-weight:600;color:#C5DCBA;overflow:hidden;}
+  .mv-avatar{width:34px;height:34px;border-radius:50%;flex-shrink:0;background:rgba(243,208,138,.14);
+    border:1px solid rgba(243,208,138,.42);display:flex;align-items:center;justify-content:center;
+    font-size:13px;font-weight:600;color:#F3D08A;overflow:hidden;}
   .mv-avatar img{width:100%;height:100%;object-fit:cover;}
   .mv-user-name{font-size:13px;font-weight:600;color:var(--parchment,#EDE3CF);line-height:1.3;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .mv-user-role{font-size:10.5px;color:var(--muted,#9C9384);margin-top:2px;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .mv-owner-tag{color:var(--or,#C9A961);font-weight:600;}
-  .mv-logout{margin-top:10px;width:100%;background:transparent;border:1px solid rgba(158,207,124,.2);
+  .mv-logout{margin-top:10px;width:100%;background:transparent;border:1px solid rgba(243,208,138,.18);
     border-radius:8px;padding:7px;font-size:11.5px;color:var(--muted,#9C9384);cursor:pointer;
     font-family:inherit;transition:.15s;}
   .mv-logout:hover{border-color:var(--bordeaux-soft,#8A3540);color:#E08A7A;}
