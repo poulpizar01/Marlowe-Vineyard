@@ -57,7 +57,7 @@
      Six ou sept sections, chacune une icône. La liste complète des pages ne
      s'affiche plus d'un bloc : elle vit dans la colonne d'à côté, qui ne montre
      que la section ouverte. Fin de l'ascenseur de vingt-cinq entrées. */
-  .mv-rail{width:64px;flex-shrink:0;background:rgba(20,19,16,.94);border-right:1px solid var(--band);
+  .mv-rail{width:64px;flex-shrink:0;background:rgba(16,20,15,.95);border-right:1px solid rgba(140,190,120,.16);
     position:sticky;top:0;height:100vh;display:flex;flex-direction:column;align-items:center;
     padding:14px 0;gap:2px;backdrop-filter:blur(8px);z-index:3;}
   .mv-rail-logo{display:flex;align-items:center;justify-content:center;margin-bottom:12px;
@@ -71,18 +71,48 @@
     color:var(--muted);font-family:inherit;font-size:8.5px;letter-spacing:.02em;
     transition:background .15s ease,color .15s ease;position:relative;flex-shrink:0;}
   .mv-rail-btn svg{width:19px;height:19px;}
-  .mv-rail-btn:hover{background:rgba(201,169,97,.07);color:var(--parchment);}
-  .mv-rail-btn.est-ouvert{background:rgba(201,169,97,.16);color:var(--or);}
+  .mv-rail-btn:hover{background:rgba(158,207,124,.08);color:var(--parchment);}
+  .mv-rail-btn.est-ouvert{background:rgba(158,207,124,.16);color:#C5DCBA;}
   /* Le point dit où l'on se trouve VRAIMENT ; le fond dit seulement ce que
      la colonne est en train de montrer. Les deux ne coïncident pas toujours. */
   .mv-rail-btn.est-courant::after{content:'';position:absolute;top:6px;right:8px;width:6px;height:6px;
-    border-radius:50%;background:var(--or);}
+    border-radius:50%;background:#9ECF7C;box-shadow:0 0 8px rgba(158,207,124,.8);}
   .mv-rail-btn.mv-hidden{display:none;}
 
   /* sidebar */
-  .sidebar{width:212px;flex-shrink:0;background:var(--oak-2);border-right:1px solid var(--band);backdrop-filter:blur(8px);padding:24px 14px;position:sticky;top:0;height:100vh;overflow-y:auto;}
-  .mv-col-titre{font-family:'Fraunces',serif;font-weight:600;font-size:16.5px;color:var(--parchment);
-    padding:0 8px 16px;border-bottom:1px solid var(--band);margin-bottom:10px;line-height:1.25;}
+  /* ===== LA COLONNE — verre & vigne =========================================
+     Le brun opaque laissait un grand vide muet sous les entrées. La colonne
+     est maintenant du verre teinté : une lumière de feuillage en haut, une
+     lueur dorée plus bas, et la grappe du domaine dessinée dans l'espace
+     libre. Tout le décor est en fond (::before, ::after) — le texte et les
+     boutons passent au-dessus grâce au z-index posé plus bas.
+     .sidebar est en position:sticky, qui suffit à contenir les absolus.
+     ========================================================================= */
+  .sidebar{width:212px;flex-shrink:0;
+    background:linear-gradient(200deg,rgba(46,66,42,.55),rgba(18,24,18,.9));
+    border-right:1px solid rgba(140,190,120,.22);backdrop-filter:blur(14px);
+    padding:24px 14px;position:sticky;top:0;height:100vh;overflow-y:auto;}
+
+  /* les deux lueurs */
+  .sidebar::before{content:'';position:absolute;inset:0;pointer-events:none;z-index:0;
+    background:
+      radial-gradient(circle 130px at -18px -14px, rgba(126,178,96,.38), transparent 64%),
+      radial-gradient(circle 150px at 214px calc(100% - 300px), rgba(201,169,97,.24), transparent 66%);}
+
+  /* la grappe, calée au-dessus du pied de colonne pour ne jamais le traverser */
+  .sidebar::after{content:'';position:absolute;left:14px;bottom:176px;width:156px;height:196px;
+    pointer-events:none;z-index:0;opacity:.75;
+    background:url("data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%2062%2078%22%20fill=%22none%22%20stroke=%22%23D6EFC3%22%20stroke-width=%221.8%22%20stroke-linecap=%22round%22%20stroke-linejoin=%22round%22%3E%3Cpath%20d=%22M31%2020%20C%2031%2012,%2026%208,%2020%209%20C%2015%2010,%2015%2016,%2020%2016%20C%2024%2016,%2025%2012,%2023%2010%22/%3E%3Cpath%20d=%22M33%2017%20C%2040%208,%2052%2010,%2053%2019%20C%2054%2028,%2042%2030,%2037%2024%22%20fill=%22%23D6EFC3%22%20fill-opacity=%22.18%22/%3E%3Cpath%20d=%22M44%2012%20L%2042%2025%20M%2037%2015%20L%2045%2020%20M%2050%2015%20L%2043%2022%22%20stroke-opacity=%22.7%22/%3E%3Ccircle%20cx=%2214%22%20cy=%2231%22%20r=%226.4%22%20fill=%22%239ECF7C%22%20fill-opacity=%22.55%22/%3E%3Ccircle%20cx=%2227%22%20cy=%2231%22%20r=%226.4%22%20fill=%22%239ECF7C%22%20fill-opacity=%22.55%22/%3E%3Ccircle%20cx=%2240%22%20cy=%2231%22%20r=%226.4%22%20fill=%22%239ECF7C%22%20fill-opacity=%22.55%22/%3E%3Ccircle%20cx=%2220%22%20cy=%2243%22%20r=%226.4%22%20fill=%22%239ECF7C%22%20fill-opacity=%22.55%22/%3E%3Ccircle%20cx=%2233%22%20cy=%2243%22%20r=%226.4%22%20fill=%22%239ECF7C%22%20fill-opacity=%22.55%22/%3E%3Ccircle%20cx=%2246%22%20cy=%2243%22%20r=%226.4%22%20fill=%22%239ECF7C%22%20fill-opacity=%22.55%22/%3E%3Ccircle%20cx=%2226%22%20cy=%2255%22%20r=%226.4%22%20fill=%22%239ECF7C%22%20fill-opacity=%22.55%22/%3E%3Ccircle%20cx=%2239%22%20cy=%2255%22%20r=%226.4%22%20fill=%22%239ECF7C%22%20fill-opacity=%22.55%22/%3E%3Ccircle%20cx=%2232%22%20cy=%2267%22%20r=%226.4%22%20fill=%22%239ECF7C%22%20fill-opacity=%22.55%22/%3E%3C/svg%3E") center/contain no-repeat;}
+
+  /* tout ce qui se lit passe devant le décor */
+  .sidebar > *{position:relative;z-index:1;}
+
+  .mv-col-titre{font-family:'Fraunces',serif;font-weight:600;font-size:16.5px;color:#F0F6EA;
+    padding:0 8px 16px;border-bottom:1px solid rgba(158,207,124,.26);margin-bottom:12px;line-height:1.25;}
+
+  /* La signature du domaine, entre la navigation et la barre d'affichage. */
+  .mv-signature{flex-shrink:0;padding:0 8px 16px;font-size:10px;letter-spacing:.15em;
+    text-transform:uppercase;color:rgba(197,220,186,.6);}
   .mv-groupe{display:none;}
   .mv-groupe.est-ouvert{display:block;}
   /* L'intitulé de section faisait doublon avec le titre de la colonne. */
@@ -113,6 +143,10 @@
     .mv-rail{width:54px;}
     .mv-rail-btn{width:44px;font-size:8px;}
     .sidebar{width:168px;padding:20px 10px;}
+    /* 156 px de grappe dans 168 px de colonne : on la retire plutôt que de la
+       coller aux bords. */
+    .sidebar::after{display:none;}
+    .mv-signature{font-size:9px;letter-spacing:.1em;}
     .content{padding:26px 20px 70px;}
   }
   .sidebar-brand{display:flex;align-items:center;gap:12px;padding:0 8px 22px;border-bottom:1px solid var(--band);margin-bottom:18px;
@@ -131,9 +165,13 @@
   .brand-name{font-family:'Fraunces',serif;font-weight:600;font-size:13.5px;line-height:1.2;}
   .brand-sub{font-size:9.5px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;}
   .nav-section{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--or-soft);font-weight:600;margin:20px 8px 8px;}
-  .nav-item{padding:10px 12px;border-radius:9px;font-size:13.5px;color:var(--parchment);cursor:pointer;margin-bottom:2px;transition:.15s;}
-  .nav-item:hover{background:rgba(201,169,97,.08);}
-  .nav-item.active{background:rgba(201,169,97,.14);color:var(--or);font-weight:600;}
+  .nav-item{padding:11px 13px;border-radius:10px;font-size:13.5px;color:var(--parchment);cursor:pointer;margin-bottom:3px;transition:.15s;}
+  .nav-item:hover{background:rgba(158,207,124,.10);color:#F0F6EA;}
+  /* L'entrée ouverte n'est plus un voile à 14 % : une pastille pleine, texte
+     sombre sur fond clair — on la trouve sans la chercher. */
+  .nav-item.active{background:linear-gradient(100deg,#D6EFC3,#9ECF7C);color:#14200F;font-weight:600;
+    box-shadow:0 6px 20px rgba(158,207,124,.3);}
+  .nav-item.active:hover{background:linear-gradient(100deg,#D6EFC3,#9ECF7C);}
 
   /* La colonne était plafonnée à 1240 px mais collée à gauche : sur un écran
      large, tout le vide se retrouvait d'un seul côté. Les marges automatiques
@@ -650,6 +688,8 @@
       <div class="nav-item" data-page="agenda">Agenda</div>
       <div class="nav-item" data-page="tombola">Tombola</div>
     </nav>
+
+    <div class="mv-signature">Marlowe · depuis 1957</div>
   </aside>
 
   <main class="content">
