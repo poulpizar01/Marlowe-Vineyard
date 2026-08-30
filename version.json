@@ -1,4 +1,4 @@
 {
-  "v": "1.23.0",
-  "note": "com runner : la suppression est verrouillee sur l'identifiant Discord de l'auteur, et reverifiee au clic ; prise de service ouverte a la vente, au commerce, au magasin, aux RH et a la direction."
+  "v": "1.24.0",
+  "note": "la colonne de contenu est centree au lieu d'etre collee a gauche ; titres de page agrandis et centres, avec les en-tetes du tableau de bord et des primes enfin styles."
 }

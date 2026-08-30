@@ -135,13 +135,34 @@
   .nav-item:hover{background:rgba(201,169,97,.08);}
   .nav-item.active{background:rgba(201,169,97,.14);color:var(--or);font-weight:600;}
 
-  .content{flex:1;padding:36px 40px 80px;max-width:1240px;}
+  /* La colonne était plafonnée à 1240 px mais collée à gauche : sur un écran
+     large, tout le vide se retrouvait d'un seul côté. Les marges automatiques
+     le répartissent des deux. */
+  .content{flex:1;padding:36px 40px 80px;max-width:1240px;margin-left:auto;margin-right:auto;}
   .page-content{display:none;}
   .page-content.active{display:block;}
 
-  .page-title{font-family:'Fraunces',serif;font-weight:600;font-size:26px;margin:0;}
+  .page-title{font-family:'Fraunces',serif;font-weight:600;font-size:34px;margin:0;text-align:center;
+    letter-spacing:-.01em;line-height:1.2;}
   .page-title .accent{color:var(--prime);}
-  .page-sub{font-size:12.5px;color:var(--muted);margin:6px 0 26px;}
+  .page-sub{font-size:13px;color:var(--muted);margin:8px auto 30px;text-align:center;max-width:760px;line-height:1.65;}
+
+  /* ---- en-têtes de page ----------------------------------------------------
+     Quatre formes cohabitaient : un titre nu, une barre titre + bouton
+     (.page-head-row), l'en-tête du tableau de bord (.pagehead, qui n'avait
+     AUCUN style et retombait donc en pile brute) et celui des primes
+     (.primes-head). Toutes se présentent maintenant pareil : surtitre, grand
+     titre centré, sous-titre, puis les actions dessous, centrées elles aussi.
+     -------------------------------------------------------------------------- */
+  .pagehead, .primes-head{display:flex;flex-direction:column;align-items:center;text-align:center;
+    gap:14px;margin-bottom:28px;}
+  .eyebrow{font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);
+    margin:0 0 8px;}
+  .pagehead h1, .primes-titlewrap h1{font-family:'Fraunces',serif;font-weight:600;font-size:34px;
+    margin:0;letter-spacing:-.01em;line-height:1.2;}
+  .headmetric{display:flex;align-items:baseline;gap:9px;}
+  .headmetric .n{font-family:'Fraunces',serif;font-weight:600;font-size:26px;color:var(--or);}
+  .headmetric .l{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);}
 
   /* generic panel */
   .panel{background:var(--oak);border:1px solid var(--band);border-radius:14px;padding:24px;backdrop-filter:blur(6px);margin-bottom:20px;}
@@ -226,8 +247,11 @@
   .vis-commercial{color:var(--or);background:rgba(201,169,97,.13);}
 
   /* ma semaine — vue employé (ex-Productions) */
-  .page-head-row{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap;margin-bottom:22px;}
-  .prod-switcher{display:flex;align-items:center;gap:10px;}
+  .page-head-row{display:flex;flex-direction:column;align-items:center;gap:16px;margin-bottom:26px;text-align:center;}
+  /* Le sous-titre porte déjà sa marge basse ; dans un en-tête suivi d'un bouton
+     elle creuserait un trou. */
+  .page-head-row .page-sub{margin-bottom:0;}
+  .prod-switcher{display:flex;align-items:center;gap:10px;justify-content:center;}
   .prod-switcher label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;}
   .prod-switcher[hidden]{display:none;}
   .mag-ligne-emp{cursor:pointer;transition:background .15s;}
@@ -419,11 +443,11 @@
   .sort-dir:hover{border-color:var(--or-soft);color:var(--or);}
 
   .primes-head{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap;margin-bottom:28px;}
-  .primes-titlewrap h1{display:inline;}
+  .primes-titlewrap{text-align:center;}
   .primes-titlewrap .accent{color:var(--prime);}
-  .primes-sub{font-size:12.5px;color:var(--muted);margin-top:6px;}
+  .primes-sub{font-size:13px;color:var(--muted);margin:8px auto 0;max-width:760px;line-height:1.65;}
   .primes-sub a{color:var(--or-soft);text-decoration:none;border-bottom:1px dotted var(--or-soft);}
-  .primes-actions{display:flex;gap:10px;flex-wrap:wrap;}
+  .primes-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;}
   .pbtn{padding:10px 16px;border-radius:9px;font-size:12.5px;font-weight:500;cursor:pointer;font-family:'Inter';border:1px solid var(--band);background:var(--oak);color:var(--parchment);backdrop-filter:blur(6px);white-space:nowrap;transition:.15s;}
   .pbtn:hover{border-color:var(--or-soft);}
   .pbtn.primary{background:var(--or);color:var(--stone);border-color:var(--or);font-weight:600;}
@@ -500,7 +524,7 @@
   .bl-warning{background:rgba(107,31,42,.14);border:1px solid var(--bordeaux-soft);color:#F0C9CE;font-size:12px;line-height:1.5;padding:11px 14px;border-radius:9px;margin:4px 0 14px;}
   .bl-warning b{color:var(--amber);}
 
-  .bilan-chips{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .bilan-chips{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:center;}
   .bilan-chip{font-size:11.5px;color:var(--muted);background:var(--oak);border:1px solid var(--band);border-radius:999px;padding:7px 13px;backdrop-filter:blur(6px);white-space:nowrap;}
   .bilan-chip b{color:var(--parchment);}
   .bilan-chip.accent{color:var(--amber);border-color:rgba(214,167,92,.4);background:rgba(214,167,92,.08);}
