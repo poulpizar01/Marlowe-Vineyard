@@ -4,8 +4,7 @@
 <meta charset="UTF-8">
 <title>Marlowe Vineyard — Gestion</title>
 <link rel="icon" type="image/png" href="favicon.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="fonts/polices.css">
 <style>
   :root{
     --stone:#1C1B18;
@@ -959,7 +958,7 @@
     <!-- ================= FACTURATION ================= -->
     <div class="page-content" id="page-facturation">
       <h1 class="page-title">Facturation</h1>
-      <p class="page-sub">MARLOWE VINEYARD · Téléphone 412 · RIB 30124</p>
+      <p class="page-sub">MARLOWE VINEYARD · Téléphone 923 · RIB 20013</p>
 
       <div class="subtabs">
         <div class="subtab active" data-sub="nouvelle">Nouvelle facture</div>
@@ -2112,7 +2111,6 @@ function renderEffectif(list){
     const pct = e.quota > 0 ? Math.min(100, Math.round(e.barils / e.quota * 100)) : 0;
     const barCls = !e.active ? 'red' : (pct >= 100 ? 'ok' : (pct >= 50 ? 'amber' : 'red'));
     const canPromote = e.active && !e.isFinal && e.barils > e.promoTarget;
-    const belowQuota = e.active && pct < 100;
     return `
     <tr>
       <td>
@@ -2127,7 +2125,15 @@ function renderEffectif(list){
       </td>
       <td>
         <div class="eq-actions">
-          ${belowQuota ? `<button class="eq-icon warn" title="Sous quota — à surveiller">▼</button>` : ''}
+          ${(() => {
+            /* Un ABSENT ne reçoit rien : il n'a pas produit parce qu'il
+               n'était pas là. Le ▼ ne s'affiche même pas sur sa ligne. */
+            const act = window.mvActionSousQuota ? window.mvActionSousQuota(e) : null;
+            if (!act) return '';
+            return act.type === 'retro'
+              ? `<button class="eq-icon warn" data-eff-down="${e.name}" title="Sous quota — rétrograder vers ${act.vers}">▼</button>`
+              : `<button class="eq-icon warn" data-eff-down="${e.name}" title="Sous quota — saisonnier, donc avertissement (pas de grade en dessous)">⚠</button>`;
+          })()}
           <button class="eq-icon promote ${canPromote ? '' : 'inactive'}" ${canPromote ? `data-eff-promote="${e.name}"` : ''} title="${canPromote ? 'Promouvoir vers ' + e.nextGrade : 'Promotion non éligible'}">▲</button>
           <button class="eq-icon" data-eff-edit="${e.name}" title="Modifier la production">✎</button>
           <button class="eq-icon danger" data-eff-del="${e.name}" title="Retirer la fiche">×</button>
@@ -2162,7 +2168,19 @@ const baseQuota = {'Saisonnier':3000, 'Ouvrier Viticole':5000, 'Chef de culture'
    rewardsByGrade et gradePillClass écrivent « Chef de Culture ». La prime
    retombait donc sur le multiplicateur par défaut au lieu du sien. */
 const multiplierFor = {'Saisonnier':1, 'Ouvrier Viticole':2, 'Chef de Culture':3};
-const recruesData = {'Julio Cortes':2, 'Nella Valmora':1};
+/* Les recrutements de la SEMAINE EN COURS, comptés depuis le registre.
+   ---------------------------------------------------------------------------
+   Deux personnes étaient nommées en dur ici, avec 2 et 1 recrue : personne
+   d'autre ne pouvait en avoir, et ces deux-là en avaient même après leur
+   départ. Le registre porte déjà la réponse — chaque fiche a son recruteur et
+   sa date d'arrivée — et la fenêtre est celle du lundi au dimanche, comme
+   partout ailleurs dans le panel. */
+function recruesDe(nom){
+  const roster = (typeof rhRosterData !== 'undefined') ? rhRosterData : [];
+  const A = window.MarloweActions;
+  if (!A || !A.recruesSemaine) return 0;
+  return A.recruesSemaine(roster)[String(nom || '').trim()] || 0;
+}
 /* Le salaire vient du barème par grade réglé dans Administration ▸ Règles.
    Avant, deux personnes étaient nommées en dur ici et tout le monde touchait
    zéro. La prime, elle, se calcule plus bas et ne se mélange pas à ça. */
@@ -2176,7 +2194,7 @@ function primesRows(){
     const mult = multiplierFor[e.rank] || 1;
     const prime = atteint ? (window.mvCalculPrime ? window.mvCalculPrime(e.runs, e.rank, null)
                                                   : Math.min(barils, PLAFOND) * mult) : null;
-    const recrues = recruesData[e.name] || 0;
+    const recrues = recruesDe(e.name);
     const salaire = salaireDe(e.rank);
     /* La prime de recrutement est une PRIME, pas un salaire : elle se gagne
        en amenant quelqu'un. Elle est comptée à part pour que les deux totaux

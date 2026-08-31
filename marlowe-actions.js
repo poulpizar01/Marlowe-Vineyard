@@ -237,6 +237,27 @@
   /* Recompte les recrutements de la SEMAINE EN COURS (lundi → dimanche)
      à partir des dates d'arrivée du registre. C'est un calcul, pas un
      compteur qu'on incrémente : impossible de le désynchroniser. */
+  /* Le compte des recrutements de la semaine, par recruteur.
+     -------------------------------------------------------------------------
+     Extrait de recomputeRecruiters() pour que la page Primes lise EXACTEMENT
+     le même chiffre que la carte « Recruteurs de la semaine » du registre.
+     Elle en avait un autre, écrit en dur, et les deux se contredisaient.
+
+     La fenêtre est la semaine du domaine : lundi 00 h 00 au dimanche 23 h 59,
+     via mondayOf(). Une arrivée de la semaine dernière ne compte plus. */
+  function recruesSemaine(roster) {
+    const now = new Date();
+    const out = {};
+    (roster || []).forEach(e => {
+      const d = parseFR(e && e.date);
+      if (!d || !sameWeek(d, now)) return;
+      const rec = String((e.rec || '').trim());
+      if (!rec || rec === '—') return;
+      out[rec] = (out[rec] || 0) + 1;
+    });
+    return out;
+  }
+
   function recomputeRecruiters() {
     const now = new Date();
     const tally = new Map();
@@ -904,6 +925,7 @@
      ------------------------------------------------------------------------ */
 
   const MV_RIB = '20013';          /* RIB du domaine, affiché sous l'émetteur */
+  const MV_TEL = '923';            /* téléphone du domaine, sur la facture */
   const PAYMENT_DAYS = 14;         /* délai de paiement accordé aux clients   */
 
   /* Blason circulaire du domaine */
@@ -1006,9 +1028,7 @@
     w.document.write(`<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(invoiceRef(inv.num, inv.date))} — Marlowe Vineyard</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,600&family=Great+Vibes&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="${new URL('fonts/polices.css', location.href).href}">
 <style>
   @page{size:A4;margin:0;}
   *{box-sizing:border-box;margin:0;padding:0;}
@@ -1113,7 +1133,7 @@
     <div class="parties">
       <div>
         <div class="lbl">ÉMETTEUR</div>
-        <b>Marlowe Vineyard</b><br>RIB : ${esc(MV_RIB)}
+        <b>Marlowe Vineyard</b><br>Téléphone : ${esc(MV_TEL)} · RIB : ${esc(MV_RIB)}
       </div>
       <div class="cl">
         <div class="lbl">CLIENT</div>
@@ -1898,6 +1918,91 @@
     D().note(`a promu ${e.name} au grade de ${step.next}`);
     D().save('effectif');
     toast(`${e.name} est promu ${step.next}.`);
+  }
+
+  /* Le cran EN DESSOUS, pour la rétrogradation. Écrit à part plutôt que
+     déduit de NEXT_GRADE : un jour on ajoutera un grade, et une table qu'on
+     lit à l'envers est une table qu'on oublie de mettre à jour. */
+  const GRADE_INFERIEUR = {
+    'Chef de Culture':  { bas: 'Ouvrier Viticole', quota: 5000, promoTarget: 8000, nextNext: 'Chef de Culture', final: false },
+    'Ouvrier Viticole': { bas: 'Saisonnier',       quota: 3000, promoTarget: 5000, nextNext: 'Ouvrier Viticole', final: false },
+    /* Saisonnier n'y figure pas : c'est le bas de l'échelle. On ne rétrograde
+       pas quelqu'un qui est déjà au premier grade — on l'avertit. */
+  };
+
+  /* Ce que le bouton ▼ propose pour une fiche donnée.
+     -------------------------------------------------------------------------
+     Trois cas, et le premier est le plus important :
+
+       absent   → RIEN. Un employé en absence déclarée n'a pas produit parce
+                  qu'il n'était pas là. Le sanctionner pour ça n'a aucun sens,
+                  et c'est le genre d'automatisme qui fâche une équipe.
+       saisonnier → un avertissement : il n'y a pas de cran en dessous.
+       les autres → une rétrogradation d'un cran. */
+  function actionSousQuota(e) {
+    if (!e || !e.active) return null;
+    const pct = e.quota > 0 ? (e.barils / e.quota) * 100 : 100;
+    if (pct >= 100) return null;
+    const bas = GRADE_INFERIEUR[e.grade];
+    return bas ? { type: 'retro', vers: bas.bas } : { type: 'avert' };
+  }
+  window.mvActionSousQuota = actionSousQuota;
+
+  async function retrograderEmploye(name) {
+    const e = effectifData.find(x => x.name === name);
+    if (!e) return;
+
+    if (!e.active) {
+      toast(`${e.name} est absent cette semaine — aucune sanction n'est proposée.`);
+      return;
+    }
+
+    const bas = GRADE_INFERIEUR[e.grade];
+    if (!bas) {
+      /* Saisonnier : pas de cran en dessous, on bascule sur l'avertissement. */
+      return avertirSousQuota(e);
+    }
+
+    if (!await confirmAction('Rétrograder',
+      `${e.name} passe de ${e.grade} à ${bas.bas}. Son quota hebdomadaire devient `
+      + `${bas.quota.toLocaleString('fr-FR')} vins.`, true)) return;
+
+    e.grade = bas.bas;
+    e.quota = bas.quota;
+    e.promoTarget = bas.promoTarget;
+    e.nextGrade = bas.nextNext;
+    e.isFinal = bas.final;
+
+    D().note(`a rétrogradé ${e.name} au grade de ${bas.bas} (sous quota)`);
+    D().save('effectif');
+    toast(`${e.name} est rétrogradé ${bas.bas}.`);
+  }
+
+  /* L'avertissement du saisonnier sous quota. Il rejoint le dossier RH comme
+     n'importe quel autre, avec son motif rempli — pas une note à part que
+     personne ne retrouverait. */
+  async function avertirSousQuota(e) {
+    const manque = Math.max(0, (e.quota || 0) - (e.barils || 0));
+    const motif = `Quota non atteint : ${Number(e.barils || 0).toLocaleString('fr-FR')} / `
+                + `${Number(e.quota || 0).toLocaleString('fr-FR')} vins, ${manque.toLocaleString('fr-FR')} manquants.`;
+
+    const r = await askForm(`Avertir ${e.name}`, [
+      { key: 'niveau', label: 'Niveau', value: NIVEAUX[0], options: NIVEAUX },
+      { key: 'motif',  label: 'Motif', value: motif },
+    ], `${e.name} est saisonnier : c'est le premier grade, il n'y a pas de cran en dessous. `
+     + `L'avertissement est enregistré au dossier RH.`);
+    if (!r) return;
+    if (!r.motif.trim()) { toast('Un avertissement sans motif ne sert à rien.'); return; }
+
+    const sess = window.MarloweSession;
+    avertissements.unshift({
+      nom: e.name, niveau: r.niveau, motif: r.motif.trim(), date: todayFR(),
+      par: (sess && sess.name) || 'Direction',
+    });
+    D().note(`a averti ${e.name} pour quota non atteint (${r.niveau})`);
+    D().saveMany(['avertissements', 'rhRoster']);
+    if (typeof renderAvertissements === 'function') renderAvertissements();
+    toast(`Avertissement enregistré pour ${e.name}.`);
   }
 
   async function editEffectif(name) {
@@ -4422,6 +4527,7 @@
       if (t.hasAttribute('data-step-reset')) return resetSteps();
       if (d.primeexcDel)   return removePrimeExc(d.primeexcDel);
       if (d.effPromote)    return promoteEmployee(d.effPromote);
+      if (d.effDown)       return retrograderEmploye(d.effDown);
       if (d.effEdit)       return editEffectif(d.effEdit);
       if (d.effDel)        return deleteEffectif(d.effDel);
       if (d.agendaDel !== undefined) return deleteEvent(Number(d.agendaDel));
@@ -8410,7 +8516,8 @@
     railConstruire, railSynchroniser, allerA,
     totalPrimeRecrutement,
     agendaVisible, AGENDA_NIVEAUX,
-    basculerPermis, rappelerPermis, estIdDiscord,
+    basculerPermis, rappelerPermis, estIdDiscord, recruesSemaine,
+    retrograderEmploye, actionSousQuota,
     renderQuotaDirect,
     /* Rejoué quand le patron change les listes de rôles dans Administration ▸ Agenda. */
     rafraichirAgenda() {

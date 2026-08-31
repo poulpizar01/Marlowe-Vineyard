@@ -1,4 +1,4 @@
 {
-  "v": "1.38.0",
-  "note": "salaires fixes par grade dans Administration > Regles, une seule source pour la page Primes et le Bilan comptable — les deux avaient chacun sa table en dur et annoncaient des masses salariales differentes. La prime de recrutement quitte le total des salaires pour rejoindre celui des primes, ou elle a toujours eu sa place. Factures recues : un justificatif se colle au Ctrl+V, se glisse ou se choisit, et s'affiche desormais dans le registre — le champ lien etait enregistre puis jamais reaffiche."
+  "v": "1.39.0",
+  "note": "les polices sont desormais servies par le site : plus aucun appel a Google, ni depuis la vitrine, ni depuis le panel, ni depuis la facture. Le bouton sous quota de l'Effectif devient actif — retrogradation d'un cran, avertissement pour un saisonnier faute de cran en dessous, et RIEN pour un absent. Les recrutements de la page Primes viennent du registre sur la semaine en cours au lieu de deux noms ecrits en dur. Nouveautes de la vitrine : defilement automatique toutes les 10 s. Telephone 923 et RIB 20013. La signature Roxwood propose le site et le Discord."
 }

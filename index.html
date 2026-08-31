@@ -5,8 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Marlowe Vineyard — Là où chaque bouteille raconte une histoire</title>
 <link rel="icon" type="image/png" href="favicon.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500;1,9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="fonts/polices.css">
 
 
 <style>
@@ -495,17 +494,26 @@
      Discrète par construction : elle vit sous le pied de page, en retrait, et
      ne réclame l'attention qu'au survol. Une signature qui crie plus fort que
      le domaine qu'elle a servi à bâtir est une signature ratée. */
-  .signature{border-top:1px solid var(--line);padding:20px 0 40px;display:flex;justify-content:center;}
+  /* La signature n'est plus un lien unique vers Discord : la marque reste du
+     texte, et les deux destinations sont proposées côte à côte. Un visiteur
+     qui cherche le site n'a plus à passer par Discord pour le trouver. */
+  .signature{border-top:1px solid var(--line);padding:20px 0 40px;
+    display:flex;justify-content:center;align-items:center;gap:10px;flex-wrap:wrap;}
+  .sig-marque{display:inline-flex;align-items:center;gap:9px;
+    color:var(--muted);font-size:11px;letter-spacing:.06em;opacity:.55;padding:7px 0 7px 14px;}
+  .sig-liens{display:inline-flex;align-items:center;gap:6px;font-size:11px;letter-spacing:.06em;}
+  .sig-sep{color:var(--muted);opacity:.4;}
   .signature a{display:inline-flex;align-items:center;gap:9px;text-decoration:none;
-    color:var(--muted);font-size:11px;letter-spacing:.06em;opacity:.55;
-    padding:7px 14px;border-radius:999px;border:1px solid transparent;
+    color:var(--muted);font-size:11px;letter-spacing:.06em;opacity:.7;
+    padding:6px 12px;border-radius:999px;border:1px solid transparent;
     transition:opacity .2s ease, color .2s ease, border-color .2s ease, background .2s ease;}
   .signature a:hover{opacity:1;color:var(--text);border-color:var(--line-2);background:var(--gold-tint);}
   .signature img{width:20px;height:20px;object-fit:contain;
     filter:saturate(.55) brightness(.9);transition:filter .2s ease;}
-  .signature a:hover img{filter:none;}
+  .signature:hover img{filter:none;}
+  .signature:hover .sig-marque{opacity:.85;}
   .signature b{font-weight:500;color:var(--gold-soft);}
-  .signature a:hover b{color:var(--gold);}
+  .signature:hover b{color:var(--gold);}
 </style>
 </head>
 <body>
@@ -1046,12 +1054,18 @@
   </footer>
 
   <div class="signature">
-    <a href="https://discord.gg/dDAFWxeU8" target="_blank" rel="noopener"
-       title="Roxwood Network — rejoindre le Discord">
+    <span class="sig-marque">
       <img src="img/roxwood.png" alt="" width="20" height="20"
            onerror="this.remove();" loading="lazy">
       <span>Développé par <b>Roxwood Network</b></span>
-    </a>
+    </span>
+    <span class="sig-liens">
+      <a href="https://roxwood-network.fbfa.fr/" target="_blank" rel="noopener"
+         title="Roxwood Network — le site">le site</a>
+      <span class="sig-sep">·</span>
+      <a href="https://discord.gg/dDAFWxeU8" target="_blank" rel="noopener"
+         title="Roxwood Network — rejoindre le Discord">le Discord</a>
+    </span>
   </div>
 
 </div>
@@ -1155,14 +1169,54 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
     }
     show(0);
 
+    /* Le défilement automatique — dix secondes.
+       ----------------------------------------------------------------------
+       Trois précautions, parce qu'un carrousel qui avance tout seul se
+       retourne vite contre le visiteur :
+
+       · toute intervention (flèche, pastille) REPART de zéro. Sans ça, on
+         clique pour revenir en arrière et l'image change une seconde plus
+         tard — on n'a jamais le temps de lire ;
+       · il se met en pause au survol de la zone, et pendant la navigation au
+         clavier, le temps qu'on lise ;
+       · il s'arrête quand l'onglet passe à l'arrière-plan. Rien à animer sur
+         une page que personne ne regarde. */
+    const DELAI = 10000;
+    let minuterie = null;
+
+    function relancer(){
+      arreter();
+      if(!multi) return;
+      minuterie = setInterval(() => show(idx + 1), DELAI);
+    }
+    function arreter(){
+      if(minuterie){ clearInterval(minuterie); minuterie = null; }
+    }
+
+    /* Toute action manuelle affiche ET redonne dix secondes pleines. */
+    function montrerEtAttendre(i){ show(i); relancer(); }
+
     stage.addEventListener('click', e => {
       const a = e.target.closest('[data-step]');
-      if(a) show(idx + Number(a.dataset.step));
+      if(a) montrerEtAttendre(idx + Number(a.dataset.step));
     });
     dotsBox.addEventListener('click', e => {
       const d = e.target.closest('[data-go]');
-      if(d) show(Number(d.dataset.go));
+      if(d) montrerEtAttendre(Number(d.dataset.go));
     });
+
+    stage.addEventListener('mouseenter', arreter);
+    stage.addEventListener('mouseleave', relancer);
+    stage.addEventListener('focusin', arreter);
+    stage.addEventListener('focusout', relancer);
+    document.addEventListener('visibilitychange', () => {
+      if(document.hidden) arreter(); else relancer();
+    });
+
+    /* Un visiteur qui a demandé moins d'animations au système n'en reçoit
+       pas : les flèches et les pastilles restent, elles. */
+    const sobre = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if(!sobre) relancer();
   }
 
   /* ---------------- Le catalogue ---------------- */
