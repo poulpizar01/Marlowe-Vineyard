@@ -496,6 +496,17 @@
 
      Le n° civil sert d'identifiant : le changer revient à changer de personne,
      on refuse donc si le nouveau numéro est déjà pris. */
+  /* L'identifiant Discord, et pas le pseudo
+     ---------------------------------------------------------------------------
+     Un pseudo se renomme et ne sert à rien côté serveur : les permissions d'un
+     salon ne connaissent que l'identifiant numérique. C'est lui qui permet de
+     retrouver le ticket d'une personne. On accepte quand même ce qui est saisi
+     — une fiche à moitié remplie vaut mieux qu'une fiche refusée — mais on
+     prévient, sinon l'erreur ne se découvre qu'au premier rappel envoyé. */
+  const ID_DISCORD = /^\d{17,20}$/;
+  function estIdDiscord(x) { return ID_DISCORD.test(String(x || '').trim()); }
+  window.estIdDiscord = estIdDiscord;
+
   const POSTES_CANON = [
     'Patron', 'Co-Patron', 'Responsable Général', 'DRH',
     'Resp. Commercial', 'Resp. Magasin', 'Resp. Runner',
@@ -516,10 +527,12 @@
       { key: 'date',    label: "Date d'arrivée (jj/mm/aaaa)", value: e.date || '' },
       { key: 'phone',   label: 'N° téléphone', value: e.phone || '' },
       { key: 'rib',     label: 'RIB', value: e.rib || '' },
-      { key: 'discord', label: 'Discord', value: e.discord || '' },
+      { key: 'discord', label: 'Identifiant Discord', value: e.discord || '' },
       { key: 'rec',     label: 'Recruteur', value: e.rec || '—',
         options: recruteurs.length ? ['—', ...recruteurs] : undefined },
-    ], 'Laissez un champ vide s\'il est encore inconnu — il restera à compléter.');
+    ], 'Laissez un champ vide s\'il est encore inconnu — il restera à compléter. '
+     + 'L\'identifiant Discord est un nombre à 18 chiffres (clic droit sur la personne ▸ '
+     + 'Copier l\'identifiant), pas un pseudo.');
     if (!r) return;
 
     const nom = (r.name || '').trim();
@@ -548,7 +561,11 @@
     recomputeRecruiters();
     D().note(`a modifié la fiche de ${nom}`);
     D().saveMany(['rhRoster', 'rhRecruiters']);
-    toast('Fiche mise à jour.');
+    if (e.discord && !estIdDiscord(e.discord)) {
+      toast('Fiche mise à jour — mais « ' + e.discord + ' » ne ressemble pas à un identifiant Discord.');
+    } else {
+      toast('Fiche mise à jour.');
+    }
   }
 
   document.addEventListener('click', e => {
@@ -609,6 +626,16 @@
         ${postesInconnus.length ? `<div class="mv-imp-warn">Poste(s) non reconnu(s), gardé(s) tels quels :
            ${esc(postesInconnus.join(', '))}</div>` : ''}
         ${dejaLa ? `<div class="mv-imp-warn"><b>${dejaLa}</b> n° civil déjà présent(s) dans le registre</div>` : ''}
+        ${(() => {
+          const mauvais = fiches.filter(f => f.discord && !estIdDiscord(f.discord)).length;
+          const vides = fiches.filter(f => !f.discord).length;
+          if (!mauvais && !vides) return '';
+          const bouts = [];
+          if (mauvais) bouts.push(`<b>${mauvais}</b> ne ressemble(nt) pas à un identifiant Discord`);
+          if (vides) bouts.push(`<b>${vides}</b> sans identifiant Discord`);
+          return `<div class="mv-imp-warn">${bouts.join(' · ')} — les fiches passent quand même,
+            mais le panel ne pourra pas retrouver leur ticket.</div>`;
+        })()}
       </div>
       <div class="mv-imp-apercu">
         <table>
@@ -691,6 +718,8 @@
       return;
     }
 
+    const discordSaisi = val('newEmpDiscord').trim();
+
     rhRosterData.unshift({
       id, name, poste,
       init: initialsOf(name),
@@ -701,7 +730,7 @@
       dept: DEPT_BY_POSTE[poste] || 'terrain',
       phone: val('newEmpPhone'),
       rib: val('newEmpRib'),
-      discord: val('newEmpDiscord'),
+      discord: discordSaisi,
     });
 
     recomputeRecruiters();
@@ -711,7 +740,11 @@
 
     D().note(`a recruté ${name} au poste de ${poste}`);
     D().saveMany(['rhRoster', 'rhRecruiters']);
-    toast(`${name} a rejoint le domaine.`);
+    if (discordSaisi && !estIdDiscord(discordSaisi)) {
+      toast(`${name} a rejoint le domaine — mais « ${discordSaisi} » ne ressemble pas à un identifiant Discord.`);
+    } else {
+      toast(`${name} a rejoint le domaine.`);
+    }
   }
 
   /* Déclarer une absence : bascule le statut de l'employé et alimente
