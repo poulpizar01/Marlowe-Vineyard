@@ -27,7 +27,7 @@ const DISCORD = 'https://discord.com/api/v10';
    correction serveur n'a rien changé, on la lit.
 
    À tenir en phase avec version.json à chaque déploiement. */
-const VERSION = '1.35.0';
+const VERSION = '1.38.0';
 const SESSION_TTL = 60 * 60 * 24 * 7;   // 7 jours
 const STATE_TTL   = 600;                // 10 minutes
 
@@ -770,7 +770,19 @@ async function handleUpload(request, env) {
 
   const s = await currentSession(request, env);
   if (!s) return json(env, { error: 'unauthorized' }, 401);
-  if (!s.isPatron) return json(env, { error: 'forbidden' }, 403);
+
+  /* Le dépôt était réservé au patron, parce qu'il ne servait qu'à la vitrine.
+     Il sert maintenant aussi à joindre le justificatif d'une facture reçue :
+     qui a le droit d'archiver la facture a le droit d'en joindre la preuve.
+     Une ligne de dépense sans pièce jointe ne vaut pas grand-chose, et
+     obliger à passer par le patron revient à ce que personne ne la joigne. */
+  if (!s.isPatron) {
+    const perms = await base(env).get('permissions', 'json') || {};
+    const reg = await base(env).get('settings', 'json') || {};
+    if (!canWrite(s, 'facturesRecues', perms, reg.permsRO || {})) {
+      return json(env, { error: 'forbidden' }, 403);
+    }
+  }
 
   const type = (request.headers.get('Content-Type') || '').split(';')[0].trim();
   if (!IMG_TYPES.includes(type)) return json(env, { error: 'bad_type', accepte: IMG_TYPES }, 415);

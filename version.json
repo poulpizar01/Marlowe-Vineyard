@@ -1,4 +1,4 @@
 {
-  "v": "1.36.0",
-  "note": "la semaine du quota est desormais ancree sur l'heure de PARIS et non sur celle du navigateur : deux personnes dans deux fuseaux voient le meme decoupage. Le decalage suit l'heure d'ete tout seul, et une semaine qui enjambe le changement d'heure fait 167 ou 169 heures sans qu'aucune seconde ne se perde entre deux semaines. Les dates et heures affichees sur la page sont elles aussi a l'heure de Paris."
+  "v": "1.38.0",
+  "note": "salaires fixes par grade dans Administration > Regles, une seule source pour la page Primes et le Bilan comptable — les deux avaient chacun sa table en dur et annoncaient des masses salariales differentes. La prime de recrutement quitte le total des salaires pour rejoindre celui des primes, ou elle a toujours eu sa place. Factures recues : un justificatif se colle au Ctrl+V, se glisse ou se choisit, et s'affiche desormais dans le registre — le champ lien etait enregistre puis jamais reaffiche."
 }

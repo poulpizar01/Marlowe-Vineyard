@@ -1142,11 +1142,117 @@
     w.document.close();
   }
 
-  /* Réédite une facture déjà enregistrée dans l'historique. */
+  /* Le détail d'une facture, réduit à ce qui a été saisi. Plafonné : une
+     facture de plus de cent lignes n'existe pas, et si elle existait un jour
+     il vaut mieux perdre sa fin que faire déborder les données du panel. */
+  const LIGNES_MAX = 100;
+
+  function lignesAbregees(rows) {
+    return (rows || []).slice(0, LIGNES_MAX).map(l => ({
+      d: String(l.desc || '').slice(0, 120),
+      r: String(l.ref || '').slice(0, 24),
+      q: Number(l.qty) || 0,
+      p: Number(l.pu) || 0,
+      t: Number(l.tva) || 0,
+    }));
+  }
+
+  /* L'inverse : on rend des lignes complètes, totaux recalculés. */
+  function lignesDepliees(lignes) {
+    return (lignes || []).map(l => {
+      const qty = Number(l.q) || 0, pu = Number(l.p) || 0, tva = Number(l.t) || 0;
+      return { ref: l.r || '', desc: l.d || '', qty, pu, tva,
+               ht: qty * pu, ttc: qty * pu * (1 + tva / 100) };
+    });
+  }
+
+  /* Réédite une facture déjà enregistrée dans l'historique.
+
+     Les factures enregistrées AVANT cette version n'ont pas de détail : on
+     ne peut pas l'inventer. Elles continuent de sortir avec leur ligne
+     récapitulative, exactement comme avant — c'est le repli prévu dans
+     openInvoiceDoc, et il reste utile pour elles. */
   function reprintInvoice(num) {
     const h = historiqueData.find(x => String(x.num) === String(num));
     if (!h) return;
-    openInvoiceDoc({ num: h.num, date: h.date, client: h.client, emetteur: h.emetteur, total: h.total });
+    const rows = lignesDepliees(h.lignes);
+    /* Le document additionne les lignes pour le HT et la TVA ; il lui faut
+       donc le total TTC AVANT remise, pas le net déjà enregistré. */
+    const remise = Number(h.remise) || 0;
+    const total = rows.length
+      ? Math.round(rows.reduce((s, l) => s + l.ttc, 0))
+      : Number(h.total);
+    openInvoiceDoc({ num: h.num, date: h.date, client: h.client, emetteur: h.emetteur,
+                     total, remise: rows.length ? remise : 0, rows });
+  }
+
+  /* ------------------------------------------------------------------------
+     Le numéro et la date, proposés tout seuls
+     ------------------------------------------------------------------------
+     Les deux champs étaient écrits en dur dans la page : le même numéro et la
+     même date à chaque ouverture, à corriger à la main chaque fois — et à
+     oublier une fois sur deux, ce qui donne deux factures du même numéro ou
+     une facture datée du mois dernier.
+
+     Les deux se calent maintenant à l'ouverture de la page. Mais JAMAIS
+     par-dessus une saisie : dès que quelqu'un touche un de ces champs, il
+     est marqué et le panel n'y revient plus. Antidater une facture reste
+     possible ; c'est un geste volontaire, pas un accident.
+     ------------------------------------------------------------------------ */
+
+  /* La date du jour à Paris, au format des champs « date » (AAAA-MM-JJ).
+     toISOString() rendrait la date UTC : à une heure du matin, elle daterait
+     la facture de la veille. */
+  function aujourdhuiISO() {
+    return new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Paris' });
+  }
+
+  /* Le numéro suivant : le plus grand de l'historique, plus un.
+     On ne regarde que les numéros purement chiffrés — une référence saisie à
+     la main comme « AV-12 » ne doit pas fixer la suite. */
+  function prochainNumero() {
+    const nums = (typeof historiqueData !== 'undefined' ? historiqueData : [])
+      .map(h => String(h && h.num || '').trim())
+      .filter(x => /^\d+$/.test(x))
+      .map(Number);
+    if (!nums.length) return '';
+    const max = Math.max(...nums);
+    /* On garde la longueur : 410072 donne 410073, pas 410073 sur 5 chiffres. */
+    return String(max + 1).padStart(String(max).length, '0');
+  }
+
+  function champTouche(el) {
+    if (!el || el.dataset.mvTouche) return;
+    const marquer = () => { el.dataset.mvTouche = '1'; };
+    el.addEventListener('input', marquer);
+    el.addEventListener('change', marquer);
+  }
+
+  /* Appelé à chaque ouverture de la page Facturation. */
+  function ouvrirFacturation() {
+    const num = $('invNum');
+    const date = $('invDate');
+
+    if (num && !num.dataset.mvTouche) {
+      const suivant = prochainNumero();
+      if (suivant) num.value = suivant;
+      champTouche(num);
+    }
+    if (date && !date.dataset.mvTouche) {
+      date.value = aujourdhuiISO();
+      champTouche(date);
+    }
+  }
+
+  /* Après un enregistrement, la facture suivante repart d'un numéro neuf et
+     de la date du jour : sans ça, le numéro resterait celui qu'on vient
+     d'utiliser et l'enregistrement suivant serait refusé pour doublon. */
+  function reinitialiserEnTeteFacture() {
+    const num = $('invNum');
+    const date = $('invDate');
+    if (num) { delete num.dataset.mvTouche; }
+    if (date) { delete date.dataset.mvTouche; }
+    ouvrirFacturation();
   }
 
   /* ------------------------------------------------------------------------
@@ -1205,6 +1311,18 @@
     historiqueData.unshift({
       num: inv.num, date: inv.date, client: inv.client,
       total: inv.net, emetteur: inv.emetteur || '—',
+      remise: inv.remise || 0,
+      /* Le DÉTAIL des lignes, en abrégé.
+         ---------------------------------------------------------------------
+         Il ne l'était pas, et c'est ce qui faisait qu'une facture rééditée
+         depuis l'historique sortait avec « Commande — REF » et des tirets à
+         la place des articles et des quantités : le document n'avait tout
+         simplement plus rien à imprimer. Le PDF n'y était pour rien.
+
+         Noms courts et valeurs saisies seulement — les totaux se recalculent.
+         Une facture pèse ainsi quelques centaines d'octets, pas plusieurs
+         kilos, et la limite de 1,5 Mo des données du panel reste loin. */
+      lignes: lignesAbregees(inv.rows),
     });
 
     /* Le client est mémorisé s'il ne figure pas encore dans la base. */
@@ -1223,6 +1341,7 @@
     if ($('invNum') && /^\d+$/.test(inv.num)) $('invNum').value = next;
 
     resetInvoiceLines();
+    reinitialiserEnTeteFacture();
     D().save('historique');
     toast(`Facture n°${inv.num} enregistrée.`);
   }
@@ -1254,6 +1373,106 @@
   /* ------------------------------------------------------------------------
      Archiver une facture reçue
      ------------------------------------------------------------------------ */
+
+/* ==========================================================================
+   LE JUSTIFICATIF D'UNE FACTURE REÇUE
+   --------------------------------------------------------------------------
+   Une capture d'écran se colle directement dans la page : Ctrl+V, et l'image
+   part sur le serveur du panel. Elle est ensuite visible dans le registre,
+   à côté de la ligne — ce qui n'était le cas d'AUCUNE pièce jointe jusqu'ici,
+   pas même du champ « lien » qui était enregistré puis jamais réaffiché.
+
+   L'image est réduite avant l'envoi, comme celles de la vitrine : une capture
+   d'écran fait volontiers trois mégaoctets, et on n'en garde que ce qui est
+   lisible.
+   ========================================================================== */
+
+  let frImage = '';        /* l'adresse du justificatif en cours de saisie */
+
+  function frApercu() {
+    const z = $('frApercu');
+    if (!z) return;
+    if (!frImage) {
+      z.innerHTML = '<span class="fr-vide">Aucun justificatif. Collez une capture ici '
+        + '(Ctrl+V), ou choisissez un fichier.</span>';
+      return;
+    }
+    z.innerHTML = `<a href="${esc(frImage)}" target="_blank" rel="noopener">
+        <img src="${esc(frImage)}" alt="justificatif"></a>
+      <button type="button" class="btn" id="frImgRetirer">Retirer</button>`;
+  }
+
+  async function frDeposer(file) {
+    if (!file) return;
+    if (!/^image\//.test(file.type) && file.type !== 'application/pdf') {
+      toast('Seules les images et les PDF peuvent être joints.'); return;
+    }
+    const z = $('frApercu');
+    if (z) z.innerHTML = '<span class="fr-vide">Envoi en cours…</span>';
+    try {
+      frImage = await envoyerFichier(file);
+      toast('Justificatif joint.');
+    } catch (e) {
+      frImage = '';
+      toast('Le justificatif n\'a pas pu être envoyé : ' + (e.message || e));
+    }
+    frApercu();
+  }
+
+  /* Le collage n'est écouté que sur la page des factures reçues : ailleurs,
+     un Ctrl+V doit rester un Ctrl+V. */
+  document.addEventListener('paste', ev => {
+    const page = document.querySelector('.page-content.active');
+    if (!page || page.id !== 'page-facturesrecues') return;
+    const cible = ev.target;
+    /* On ne vole pas un collage destiné à un champ de saisie, sauf s'il
+       s'agit d'une image — un champ texte n'en fera rien de toute façon. */
+    const items = [...((ev.clipboardData && ev.clipboardData.items) || [])];
+    const img = items.find(i => i.kind === 'file' && /^image\//.test(i.type));
+    if (!img) return;
+    if (cible && /^(INPUT|TEXTAREA)$/.test(cible.tagName) && !/^image\//.test(img.type)) return;
+    ev.preventDefault();
+    frDeposer(img.getAsFile());
+  });
+
+  document.addEventListener('change', ev => {
+    const f = ev.target.closest('#frFichier');
+    if (f && f.files && f.files[0]) { frDeposer(f.files[0]); f.value = ''; }
+  });
+
+  document.addEventListener('click', ev => {
+    if (!ev.target.closest('#frImgRetirer')) return;
+    frImage = '';
+    frApercu();
+  });
+
+  document.addEventListener('dragover', ev => {
+    const z = ev.target.closest && ev.target.closest('#frApercu');
+    if (z) { ev.preventDefault(); z.classList.add('survol'); }
+  });
+  document.addEventListener('dragleave', ev => {
+    const z = ev.target.closest && ev.target.closest('#frApercu');
+    if (z) z.classList.remove('survol');
+  });
+  document.addEventListener('drop', ev => {
+    const z = ev.target.closest && ev.target.closest('#frApercu');
+    if (!z) return;
+    ev.preventDefault();
+    z.classList.remove('survol');
+    const f = ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files[0];
+    if (f) frDeposer(f);
+  });
+
+  /* Appelé à l'ouverture de la page. */
+  function ouvrirFacturesRecues() {
+    const d = $('frDateIn');
+    if (d && !d.dataset.mvTouche) {
+      d.value = aujourdhuiISO();
+      champTouche(d);
+    }
+    frApercu();
+  }
+
   function archiveFactureRecue() {
     const supplier = val('frSupplier');
     if (!supplier) { toast('Indiquez l\'entreprise émettrice.'); $('frSupplier') && $('frSupplier').focus(); return; }
@@ -1265,6 +1484,7 @@
       note: val('frNote') || '—',
       par: (window.MarloweSession && window.MarloweSession.name) || '—',
       lien: val('frLien') || '',
+      image: frImage || '',
     };
 
     let group = facturesRecuesData.find(g => g.supplier.toLowerCase() === supplier.toLowerCase());
@@ -1272,6 +1492,8 @@
     else facturesRecuesData.unshift({ supplier, items: [item] });
 
     clear('frSupplier', 'frMontant', 'frNote', 'frLien');
+    frImage = '';
+    frApercu();
     refreshFrCounts();
     D().note(`a archivé une facture de ${supplier} (${item.montant.toLocaleString('fr-FR')} $)`);
     D().save('facturesRecues');
@@ -2153,8 +2375,10 @@
       name: e.name, rank: e.rank,
       runs: e.runs || 0, factures: e.factures || 0, ventes: e.ventes || 0,
       ca: (e.runs || 0) + (e.factures || 0) + (e.ventes || 0),
-      salaire: (typeof bcRankSalaire === 'object' && bcRankSalaire[e.rank] !== undefined)
-        ? bcRankSalaire[e.rank] : 1500,
+      /* Même barème que partout ailleurs : celui des Règles du domaine.
+         Le repli à 1 500 $ pour tout grade inconnu a disparu — il inventait
+         un salaire à des gens qui n'en avaient pas. */
+      salaire: salaireDuGrade(e.rank),
     }));
     bcRows = auto.concat(manuels);
   }
@@ -5140,7 +5364,30 @@
     primeRecrutMontant: 0,  /* prime versée à une recrue de fin de semaine */
     primeRecrutQuota: 0,    /* vins minimum pour y avoir droit */
     rappelPermis: '',       /* texte par défaut du rappel de permis, vide = celui du serveur */
+    salaires: {},           /* salaire fixe par grade, en dollars ; absent ou 0 = pas de salaire */
   };
+
+  /* Le SALAIRE d'un grade — à ne pas confondre avec la prime.
+     -------------------------------------------------------------------------
+     Le salaire est fixe : il est dû parce qu'on occupe le poste, que le quota
+     soit atteint ou non. La prime est variable : elle se gagne, elle dépend
+     des vins vendus et du multiplicateur, et elle vaut zéro quand le quota
+     n'est pas fait. Les deux ne se mélangent jamais — ni dans les colonnes,
+     ni dans les totaux, ni dans le plafond du palier.
+
+     Il vivait jusqu'ici en dur à deux endroits qui ne disaient pas la même
+     chose : une liste de deux personnes nommées sur la page Primes, et un
+     barème par grade dans le Bilan. Une seule source désormais. */
+  function salaireDuGrade(grade) {
+    const table = (reglages && reglages.salaires) || {};
+    const g = String(grade || '').trim();
+    if (table[g] !== undefined) return Number(table[g]) || 0;
+    /* Le registre écrit « Chef de culture », la tablette « Chef de Culture ».
+       On ne va pas faire dépendre une paie d'une majuscule. */
+    const clef = Object.keys(table).find(k => k.toLowerCase() === g.toLowerCase());
+    return clef ? (Number(table[clef]) || 0) : 0;
+  }
+  window.mvSalaireGrade = salaireDuGrade;
 
   const h2m = h => Math.round((Number(h) || 0) * 60);
   const m2h = m => `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}`;
@@ -5313,6 +5560,20 @@
       </div>
 
       <div class="mv-vit-sec">
+        <h4>Salaires par grade</h4>
+        <p class="mv-hint" style="margin:0 0 12px;">Le salaire est <b>fixe</b> : il est dû parce qu'on occupe le
+          poste, que le quota soit atteint ou non. Il ne se mélange jamais avec la prime, qui elle se gagne
+          sur les vins vendus. Un grade laissé à 0 n'est simplement pas salarié.</p>
+        <div class="mv-sal-grille">
+          ${POSTES_CANON.map(g => `
+            <label class="mv-lab mv-sal-l">${esc(g)}
+              <input type="number" min="0" step="500" data-salaire="${esc(g)}"
+                value="${Number((reglages.salaires || {})[g]) || 0}">
+            </label>`).join('')}
+        </div>
+      </div>
+
+      <div class="mv-vit-sec">
         <h4>Rappel de permis</h4>
         <p class="mv-hint" style="margin:0 0 12px;">Le texte proposé par défaut quand un RH clique sur
           « ✉ Rappel » dans le registre. Il reste modifiable au cas par cas avant chaque envoi.
@@ -5348,6 +5609,12 @@
     reglages.primeRecrutQuota   = Math.round(n('mvRegSeuil'));
     const rap = $('mvRegRappel');
     if (rap) reglages.rappelPermis = rap.value.trim().slice(0, 1500);
+    const sal = {};
+    document.querySelectorAll('[data-salaire]').forEach(el => {
+      const v = Math.max(0, Math.round(Number(el.value) || 0));
+      if (v) sal[el.dataset.salaire] = v;      /* on ne stocke pas les zéros */
+    });
+    reglages.salaires = sal;
     D().note('a modifié les règles du domaine');
     D().save('reglages');
     const ok = $('mvRegSaved');
@@ -8136,7 +8403,7 @@
     renderQuotas3, renderJournal, appliquerLectureSeule, remplirVides, repartirDeZero,
     renderMaSemaine, reinitialiserService,
     renderVitrine, renderCatalogues, appliquerAccesService, renderAvertissements, compteAvertissements,
-    openInvoiceDoc, renderRegles, chargerDemo, importerListeRH, analyserListeRH, modifierEmploye, estFormatRegistre,
+    openInvoiceDoc, ouvrirFacturation, ouvrirFacturesRecues, prochainNumero, renderRegles, chargerDemo, importerListeRH, analyserListeRH, modifierEmploye, estFormatRegistre,
     synchroniserEffectif, syncEffectifEtEnregistrer, renderMagasin, renderCommandes, renderStock, renderMagRecap,
     renderComRunner, testerDiscord, renderQuotaService, renderPrimeRecrutement,
     renderTombola, ticketsDe, renderEntretien, renderDocuments,

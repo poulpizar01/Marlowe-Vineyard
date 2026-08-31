@@ -198,6 +198,16 @@
     font-family:inherit;line-height:1.55;resize:vertical;}
   .mv-rap-txt:focus{outline:none;border-color:var(--or,#C9A961);}
   .mv-rap-pied{font-size:11.5px;line-height:1.55;color:var(--muted);margin:10px 0 0;}
+  .fr-apercu{min-height:96px;display:flex;align-items:center;justify-content:center;gap:14px;
+    border:1px dashed #3A342C;border-radius:11px;background:rgba(0,0,0,.18);padding:12px;}
+  .fr-apercu.survol{border-color:var(--prime);background:rgba(227,154,78,.08);}
+  .fr-apercu img{max-height:170px;max-width:100%;border-radius:8px;display:block;}
+  .fr-vide{font-size:12.5px;color:var(--muted);text-align:center;line-height:1.6;}
+  .fr-choisir{color:var(--prime);cursor:pointer;text-decoration:underline;}
+  .fr-vignette img{height:34px;width:auto;border-radius:5px;display:block;border:1px solid #3A342C;}
+  .fr-lien{color:var(--prime);font-size:12px;}
+  .mv-sal-grille{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px 14px;}
+  .mv-sal-l input{width:100%;}
   .qd-metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px;}
   @media (max-width:1100px){ .qd-metrics{grid-template-columns:repeat(2,1fr);} }
   .qd-select{background:#17130F;border:1px solid var(--band,#3D372C);border-radius:9px;
@@ -964,8 +974,8 @@
           <div class="panel">
             <h3>Facture</h3>
             <div class="field-row">
-              <div class="field"><label>N°</label><input type="text" id="invNum" value="410072"></div>
-              <div class="field"><label>Date</label><input type="date" id="invDate" value="2026-08-23"></div>
+              <div class="field"><label>N°</label><input type="text" id="invNum" placeholder="suivant"></div>
+              <div class="field"><label>Date</label><input type="date" id="invDate"></div>
             </div>
             <div class="field-row">
               <div class="field"><label>Tarif appliqué</label>
@@ -1164,12 +1174,20 @@
         <h3>+ Archiver une facture reçue</h3>
         <div class="field-row-3">
           <div class="field"><label>Entreprise</label><input type="text" id="frSupplier" placeholder="Nom de l'entreprise émettrice"></div>
-          <div class="field"><label>Date de la facture</label><input type="date" id="frDateIn" value="2026-08-23"></div>
+          <div class="field"><label>Date de la facture</label><input type="date" id="frDateIn"></div>
           <div class="field"><label>Montant ($, optionnel)</label><input type="number" id="frMontant" placeholder="0"></div>
         </div>
         <div class="field-row">
           <div class="field"><label>Lien (optionnel — Discord, Imgur…)</label><input type="text" id="frLien" placeholder="https://…"></div>
           <div class="field"><label>Note (optionnel)</label><input type="text" id="frNote" placeholder="Achat de verre, prestation…"></div>
+        </div>
+        <div class="field" style="margin-top:4px;">
+          <label>Justificatif (optionnel)</label>
+          <div id="frApercu" class="fr-apercu"></div>
+          <p class="hint" style="margin-top:8px;">Collez une capture avec <b>Ctrl+V</b> pendant que vous êtes
+            sur cette page, glissez un fichier dans le cadre, ou
+            <label class="fr-choisir">choisissez-en un<input type="file" id="frFichier"
+              accept="image/*,application/pdf" hidden></label>.</p>
         </div>
         <div class="btn-row"><button class="btn primary" id="frArchiveBtn">💾 Archiver la facture</button></div>
       </div>
@@ -1793,6 +1811,16 @@ document.querySelectorAll('.nav-item').forEach(item => {
         && window.MarloweActions && window.MarloweActions.renderQuotaDirect) {
       window.MarloweActions.renderQuotaDirect();
     }
+    /* La facturation propose un numéro neuf et la date du jour à chaque
+       ouverture — mais jamais par-dessus une saisie en cours. */
+    if (item.dataset.page === 'facturation'
+        && window.MarloweActions && window.MarloweActions.ouvrirFacturation) {
+      window.MarloweActions.ouvrirFacturation();
+    }
+    if (item.dataset.page === 'facturesrecues'
+        && window.MarloweActions && window.MarloweActions.ouvrirFacturesRecues) {
+      window.MarloweActions.ouvrirFacturesRecues();
+    }
   });
 });
 document.querySelectorAll('.subtab').forEach(tab => {
@@ -2135,7 +2163,10 @@ const baseQuota = {'Saisonnier':3000, 'Ouvrier Viticole':5000, 'Chef de culture'
    retombait donc sur le multiplicateur par défaut au lieu du sien. */
 const multiplierFor = {'Saisonnier':1, 'Ouvrier Viticole':2, 'Chef de Culture':3};
 const recruesData = {'Julio Cortes':2, 'Nella Valmora':1};
-const salaireData = {'Julio Cortes':28000, 'Nella Valmora':44000};
+/* Le salaire vient du barème par grade réglé dans Administration ▸ Règles.
+   Avant, deux personnes étaient nommées en dur ici et tout le monde touchait
+   zéro. La prime, elle, se calcule plus bas et ne se mélange pas à ça. */
+const salaireDe = r => (window.mvSalaireGrade ? window.mvSalaireGrade(r) : 0);
 
 function primesRows(){
   return dash.map(e => {
@@ -2146,9 +2177,13 @@ function primesRows(){
     const prime = atteint ? (window.mvCalculPrime ? window.mvCalculPrime(e.runs, e.rank, null)
                                                   : Math.min(barils, PLAFOND) * mult) : null;
     const recrues = recruesData[e.name] || 0;
-    const salaire = salaireData[e.name] || 0;
-    const total = (prime || 0) + recrues * 4000 + salaire;
-    return {name:e.name, rank:e.rank, barils, quota, atteint, mult, prime, recrues, salaire, total};
+    const salaire = salaireDe(e.rank);
+    /* La prime de recrutement est une PRIME, pas un salaire : elle se gagne
+       en amenant quelqu'un. Elle est comptée à part pour que les deux totaux
+       du haut de page veuillent dire ce qu'ils annoncent. */
+    const primeRecrues = recrues * 4000;
+    const total = (prime || 0) + primeRecrues + salaire;
+    return {name:e.name, rank:e.rank, barils, quota, atteint, mult, prime, recrues, primeRecrues, salaire, total};
   }).sort((a, b) => b.barils - a.barils);
 }
 
@@ -2164,8 +2199,11 @@ function renderPrimes(query){
   const rows = primesRows();
   const filtered = rows.filter(r => (r.name + r.rank).toLowerCase().includes(q));
 
-  const totalPrimes = rows.reduce((s, r) => s + (r.prime || 0), 0);
-  const totalSalaires = rows.reduce((s, r) => s + r.salaire, 0) + rows.reduce((s, r) => s + r.recrues * 4000, 0);
+  /* Les primes de recrutement comptaient jusqu'ici dans les SALAIRES. C'est
+     une prime : elle rejoint les primes. La masse totale ne change pas, mais
+     chacun des deux chiffres dit enfin la vérité. */
+  const totalPrimes = rows.reduce((s, r) => s + (r.prime || 0) + (r.primeRecrues || 0), 0);
+  const totalSalaires = rows.reduce((s, r) => s + r.salaire, 0);
   document.getElementById('pr-total-primes').textContent = totalPrimes.toLocaleString('fr-FR') + ' $';
   document.getElementById('pr-total-salaires').textContent = totalSalaires.toLocaleString('fr-FR') + ' $';
   document.getElementById('pr-masse-totale').textContent = `masse totale : ${(totalPrimes + totalSalaires).toLocaleString('fr-FR')} $ (salaires + primes)`;
@@ -2663,13 +2701,20 @@ document.getElementById('facturesRecuesList').innerHTML = facturesRecuesData.map
   <div class="panel">
     <h3>${g.supplier} · ${g.items.length} facture(s) · total ${total.toLocaleString('fr-FR')} $</h3>
     <table class="gtable">
-      <thead><tr><th>Date</th><th class="num">Montant</th><th>Note</th><th>Par</th><th></th></tr></thead>
+      <thead><tr><th>Date</th><th class="num">Montant</th><th>Note</th><th>Pièce</th><th>Par</th><th></th></tr></thead>
       <tbody>
         ${g.items.map((i, ii) => `
         <tr>
           <td class="mono">${i.date}</td>
           <td class="num">${i.montant.toLocaleString('fr-FR')} $</td>
           <td>${i.note}</td>
+          <td>${
+            i.image
+              ? `<a class="fr-vignette" href="${i.image}" target="_blank" rel="noopener" title="Ouvrir le justificatif"><img src="${i.image}" alt=""></a>`
+              : i.lien
+                ? `<a class="fr-lien" href="${i.lien}" target="_blank" rel="noopener">lien ↗</a>`
+                : '<span class="dash-cell">—</span>'
+          }</td>
           <td>${i.par}</td>
           <td class="action-icons"><button class="icon-btn" data-fr-edit="${gi}:${ii}" title="Modifier">✎</button><button class="icon-btn danger" data-fr-del="${gi}:${ii}" title="Supprimer">×</button></td>
         </tr>`).join('')}
@@ -2820,16 +2865,16 @@ document.getElementById('richesseBody').innerHTML = richesseData.map(r => `
 
 document.getElementById('bcEffectif').textContent = rhRosterData.filter(e => e.status === 'actif').length;
 
-const bcRankSalaire = {
-  'RH':0, 'Responsable Commercial':1500, 'Chef de culture':0, 'Chef de Culture':0,
-  'Vendeur':1500, 'Ouvrier Viticole':0, 'Saisonnier':0,
-};
+/* Le barème est celui d'Administration ▸ Règles, comme sur la page Primes :
+   deux tables en dur qui ne disaient pas la même chose, c'était deux masses
+   salariales différentes selon la page qu'on regardait. */
+const bcSalaireDe = r => (window.mvSalaireGrade ? window.mvSalaireGrade(r) : 0);
 const bcDirectionRanks = ['Patron', 'Co-Patron', 'Responsable Commercial'];
 let bcRows = dash.map(e => ({
   name: e.name, rank: e.rank,
   runs: e.runs, factures: e.factures, ventes: e.ventes,
   ca: e.factures + e.runs,
-  salaire: bcRankSalaire[e.rank] !== undefined ? bcRankSalaire[e.rank] : 1500,
+  salaire: bcSalaireDe(e.rank),
 }));
 
 function bcRenderDetail(){
