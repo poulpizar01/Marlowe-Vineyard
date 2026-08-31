@@ -1167,7 +1167,7 @@
 
     if (!await confirmAction('Enregistrer la facture',
       `N°${inv.num} — ${inv.client} — ${inv.net.toLocaleString('fr-FR')} $ ` +
-      `(${inv.bouteilles.toLocaleString('fr-FR')} bouteille(s)). Elle rejoindra l'historique.`)) return;
+      `(${inv.bouteilles.toLocaleString('fr-FR')} article(s)). Elle rejoindra l'historique.`)) return;
 
     historiqueData.unshift({
       num: inv.num, date: inv.date, client: inv.client,
@@ -1538,7 +1538,7 @@
      La voici. Elle croise deux sources et n'en invente aucune :
 
        · QUI travaille — le registre RH, pour les trois grades de production ;
-       · COMBIEN il produit — le tableau de bord de la semaine, où les barils
+       · COMBIEN il produit — le tableau de bord de la semaine, où les vins
          valent runs ÷ 5, exactement comme partout ailleurs.
 
      Deux prudences délibérées : une fiche déjà présente n'est jamais réécrite
@@ -1632,7 +1632,7 @@
     if (!step) { toast('Ce grade est déjà le dernier du parcours.'); return; }
 
     if (!await confirmAction('Promouvoir',
-      `${e.name} passe de ${e.grade} à ${step.next}. Son quota hebdomadaire devient ${step.quota.toLocaleString('fr-FR')} bouteilles.`)) return;
+      `${e.name} passe de ${e.grade} à ${step.next}. Son quota hebdomadaire devient ${step.quota.toLocaleString('fr-FR')} vins.`)) return;
 
     e.grade = step.next;
     e.quota = step.quota;
@@ -1950,7 +1950,7 @@
     const sub = document.querySelector('#page-statsprimes .primes-sub');
     if (sub) {
       sub.textContent = `Prochaine clôture : du ${frDate(start)} au ${frDate(end)} · `
-        + `prime = barils × multiplicateur, plafonné à 19 000 barils/semaine`;
+        + `prime = vins × multiplicateur, plafonné à 19 000 vins/semaine`;
     }
     const h = document.querySelector('#page-statsprimes .primes-titlewrap h1');
     if (h) h.innerHTML = `Semaine ${isoWeek(start)} — <span class="accent">Primes</span>`;
@@ -2076,7 +2076,7 @@
        Bénéfice imposable = CA total − salaires − factures reçues
                             (avant primes — c'est lui qui fixe le palier)
        Palier            → plafonds de salaire et de prime
-       Primes            = barils × multiplicateur, plafonnées
+       Primes            = vins × multiplicateur, plafonnées
        Dépenses          = salaires + primes + factures reçues
      ======================================================================== */
 
@@ -2085,12 +2085,12 @@
   /* ------------------------------------------------------------------------
      LA formule de prime — une seule, partagée.
      Le fichier d'origine en contenait deux qui ne donnaient pas le même
-     résultat : la page Primes plafonnait les barils puis multipliait, le
+     résultat : la page Primes plafonnait les vins puis multipliait, le
      bilan multipliait puis plafonnait la somme. Les deux plafonds existent
      bel et bien, ils s'appliquent donc l'un après l'autre :
 
-         barils = runs / 5, écrêtés à PLAFOND (19 000 par semaine)
-         prime  = barils × multiplicateur du grade
+         vins   = runs / 5, écrêtés à PLAFOND (19 000 par semaine)
+         prime  = vins   × multiplicateur du grade
          prime  = min(prime, plafond de prime du palier)
 
      Toute modification de la règle se fait ici et nulle part ailleurs.
@@ -2685,10 +2685,10 @@
       <div class="mv-kpis">
         <div class="mv-kpi"><div class="mv-kpi-l">🏆 Meilleure semaine</div>
           <div class="mv-kpi-v">${prod(best).toLocaleString('fr-FR')}</div>
-          <div class="mv-kpi-s">bouteilles · ${esc(best.label)}</div></div>
+          <div class="mv-kpi-s">vins · ${esc(best.label)}</div></div>
         <div class="mv-kpi"><div class="mv-kpi-l">Moyenne par semaine</div>
           <div class="mv-kpi-v">${moyenne.toLocaleString('fr-FR')}</div>
-          <div class="mv-kpi-s">bouteilles</div></div>
+          <div class="mv-kpi-s">vins</div></div>
         <div class="mv-kpi"><div class="mv-kpi-l">Production cumulée</div>
           <div class="mv-kpi-v accent">${cumul.toLocaleString('fr-FR')}</div>
           <div class="mv-kpi-s">depuis la première clôture</div></div>
@@ -2698,8 +2698,8 @@
       </div>
 
       <div class="grid2">
-        <div class="panel"><h3>Production par semaine <span class="mv-unit">bouteilles</span></h3>
-          ${barChart(serieProd, CHART.or, 'bouteilles')}</div>
+        <div class="panel"><h3>Production par semaine <span class="mv-unit">vins</span></h3>
+          ${barChart(serieProd, CHART.or, 'vins')}</div>
         <div class="panel"><h3>Primes versées par semaine <span class="mv-unit">$</span></h3>
           ${areaChart(seriePrimes, CHART.ambre, '$')}</div>
       </div>
@@ -4853,7 +4853,7 @@
     const quota = Number(e.quota) || 0;
     const pct = quota > 0 ? Math.min(100, Math.round(barils / quota * 100)) : 0;
     $('prodValue').innerHTML = `${pct}<span>%</span>`;
-    $('prodLabel').textContent = `${barils.toLocaleString('fr-FR')} / ${quota.toLocaleString('fr-FR')} bouteilles`;
+    $('prodLabel').textContent = `${barils.toLocaleString('fr-FR')} / ${quota.toLocaleString('fr-FR')} vins`;
     const bar = $('prodBar');
     if (bar) {
       bar.style.width = pct + '%';
@@ -4885,9 +4885,9 @@
         const reste = Math.max(0, e.promoTarget - barils);
         nxt.innerHTML = `
           <p class="prod-next-title">Passage à <b>${esc(e.nextGrade || '—')}</b> à partir de
-            <b>${Number(e.promoTarget).toLocaleString('fr-FR')}</b> bouteilles.</p>
+            <b>${Number(e.promoTarget).toLocaleString('fr-FR')}</b> vins.</p>
           ${reste > 0
-            ? `<div class="prod-reward-check pending">○ Encore ${reste.toLocaleString('fr-FR')} bouteilles avant la promotion</div>`
+            ? `<div class="prod-reward-check pending">○ Encore ${reste.toLocaleString('fr-FR')} vins avant la promotion</div>`
             : `<div class="prod-reward-check ok">✓ Seuil de promotion dépassé — bascule à la prochaine clôture</div>`}`;
       }
     }
@@ -4938,7 +4938,7 @@
    PRISE DE SERVICE — réservée aux postes qui pointent
    --------------------------------------------------------------------------
    Un saisonnier, un ouvrier viticole, un chef de culture ne pointent pas : leur
-   semaine se mesure en bouteilles, pas en heures — c'est le quota qui les juge.
+   semaine se mesure en vins, pas en heures — c'est le quota qui les juge.
    Le pointage concerne la vente, le commerce, le magasin, les RH et la
    direction, dont le travail ne se compte pas en production.
    ========================================================================== */
@@ -5105,7 +5105,7 @@
   const reglages = {
     quotaServiceH: 0,       /* heures de service attendues par semaine, 0 = pas de quota */
     primeRecrutMontant: 0,  /* prime versée à une recrue de fin de semaine */
-    primeRecrutQuota: 0,    /* bouteilles minimum pour y avoir droit */
+    primeRecrutQuota: 0,    /* vins minimum pour y avoir droit */
   };
 
   const h2m = h => Math.round((Number(h) || 0) * 60);
@@ -5226,7 +5226,7 @@
       </div>
       <div id="mvPrimeRecrutCorps"${primeRecrutOuvert ? '' : ' style="display:none;"'}>
       <p class="mv-sub" style="margin:12px 0 14px;font-size:12.5px;color:var(--muted);">Arrivées entre jeudi et dimanche de la semaine en cours.
-        ${seuil ? `Il faut ${seuil.toLocaleString('fr-FR')} bouteilles pour y avoir droit.` : 'Aucun quota exigé.'}</p>
+        ${seuil ? `Il faut ${seuil.toLocaleString('fr-FR')} vins pour y avoir droit.` : 'Aucun quota exigé.'}</p>
       <table class="gtable">
         <thead><tr><th>Employé</th><th>Poste</th><th>Arrivée</th><th class="num">Production</th><th class="num">Prime</th></tr></thead>
         <tbody>${recrues.map(r => `
@@ -5254,7 +5254,7 @@
       <div class="mv-vit-sec" style="border-top:none;padding-top:0;">
         <h4>Quota de prise de service</h4>
         <p class="mv-hint" style="margin:0 0 12px;">Pour les postes qui pointent — boutique et commerce —
-          et qui ne sont donc pas jugés sur les bouteilles produites. Le compte se fait à partir des
+          et qui ne sont donc pas jugés sur les vins produits. Le compte se fait à partir des
           prises de service enregistrées dans « Ma semaine ». Laissez à 0 pour n'imposer aucun quota.</p>
         <div class="mv-vit-champs">
           <label class="mv-lab">Heures par semaine
@@ -5266,13 +5266,13 @@
       <div class="mv-vit-sec">
         <h4>Prime de recrutement</h4>
         <p class="mv-hint" style="margin:0 0 12px;">Versée aux employés arrivés <b>entre le jeudi et le dimanche</b>
-          de la semaine en cours, à condition d'avoir atteint le nombre de bouteilles indiqué. Ils n'ont que
+          de la semaine en cours, à condition d'avoir atteint le nombre de vins indiqué. Ils n'ont que
           quelques jours pour produire : c'est la raison d'être de cette barre plus basse. Montant à 0 = prime désactivée.</p>
         <div class="mv-vit-champs">
           <label class="mv-lab">Montant de la prime ($)
             <input type="number" id="mvRegPrime" min="0" step="500" value="${reglages.primeRecrutMontant}">
           </label>
-          <label class="mv-lab">Bouteilles minimum
+          <label class="mv-lab">Vins minimum
             <input type="number" id="mvRegSeuil" min="0" step="100" value="${reglages.primeRecrutQuota}">
           </label>
         </div>

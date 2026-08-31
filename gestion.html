@@ -716,7 +716,7 @@
       <div class="panel">
         <h3>Liste des éligibles</h3>
         <table class="gtable">
-          <thead><tr><th>Employé</th><th>Grade</th><th class="num">Barils</th><th>Récompense</th><th>Statut</th><th></th></tr></thead>
+          <thead><tr><th>Employé</th><th>Grade</th><th class="num">Vins</th><th>Récompense</th><th>Statut</th><th></th></tr></thead>
           <tbody id="eligibiliteBody"></tbody>
         </table>
       </div>
@@ -958,7 +958,7 @@
         <div class="totals-strip">
           <div class="totals-box"><div class="lbl">Total HT</div><div class="val" id="totHT">0 $</div></div>
           <div class="totals-box"><div class="lbl">Total TTC</div><div class="val" id="totTTC">0 $</div></div>
-          <div class="totals-box"><div class="lbl">Bouteilles livrées</div><div class="val" id="totBottles">0</div></div>
+          <div class="totals-box"><div class="lbl">Vins livrés</div><div class="val" id="totBottles">0</div></div>
           <div class="totals-box"><div class="lbl">Poids total</div><div class="val" id="totWeight">0 kg</div></div>
         </div>
 
@@ -1152,7 +1152,7 @@
       <div class="metric-card">
         <div class="metric-label">Production</div>
         <div class="metric-value" id="ov-production">0</div>
-        <div class="metric-sub" id="ov-production-sub">bouteilles · 0 saisie</div>
+        <div class="metric-sub" id="ov-production-sub">vins · 0 saisie</div>
       </div>
       <div class="metric-card">
         <div class="metric-label">Chiffre d'affaires</div>
@@ -1162,7 +1162,7 @@
       <div class="metric-card">
         <div class="metric-label">Objectif collectif</div>
         <div class="metric-value" id="ov-objectif">0<span style="font-size:20px;">%</span></div>
-        <div class="metric-sub" id="ov-objectif-sub">0 / 50 000 bouteilles</div>
+        <div class="metric-sub" id="ov-objectif-sub">0 / 50 000 vins</div>
         <div class="metric-bar-track"><div class="metric-bar-fill" id="ov-objectif-bar" style="width:0%"></div></div>
       </div>
     </div>
@@ -1243,7 +1243,7 @@
       </thead>
       <tbody id="dashBody"></tbody>
     </table>
-    <p class="footnote">Quota effectué = Runs ÷ 5 — reflète le nombre de bouteilles livrées derrière chaque run. Total = Factures + Runs, Part = Part employé, Tickets = participations à la tombola.</p>
+    <p class="footnote">Quota effectué = Runs ÷ 5 — reflète le nombre de vins livrés derrière chaque run. Total = Factures + Runs, Part = Part employé, Tickets = participations à la tombola.</p>
   </div>
 
   <!-- ============ TAB 2 — GRADES & QUOTAS ============ -->
@@ -1265,7 +1265,7 @@
           </div>
           <div class="grade-count"><div class="n" id="count-saisonnier">0</div><div class="l">à ce palier</div></div>
         </div>
-        <div class="grade-row"><span class="grade-label">Quota hebdo</span><span class="grade-value">3 000 bouteilles</span></div>
+        <div class="grade-row"><span class="grade-label">Quota hebdo</span><span class="grade-value">3 000 vins</span></div>
         <div class="grade-reward">Si quota atteint → <b>15 menus</b> + <b>15 bidons</b></div>
         <div class="grade-promo active">Promotion possible vers <b>Ouvrier Viticole</b> — au-delà de 5 000 ventes</div>
       </div>
@@ -1279,7 +1279,7 @@
           </div>
           <div class="grade-count"><div class="n" id="count-ouvrier">0</div><div class="l">à ce palier</div></div>
         </div>
-        <div class="grade-row"><span class="grade-label">Quota hebdo</span><span class="grade-value">5 000 bouteilles</span></div>
+        <div class="grade-row"><span class="grade-label">Quota hebdo</span><span class="grade-value">5 000 vins</span></div>
         <div class="grade-reward">Si quota atteint → <b>25 menus</b> + <b>20 bidons</b> + <b>1 ticket tombola</b></div>
         <div class="grade-promo active">Promotion possible vers <b>Chef de Culture</b> — au-delà de 8 000 ventes</div>
       </div>
@@ -1293,7 +1293,7 @@
           </div>
           <div class="grade-count"><div class="n" id="count-chef">0</div><div class="l">à ce palier</div></div>
         </div>
-        <div class="grade-row"><span class="grade-label">Quota hebdo</span><span class="grade-value">8 000 bouteilles</span></div>
+        <div class="grade-row"><span class="grade-label">Quota hebdo</span><span class="grade-value">8 000 vins</span></div>
         <div class="grade-reward">Si quota atteint → <b>50 menus</b> + <b>30 bidons</b> + <b>2 tickets tombola</b></div>
         <div class="grade-promo final-note">Grade final — sommet de la filière viticole</div>
       </div>
@@ -1344,7 +1344,7 @@
       <div class="primes-titlewrap">
         <p class="eyebrow">Clôture hebdomadaire</p>
         <h1>Semaine 34 — <span class="accent">Primes</span></h1>
-        <p class="primes-sub">du lundi 17 août au dimanche 23 août · prime = barils × multiplicateur, plafonné à 19 000 barils/semaine</p>
+        <p class="primes-sub">du lundi 17 août au dimanche 23 août · prime = vins × multiplicateur, plafonné à 19 000 vins/semaine</p>
       </div>
       <div class="primes-actions">
         <button class="pbtn" id="primesExcBtn">Primes exceptionnelles</button>
@@ -1388,7 +1388,7 @@
         </colgroup>
         <thead>
           <tr>
-            <th>#</th><th>Runner</th><th>Grade</th><th class="num">Barils</th>
+            <th>#</th><th>Runner</th><th>Grade</th><th class="num">Vins</th>
             <th>Quota</th><th>Mult.</th><th class="num">Prime</th><th>Recrues</th>
             <th class="num">Salaire</th><th class="num">Total</th>
           </tr>
@@ -1444,7 +1444,7 @@
         <div class="metric-label">Quota de la semaine</div>
         <div class="prod-progress-value" id="prodValue">0<span>%</span></div>
         <div class="prod-bar-track"><div class="prod-bar-fill" id="prodBar" style="width:0%"></div></div>
-        <div class="prod-progress-label" id="prodLabel">0 / 0 bouteilles</div>
+        <div class="prod-progress-label" id="prodLabel">0 / 0 vins</div>
         <span class="status-badge" id="prodStatus">—</span>
       </div>
 
@@ -1869,7 +1869,7 @@ function populateOverview(){
   const totalProduction = dash.reduce((s, e) => s + e.ventes, 0);
   const nbSaisies = dash.filter(e => e.ventes > 0).length;
   document.getElementById('ov-production').textContent = totalProduction.toLocaleString('fr-FR');
-  document.getElementById('ov-production-sub').textContent = `bouteilles · ${nbSaisies} saisie${nbSaisies > 1 ? 's' : ''}`;
+  document.getElementById('ov-production-sub').textContent = `vins · ${nbSaisies} saisie${nbSaisies > 1 ? 's' : ''}`;
 
   const totalCA = dash.reduce((s, e) => s + e.factures + e.runs, 0);
   document.getElementById('ov-ca').textContent = totalCA.toLocaleString('fr-FR');
@@ -1877,7 +1877,7 @@ function populateOverview(){
   const objectifTarget = 50000;
   const objectifPct = Math.min(100, Math.round(totalProduction / objectifTarget * 100));
   document.getElementById('ov-objectif').innerHTML = `${objectifPct}<span style="font-size:20px;">%</span>`;
-  document.getElementById('ov-objectif-sub').textContent = `${totalProduction.toLocaleString('fr-FR')} / ${objectifTarget.toLocaleString('fr-FR')} bouteilles`;
+  document.getElementById('ov-objectif-sub').textContent = `${totalProduction.toLocaleString('fr-FR')} / ${objectifTarget.toLocaleString('fr-FR')} vins`;
   document.getElementById('ov-objectif-bar').style.width = objectifPct + '%';
 
   const gradeGroups = {'Saisonnier':{n:0, prod:0}, 'Ouvrier Viticole':{n:0, prod:0}, 'Chef de Culture':{n:0, prod:0}};
@@ -1893,7 +1893,7 @@ function populateOverview(){
     </tr>`).join('');
 
   /* Classement sur l'avancement du quota, et non sur la production brute :
-     un saisonnier à 3 200 barils sur 3 000 a mieux fait qu'un chef de culture
+     un saisonnier à 3 200 vins sur 3 000 a mieux fait qu'un chef de culture
      à 4 000 sur 8 000. Les quotas viennent des fiches d'effectif ; si aucune
      n'est encore remplie, on retombe sur le barème par grade — baseQuota est
      déclaré plus bas dans le fichier, d'où la copie locale. */
@@ -1928,7 +1928,7 @@ function populateOverview(){
     <div class="ov-top5-row">
       <div class="ov-top5-left"><span class="ov-top5-rank">${i + 1}</span>
         <span><span class="ov-top5-name">${e.name}</span>
-          <span class="ov-top5-sub">${e.barils.toLocaleString('fr-FR')} / ${e.quota.toLocaleString('fr-FR')} barils</span></span></div>
+          <span class="ov-top5-sub">${e.barils.toLocaleString('fr-FR')} / ${e.quota.toLocaleString('fr-FR')} vins</span></span></div>
       <span class="ov-top5-val">${Math.round(e.pct)} %</span>
     </div>`).join('') : `<p class="ov-empty">Aucun quota renseigné : collez la tablette dans Tableau de bord, puis synchronisez l'effectif.</p>`;
 }
@@ -2869,7 +2869,7 @@ function renderMaSemaine(name){
 
   const pct = e.quota > 0 ? Math.min(100, Math.round(e.barils / e.quota * 100)) : 0;
   document.getElementById('prodValue').innerHTML = `${pct}<span>%</span>`;
-  document.getElementById('prodLabel').textContent = `${e.barils.toLocaleString('fr-FR')} / ${e.quota.toLocaleString('fr-FR')} bouteilles`;
+  document.getElementById('prodLabel').textContent = `${e.barils.toLocaleString('fr-FR')} / ${e.quota.toLocaleString('fr-FR')} vins`;
   const bar = document.getElementById('prodBar');
   bar.style.width = pct + '%';
   bar.className = 'prod-bar-fill' + (pct < 100 && pct >= 50 ? ' warn' : '');
@@ -2890,7 +2890,7 @@ function renderMaSemaine(name){
     nextEl.innerHTML = `
       <p class="prod-next-title">Passage à <b>${e.nextGrade}</b> à partir de <b>${e.promoTarget.toLocaleString('fr-FR')}</b> ventes.</p>
       ${remaining > 0
-        ? `<div class="prod-reward-check pending">○ Encore ${remaining.toLocaleString('fr-FR')} bouteilles avant la promotion</div>`
+        ? `<div class="prod-reward-check pending">○ Encore ${remaining.toLocaleString('fr-FR')} vins avant la promotion</div>`
         : `<div class="prod-reward-check ok">✓ Seuil de promotion dépassé — bascule au prochain reset</div>`}
     `;
   }
