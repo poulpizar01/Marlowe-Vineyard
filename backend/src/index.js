@@ -27,7 +27,7 @@ const DISCORD = 'https://discord.com/api/v10';
    correction serveur n'a rien changé, on la lit.
 
    À tenir en phase avec version.json à chaque déploiement. */
-const VERSION = '1.42.0';
+const VERSION = '1.42.1';
 const SESSION_TTL = 60 * 60 * 24 * 7;   // 7 jours
 const STATE_TTL   = 600;                // 10 minutes
 
@@ -1041,7 +1041,10 @@ async function handleDispo(request, env) {
     await base(env).put(cle, '1', { expirationTtl: Math.ceil(DISPO_MIN_MS / 1000) });
   } catch (e) { /* sans effet */ }
 
-  /* Le rôle à réveiller est celui des clients — pas celui des runners. */
+  /* Le rôle à réveiller est celui des membres du domaine, pas celui des
+     runners. Et ce ne sont pas des clients : ce qu'ils viennent chercher
+     leur appartient déjà, c'est le fruit de leur travail. Le message ne
+     doit donc rien avoir d'une invitation à commander. */
   const role = String(env.DISCORD_DISPO_ROLE || '').trim();
   const roleOk = /^\d{17,20}$/.test(role);
   const mention = roleOk ? `<@&${role}> ` : '';
@@ -1049,7 +1052,7 @@ async function handleDispo(request, env) {
   const nom = String(s.user.name || '').slice(0, 60).replace(/[`@]/g, '');
   const contenu = `${mention}**Disponibilité**\n`
     + `> **${nom}** est là pour vos bouteilles et vos avantages 🍇\n`
-    + `> Passez commande, le domaine vous répond.`;
+    + `> Passez récupérer ce qui vous revient.`;
 
   const res = await fetch(w.url, {
     method: 'POST',

@@ -1241,7 +1241,7 @@
         menu: 'Disponibilités',
         titre: 'Annonces de disponibilité',
         sub: `Le bouton « Je suis disponible » du Com Runner écrit dans le salon Discord
-              et mentionne le rôle des clients. C'est l'inverse d'une demande de retrait :
+              et mentionne le rôle du domaine. C'est l'inverse d'une demande de retrait :
               un responsable annonce qu'il est là. Cochez les rôles qui ont le droit
               de s'en servir.`,
         html: `

@@ -10,7 +10,7 @@
      n'a jamais touchée ne doit ouvrir aucune porte ;
    · le nom annoncé vient de la SESSION, jamais du corps de la requête —
      sinon n'importe qui se déclarerait disponible au nom d'un autre ;
-   · le rôle client est mentionné, et l'autorisation Discord qui va avec est
+   · le rôle du domaine est mentionné, et l'autorisation Discord qui va avec est
      bien posée : sans « allowed_mentions », le message part sans réveiller
      personne, en silence, avec un code 200 — le défaut exact qu'on avait
      déjà eu sur le rappel de permis ;
@@ -39,7 +39,7 @@ const dit = (nom, vrai, detail) => {
 };
 
 const WEBHOOK = 'https://discord.com/api/webhooks/123456789012345678/jeton-de-test_-abc';
-const ROLE_CLIENT = '1112658686431723520';
+const ROLE_MEMBRES = '1112658686431723520';
 const ROLE_RESP = '444444444444444444';
 const ROLE_SAISO = '333333333333333333';
 
@@ -102,7 +102,7 @@ const ENV = {
   DISCORD_GUILD_ID: '932301610128912414',
   DISCORD_BOT_TOKEN: 'faux',
   DISCORD_WEBHOOK: WEBHOOK,
-  DISCORD_DISPO_ROLE: ROLE_CLIENT,
+  DISCORD_DISPO_ROLE: ROLE_MEMBRES,
   OWNER_IDS: '',
   PATRON_ROLES: 'Patron',
   SITE_URL: 'https://exemple.test',
@@ -167,17 +167,25 @@ console.log('\nL\'annonce elle-même');
 
   const m = ENVOIS[0] || {};
   dit('le nom annoncé est celui de la SESSION', /Robert Morgan/.test(m.content || ''), m.content);
-  dit('le rôle client est mentionné', (m.content || '').includes(`<@&${ROLE_CLIENT}>`), m.content);
+  dit('le rôle du domaine est mentionné', (m.content || '').includes(`<@&${ROLE_MEMBRES}>`), m.content);
   /* Sans cette liste, Discord accepte le message (200) et ne réveille
      personne. L'erreur ne se verrait qu'en salon. */
   dit('l\'autorisation de mention accompagne le rôle',
     m.allowed_mentions && Array.isArray(m.allowed_mentions.roles)
-    && m.allowed_mentions.roles[0] === ROLE_CLIENT
+    && m.allowed_mentions.roles[0] === ROLE_MEMBRES
     && Array.isArray(m.allowed_mentions.parse) && m.allowed_mentions.parse.length === 0,
     m.allowed_mentions);
   dit('la réponse confirme que la mention a bien été posée', corps.mention === true, corps);
   dit('le message parle de bouteilles et d\'avantages',
     /bouteilles/.test(m.content || '') && /avantages/.test(m.content || ''), m.content);
+  /* Ce qu'ils viennent chercher leur appartient déjà : c'est le fruit de leur
+     travail, pas un achat. Le message ne doit à aucun moment les traiter en
+     clients — « passez commande » avait exactement ce défaut. */
+  dit('rien n\'invite à commander ni n\'en fait des clients',
+    !/command/i.test(m.content || '') && !/client/i.test(m.content || '')
+    && !/achat|acheter|prix|tarif/i.test(m.content || ''), m.content);
+  dit('il dit bien que ce qui les attend leur revient',
+    /vous revient/.test(m.content || ''), m.content);
 }
 
 console.log('\nLe nom ne peut pas être soufflé par le navigateur');
@@ -201,7 +209,7 @@ console.log('\nLe garde-fou anti-répétition');
   dit('le refus dit combien de temps attendre', /dizaine de minutes/.test(d.detail || ''), d);
 }
 
-console.log('\nQuand le rôle client n\'est pas déclaré');
+console.log('\nQuand le rôle à prévenir n\'est pas déclaré');
 {
   ENVOIS = []; reglages({ dispoRoles: ['Responsable'] }); oublier();
   const r = await W.handleDispo(req('POST', '/api/dispo', 'jeton-resp', {}),

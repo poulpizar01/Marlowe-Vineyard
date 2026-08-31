@@ -57,7 +57,12 @@
         border-radius:16px;padding:26px 24px;box-shadow:0 24px 70px rgba(0,0,0,.6);
         font-family:'Inter',sans-serif;color:var(--parchment,#EDE3CF);}
       .mv-dlg h3{font-family:'Fraunces',serif;font-size:18px;margin:0 0 8px;}
-      .mv-dlg p{font-size:13px;line-height:1.6;color:var(--muted,#9C9384);margin:0 0 18px;}
+      /* « pre-line » : les retours à la ligne écrits dans le message sont
+         rendus. Sans lui, une confirmation qui recopie un message Discord sur
+         deux lignes s'affichait d'un seul bloc, et la citation devenait
+         illisible. Les textes d'une seule ligne ne changent pas. */
+      .mv-dlg p{font-size:13px;line-height:1.6;color:var(--muted,#9C9384);margin:0 0 18px;
+        white-space:pre-line;}
       .mv-dlg label{display:block;font-size:10px;letter-spacing:.14em;text-transform:uppercase;
         color:var(--or-soft,#8E7C4E);margin:12px 0 6px;}
       .mv-dlg input,.mv-dlg select{width:100%;background:rgba(0,0,0,.25);border:1px solid var(--band,#3D372C);
@@ -7627,9 +7632,13 @@
     let tok = null;
     try { tok = JSON.parse(localStorage.getItem('mv.token') || 'null'); } catch (e) {}
 
+    /* La confirmation recopie le message MOT POUR MOT. Un résumé approximatif
+       ferait valider autre chose que ce qui part réellement dans le salon. */
     const ok = await confirmAction('Annoncer votre disponibilité',
-      `Le salon Discord verra : « ${moiSession()} est là pour vos bouteilles et vos avantages », `
-      + 'avec la mention du rôle client. Une annonce toutes les dix minutes au maximum.');
+      `Le salon Discord verra, avec la mention du rôle du domaine :\n\n`
+      + `« ${moiSession()} est là pour vos bouteilles et vos avantages. `
+      + `Passez récupérer ce qui vous revient. »\n\n`
+      + 'Une annonce toutes les dix minutes au maximum.');
     if (!ok) return;
 
     /* Le fil garde la trace dans tous les cas — même Discord injoignable,
@@ -7662,7 +7671,7 @@
            c'est exactement le défaut qu'on avait déjà eu avec le rappel de
            permis parti sans son texte, et qui avait l'air d'un succès. */
         toast(data.mention === false
-          ? 'Annonce envoyée — mais sans mention : le rôle client n\'est pas déclaré côté serveur.'
+          ? 'Annonce envoyée — mais sans mention : le rôle à prévenir n\'est pas déclaré côté serveur.'
           : 'Annonce envoyée sur Discord.');
         return;
       }
