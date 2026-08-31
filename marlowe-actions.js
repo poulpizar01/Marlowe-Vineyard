@@ -7403,6 +7403,11 @@
     const fil = $('crFil');
     if (!fil) return;
 
+    /* Le droit d'annoncer peut changer en cours de session — le patron coche
+       un rôle dans Paramètres et la page ne recharge pas. On le relit à
+       chaque dessin du fil plutôt qu'une seule fois au démarrage. */
+    majBoutonDispo();
+
     if (!comRunner.length) {
       fil.innerHTML = `<div class="panel"><p class="empty-note" style="text-align:center;padding:24px;">
         Rien pour l'instant. Le premier message lance le fil.</p></div>`;
@@ -7610,9 +7615,82 @@
     }
   }
 
+  /* L'inverse du retrait : un responsable annonce qu'il est là.
+     ------------------------------------------------------------------------
+     Aucun formulaire. Les responsables l'écrivaient à la main dans le salon,
+     en une seconde ; un formulaire qui demande « jusqu'à quelle heure » leur
+     ferait perdre le seul avantage du bouton. Le message est composé par le
+     serveur à partir du nom de la session — on ne peut pas se déclarer
+     disponible au nom d'un autre. */
+  async function annoncerDispo() {
+    const cfg = (window.MarloweAuth && window.MarloweAuth.CONFIG) || {};
+    let tok = null;
+    try { tok = JSON.parse(localStorage.getItem('mv.token') || 'null'); } catch (e) {}
+
+    const ok = await confirmAction('Annoncer votre disponibilité',
+      `Le salon Discord verra : « ${moiSession()} est là pour vos bouteilles et vos avantages », `
+      + 'avec la mention du rôle client. Une annonce toutes les dix minutes au maximum.');
+    if (!ok) return;
+
+    /* Le fil garde la trace dans tous les cas — même Discord injoignable,
+       l'équipe voit qui s'est annoncé et quand. */
+    comRunner.unshift({
+      id: 'D' + Date.now().toString(36),
+      auteur: moiSession(), par: (window.MarloweSession || {}).id || null,
+      texte: 'Disponible pour les bouteilles et les avantages',
+      quand: quandFR(new Date()), type: 'dispo',
+    });
+    if (comRunner.length > CR_MAX) comRunner.length = CR_MAX;
+    D().note('s\'est annoncé disponible');
+    D().save('comRunner');
+    renderComRunner();
+
+    if (cfg.MODE !== 'discord' || !tok) {
+      toast('Annonce inscrite au fil. Discord non relié en mode test.');
+      return;
+    }
+
+    try {
+      const res = await fetch(cfg.API_BASE + '/api/dispo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tok },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        /* Partie sans mention = partie sans réveiller personne. Le dire :
+           c'est exactement le défaut qu'on avait déjà eu avec le rappel de
+           permis parti sans son texte, et qui avait l'air d'un succès. */
+        toast(data.mention === false
+          ? 'Annonce envoyée — mais sans mention : le rôle client n\'est pas déclaré côté serveur.'
+          : 'Annonce envoyée sur Discord.');
+        return;
+      }
+      if (res.status === 404) {
+        toast('Cette version du serveur ne connaît pas encore ce bouton — le Worker doit être redéployé.');
+        return;
+      }
+      toast(data.detail || `Discord a refusé l'envoi (${res.status}).`);
+    } catch (e) {
+      console.warn('[Marlowe] annonce de disponibilité bloquée :', e);
+      toast("L'annonce est dans le fil, mais l'appel n'est pas sorti du navigateur. "
+          + 'Paramètres ▸ Règles du domaine ▸ « Tester le lien Discord ».');
+    }
+  }
+
+  /* Le bouton n'existe à l'écran que pour ceux qui ont le droit de s'en
+     servir : un bouton visible qui refuse est pire que pas de bouton. */
+  function majBoutonDispo() {
+    const b = document.getElementById('crDispo');
+    if (!b) return;
+    const S = window.MarloweSession || {};
+    b.hidden = !(S.peutAnnoncerDispo || S.isPatron || S.isOwner);
+  }
+
   document.addEventListener('click', e => {
     if (e.target.closest('#crEnvoyer')) { envoyerMessage(); return; }
     if (e.target.closest('#crRetrait')) { demanderRetrait(); return; }
+    if (e.target.closest('#crDispo'))   { annoncerDispo(); return; }
 
     /* --- les réponses --- */
     const rep = e.target.closest('[data-cr-rep]');
@@ -8585,6 +8663,9 @@
     enregistrerAvertissement, niveauSuivant, notifierAvertissement,
     retrograderEmploye, actionSousQuota,
     renderQuotaDirect,
+    /* Rejoué quand le patron coche des rôles dans Administration ▸ Com Runner :
+       le bouton doit apparaître ou disparaître sans recharger la page. */
+    majBoutonDispo,
     /* Rejoué quand le patron change les listes de rôles dans Administration ▸ Agenda. */
     rafraichirAgenda() {
       if (typeof renderAgendaList === 'function') renderAgendaList();

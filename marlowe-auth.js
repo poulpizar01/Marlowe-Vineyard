@@ -257,6 +257,22 @@
     return out;
   }
 
+  /* Qui peut annoncer une disponibilité dans le salon des runners.
+     ------------------------------------------------------------------------
+     Même règle exactement que côté serveur, et c'est voulu : le panel cache
+     le bouton, le Worker refuse l'appel. Les deux doivent dire la même chose,
+     sinon on obtient un bouton qui s'affiche puis répond « interdit ».
+
+     Une liste vide ne laisse passer que le patron. Un réglage jamais touché
+     ne doit pas ouvrir une porte — il doit la laisser fermée. */
+  function appliquerDispo(session, settings) {
+    const liste = Array.isArray(settings && settings.dispoRoles) ? settings.dispoRoles : [];
+    const droit = !!(session.isPatron || session.isOwner)
+      || liste.some(r => (session.roles || []).includes(r));
+    if (window.MarloweSession) window.MarloweSession.peutAnnoncerDispo = droit;
+    return droit;
+  }
+
   /* Recalcule ce que la session a le droit de voir. Appelé au démarrage, et à
      nouveau quand le patron enregistre de nouvelles listes — sans rechargement. */
   function appliquerAgendaVis(session, settings, roles) {
@@ -1108,6 +1124,7 @@
        façon, pour que ce qui est coché reflète la règle écrite. */
     const rolesAgenda = visible.slice();
     const agendaListes = agendaRoles(settings, roles);
+    const dispoListe = Array.isArray(settings.dispoRoles) ? settings.dispoRoles.slice() : [];
 
     const banniereTest = CONFIG.MODE !== 'discord' ? `
       <div class="mv-demo-banner" style="max-width:760px;">
@@ -1214,6 +1231,42 @@
               <button class="btn primary" id="mvAgSave">Enregistrer</button>
               <button class="btn" id="mvAgGuess">Re-deviner</button>
               <span class="mv-saved" id="mvAgSaved">Enregistré ✓</span>
+            </div>
+          </div>`,
+      },
+      {
+        id: 'paramdispo',
+        /* Pas « Com Runner » : ce nom est déjà celui d'une page dans la colonne,
+           et deux entrées identiques dans le même menu ne se distinguent plus. */
+        menu: 'Disponibilités',
+        titre: 'Annonces de disponibilité',
+        sub: `Le bouton « Je suis disponible » du Com Runner écrit dans le salon Discord
+              et mentionne le rôle des clients. C'est l'inverse d'une demande de retrait :
+              un responsable annonce qu'il est là. Cochez les rôles qui ont le droit
+              de s'en servir.`,
+        html: `
+          <div class="panel">
+            <h4>Qui peut annoncer <span class="mv-cpt" id="mvDispoCpt">${
+              dispoListe.length} rôle(s)</span></h4>
+            <p class="mv-hint" style="margin:0 0 12px;">Le patron peut toujours, coché ou non —
+              il ne peut pas se verrouiller hors de son propre salon. Pour tous les autres,
+              <b>tant que rien n'est coché ici, le bouton n'apparaît pas</b> : un réglage
+              qu'on n'a jamais touché ne doit ouvrir aucune porte.</p>
+            <div class="mv-role-list mv-pick" id="mvDispo">
+              ${rolesAgenda.map(r => `<div class="mv-role-chip${
+                dispoListe.includes(r) ? ' on' : ''
+              }" data-role="${esc(r)}">${esc(r)}</div>`).join('')}
+            </div>
+
+            <p class="mv-hint" style="max-width:760px;">Le message part dans le même salon
+              que les demandes de retrait, par le même webhook — il n'y a rien de plus à
+              relier. Il est composé par le serveur à partir du nom de la personne
+              connectée : personne ne peut se déclarer disponible au nom d'un autre.
+              Une annonce toutes les dix minutes au maximum, pour que le salon reste lisible.</p>
+
+            <div class="btn-row" style="margin-top:6px;align-items:center;">
+              <button class="btn primary" id="mvDispoSave">Enregistrer</button>
+              <span class="mv-saved" id="mvDispoSaved">Enregistré ✓</span>
             </div>
           </div>`,
       },
@@ -1423,6 +1476,37 @@
       }
     });
 
+    /* --- Com Runner : qui peut annoncer une disponibilité --- */
+    const pageDi = pages.paramdispo;
+    const boxDi = pageDi.querySelector('#mvDispo');
+    const cptDi = pageDi.querySelector('#mvDispoCpt');
+    boxDi.addEventListener('click', e => {
+      const chip = e.target.closest('[data-role]');
+      if (!chip) return;
+      chip.classList.toggle('on');
+      cptDi.textContent = boxDi.querySelectorAll('[data-role].on').length + ' rôle(s)';
+    });
+
+    pageDi.querySelector('#mvDispoSave').addEventListener('click', async () => {
+      const dispoRoles = [...boxDi.querySelectorAll('[data-role].on')].map(c => c.dataset.role);
+      try {
+        const next = Object.assign({}, settings, { dispoRoles });
+        await Store.setSettings(next);
+        settings = next;
+        /* Appliqué tout de suite : si le patron vient de se retirer un droit,
+           le bouton doit disparaître sans qu'il ait à recharger la page. */
+        const S = window.MarloweSession;
+        if (S) appliquerDispo(S, next);
+        const a = window.MarloweActions;
+        if (a && a.majBoutonDispo) a.majBoutonDispo();
+        const tag = pageDi.querySelector('#mvDispoSaved');
+        tag.classList.add('on');
+        setTimeout(() => tag.classList.remove('on'), 1800);
+      } catch (e) {
+        alert("Impossible d'enregistrer : " + e.message);
+      }
+    });
+
     const demo = pages.paramdonnees.querySelector('#mvDemo');
     if (demo) demo.addEventListener('click', () => {
       const a = window.MarloweActions;
@@ -1520,6 +1604,8 @@
     /* Ce que cette session a le droit de voir dans l'agenda. Calculé une fois,
        avant le premier rendu : le tri des événements le lit à chaque affichage. */
     appliquerAgendaVis(session, settings0, roles);
+    /* Et le droit d'annoncer une disponibilité, lu au même moment. */
+    appliquerDispo(session, settings0);
 
     applyNavFilter(allowedPages(session, perms));
     addUserBadge(session);

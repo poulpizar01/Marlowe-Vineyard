@@ -45,6 +45,13 @@ DISCORD_LOGS_JOB = "Vigneron"
 # L'adresse du webhook, elle, est un SECRET : voir README.
 DISCORD_RUNNER_ROLE = "1112654936749125632"
 
+# Le rôle réveillé par le bouton « Je suis disponible » — les clients, pas les
+# runners. C'est l'inverse du retrait : un responsable annonce sa présence.
+# Si cette valeur manque ou n'est pas un identifiant, l'annonce part quand
+# même, mais sans mention, et le panel le dit au lieu de laisser croire que
+# tout le monde a été prévenu.
+DISCORD_DISPO_ROLE = "1112658686431723520"
+
 # ---------------------------------------------------------------------------
 # Stockage principal : D1 (base SQLite).
 #

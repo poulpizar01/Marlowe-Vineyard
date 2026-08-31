@@ -1738,9 +1738,16 @@
       <div class="page-head-row">
         <div>
           <h1 class="page-title">Com Runner</h1>
-          <p class="page-sub">Le fil des runners — et le bouton qui prévient le salon Discord.</p>
+          <p class="page-sub">Le fil des runners — et les deux boutons qui parlent au salon Discord :
+            un runner demande du vin, un responsable annonce qu'il est là.</p>
         </div>
-        <button class="btn primary" id="crRetrait">📦 Demander un retrait</button>
+        <div class="btn-row" style="margin-top:0;">
+          <!-- Caché par défaut : marlowe-auth.js l'ouvre aux rôles cochés en
+               Paramètres. Un bouton qui apparaît puis refuse serait pire que
+               pas de bouton du tout. -->
+          <button class="btn" id="crDispo" hidden>🍇 Je suis disponible</button>
+          <button class="btn primary" id="crRetrait">📦 Demander un retrait</button>
+        </div>
       </div>
 
       <div class="panel">

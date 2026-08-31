@@ -27,7 +27,7 @@ const DISCORD = 'https://discord.com/api/v10';
    correction serveur n'a rien changé, on la lit.
 
    À tenir en phase avec version.json à chaque déploiement. */
-const VERSION = '1.41.1';
+const VERSION = '1.42.0';
 const SESSION_TTL = 60 * 60 * 24 * 7;   // 7 jours
 const STATE_TTL   = 600;                // 10 minutes
 
@@ -887,6 +887,29 @@ function lienCanva(brut) {
    ne peut donc pas demander un retrait au nom de quelqu'un d'autre. */
 const RETRAIT_MIN_MS = 30 * 1000;   // un envoi toutes les 30 s par personne
 
+/* L'adresse du salon, et ce qu'il faut dire quand elle manque.
+   ---------------------------------------------------------------------------
+   Le secret peut exister sans être une adresse valable : une commande mal
+   tapée y met vite autre chose. Sans ce contrôle, fetch() lèverait une
+   exception et l'erreur remonterait en « le serveur a planté », ce qui
+   n'aide personne. Deux boutons s'en servent — le retrait et la
+   disponibilité — donc la vérification vit ici, une seule fois. */
+function webhookDuSalon(env) {
+  if (!env.DISCORD_WEBHOOK) {
+    return { erreur: { error: 'webhook_absent',
+      detail: "Le salon Discord n'est pas encore relié. Le patron doit créer un webhook et l'enregistrer." } };
+  }
+  const url = String(env.DISCORD_WEBHOOK).trim();
+  if (!/^https:\/\/(discord\.com|discordapp\.com)\/api\/webhooks\/\d+\/[\w-]+$/.test(url)) {
+    return { erreur: { error: 'webhook_invalide', detail:
+      "Le secret DISCORD_WEBHOOK ne contient pas une adresse de webhook Discord valable. "
+      + "Elle doit ressembler à https://discord.com/api/webhooks/<nombres>/<jeton>. "
+      + "Depuis le dossier backend : npx wrangler secret put DISCORD_WEBHOOK, "
+      + "puis collez l'adresse au prompt (sans guillemets, sans espace)." } };
+  }
+  return { url };
+}
+
 async function handleDiscord(request, env) {
   if (request.method !== 'POST') return json(env, { error: 'method' }, 405);
 
@@ -900,23 +923,9 @@ async function handleDiscord(request, env) {
   const s = await currentSession(request, env, typeof body.token === 'string' ? body.token : null);
   if (!s) return json(env, { error: 'unauthorized' }, 401);
 
-  if (!env.DISCORD_WEBHOOK) {
-    return json(env, { error: 'webhook_absent',
-      detail: "Le salon Discord n'est pas encore relié. Le patron doit créer un webhook et l'enregistrer." }, 503);
-  }
-
-  /* Le secret existe, mais rien ne garantit que c'en soit une adresse valable :
-     une commande mal tapée y met vite autre chose. Sans ce contrôle, fetch()
-     lèverait une exception et l'erreur remonterait en « le serveur a planté »,
-     ce qui n'aide personne. Autant nommer le vrai problème. */
-  const cible = String(env.DISCORD_WEBHOOK).trim();
-  if (!/^https:\/\/(discord\.com|discordapp\.com)\/api\/webhooks\/\d+\/[\w-]+$/.test(cible)) {
-    return json(env, { error: 'webhook_invalide', detail:
-      "Le secret DISCORD_WEBHOOK ne contient pas une adresse de webhook Discord valable. "
-      + "Elle doit ressembler à https://discord.com/api/webhooks/<nombres>/<jeton>. "
-      + "Depuis le dossier backend : npx wrangler secret put DISCORD_WEBHOOK, "
-      + "puis collez l'adresse au prompt (sans guillemets, sans espace)." }, 503);
-  }
+  const w = webhookDuSalon(env);
+  if (w.erreur) return json(env, w.erreur, 503);
+  const cible = w.url;
 
   const texte = (x, n) => String(x == null ? '' : x).slice(0, n).replace(/[`@]/g, '');
   const produit = texte(body.produit, 120);
@@ -964,6 +973,105 @@ async function handleDiscord(request, env) {
       detail: "Discord a refusé le message. Le webhook a peut-être été supprimé." }, 502);
   }
   return json(env, { ok: true, envoyePar: s.user.name });
+}
+
+/* POST /api/dispo  —  l'inverse du retrait
+   ---------------------------------------------------------------------------
+   Le retrait part d'un runner qui a besoin de vin. Celui-ci part d'un
+   responsable qui annonce qu'il est là : même salon, même webhook, message
+   inverse. Les responsables l'écrivaient à la main jusqu'ici.
+
+   Deux différences avec le retrait, et elles comptent.
+
+   · Le droit n'est pas le même. Demander un retrait est un geste de service ;
+     annoncer une disponibilité engage le domaine devant tout le serveur. Les
+     rôles autorisés se cochent dans Paramètres ▸ Com Runner. Tant que rien
+     n'est coché, seul le patron peut appuyer — un réglage vide ne doit jamais
+     ouvrir une porte, il doit la laisser fermée.
+
+   · Le délai d'attente est plus long. Une demande de retrait se répète dans la
+     journée ; une annonce de présence répétée toutes les trente secondes est
+     du bruit dans un salon que tout le monde lit.
+
+   Le message est composé ICI, à partir du nom de la session : personne ne peut
+   se déclarer disponible au nom de quelqu'un d'autre. */
+const DISPO_MIN_MS = 10 * 60 * 1000;   // une annonce toutes les 10 min par personne
+
+/* Qui a le droit d'annoncer. Le patron toujours ; les autres seulement si
+   l'un de leurs rôles figure dans la liste cochée en Paramètres. */
+function peutAnnoncerDispo(session, reglages) {
+  if (session.isPatron) return true;
+  /* Un accès extérieur n'a pas de rôle Discord : il ne parle pas au salon. */
+  if (session.invite) return false;
+  const liste = Array.isArray(reglages && reglages.dispoRoles) ? reglages.dispoRoles : [];
+  if (!liste.length) return false;
+  return liste.some(r => (session.roles || []).includes(r));
+}
+
+async function handleDispo(request, env) {
+  if (request.method !== 'POST') return json(env, { error: 'method' }, 405);
+
+  /* Comme pour le retrait, le corps est lu AVANT la session : il peut porter
+     le jeton quand l'appel arrive par la voie de repli. */
+  let body = {};
+  try { body = await request.json(); } catch (e) { body = {}; }
+  if (!body || typeof body !== 'object') body = {};
+
+  const s = await currentSession(request, env, typeof body.token === 'string' ? body.token : null);
+  if (!s) return json(env, { error: 'unauthorized' }, 401);
+
+  const reglages = await base(env).get('settings', 'json') || {};
+  if (!peutAnnoncerDispo(s, reglages)) {
+    return json(env, { error: 'forbidden', detail:
+      "Votre rôle n'est pas autorisé à annoncer une disponibilité. "
+      + "Le patron coche les rôles dans Paramètres ▸ Com Runner." }, 403);
+  }
+
+  const w = webhookDuSalon(env);
+  if (w.erreur) return json(env, w.erreur, 503);
+
+  const cle = 'dispo:' + s.user.id;
+  if (await base(env).get(cle)) {
+    return json(env, { error: 'trop_vite', detail:
+      'Vous venez d\'annoncer votre disponibilité. Attendez une dizaine de minutes.' }, 429);
+  }
+  /* Le garde-fou est un confort, pas une sécurité : s'il ne peut pas
+     s'inscrire, l'annonce part quand même. */
+  try {
+    await base(env).put(cle, '1', { expirationTtl: Math.ceil(DISPO_MIN_MS / 1000) });
+  } catch (e) { /* sans effet */ }
+
+  /* Le rôle à réveiller est celui des clients — pas celui des runners. */
+  const role = String(env.DISCORD_DISPO_ROLE || '').trim();
+  const roleOk = /^\d{17,20}$/.test(role);
+  const mention = roleOk ? `<@&${role}> ` : '';
+
+  const nom = String(s.user.name || '').slice(0, 60).replace(/[`@]/g, '');
+  const contenu = `${mention}**Disponibilité**\n`
+    + `> **${nom}** est là pour vos bouteilles et vos avantages 🍇\n`
+    + `> Passez commande, le domaine vous répond.`;
+
+  const res = await fetch(w.url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      content: contenu,
+      username: 'Marlowe Vineyard',
+      /* Sans cette liste, Discord refuse de notifier un rôle depuis un
+         webhook — et le message partirait sans réveiller personne. */
+      allowed_mentions: roleOk ? { parse: [], roles: [role] } : { parse: [] },
+    }),
+  });
+
+  if (!res.ok) {
+    return json(env, { error: 'discord', status: res.status,
+      detail: "Discord a refusé le message. Le webhook a peut-être été supprimé." }, 502);
+  }
+  /* « mention: false » n'est pas une erreur : l'annonce est partie, mais sans
+     réveiller personne. Le panel le dit plutôt que de laisser croire au
+     succès complet — c'est exactement le défaut qu'on avait déjà eu avec le
+     rappel de permis parti sans son texte. */
+  return json(env, { ok: true, envoyePar: s.user.name, mention: roleOk });
 }
 
 /* ===========================================================================
@@ -1157,6 +1265,18 @@ async function handleSettings(request, env) {
     try { body = await request.json(); }
     catch (e) { return json(env, { error: 'bad_json' }, 400); }
 
+    /* Un filtre en liste blanche : ce qui n'est pas nommé ici est JETÉ.
+       ------------------------------------------------------------------------
+       C'est volontaire — le navigateur ne doit pas pouvoir écrire n'importe
+       quoi dans les réglages du domaine. Mais la conséquence est brutale :
+       une clé oubliée disparaît en silence, la page affiche « Enregistré ✓ »,
+       et le réglage repart à zéro au rechargement suivant. C'est exactement ce
+       qui arrivait à « agendaVis » : les listes de visibilité de l'agenda
+       étaient enregistrées côté panel, jamais côté serveur. Toute nouvelle
+       clé de réglage DOIT être ajoutée ici. */
+    const listeDeRoles = x => (Array.isArray(x) ? x : [])
+      .filter(r => typeof r === 'string').map(r => r.slice(0, 100)).slice(0, 300);
+
     const clean = {};
     if (Array.isArray(body.visibleRoles)) {
       clean.visibleRoles = body.visibleRoles
@@ -1175,6 +1295,20 @@ async function handleSettings(request, env) {
       }
       clean.permsRO = ro;
     }
+
+    /* Visibilité de l'agenda : un objet { direction: [rôles], commercial: [] }. */
+    if (body.agendaVis && typeof body.agendaVis === 'object' && !Array.isArray(body.agendaVis)) {
+      const vis = {};
+      for (const [niveau, roles] of Object.entries(body.agendaVis)) {
+        vis[String(niveau).slice(0, 32)] = listeDeRoles(roles);
+      }
+      clean.agendaVis = vis;
+    }
+
+    /* Rôles autorisés à annoncer une disponibilité dans le salon des runners.
+       Une liste absente et une liste vide veulent dire la même chose : personne
+       en dehors du patron. */
+    if (Array.isArray(body.dispoRoles)) clean.dispoRoles = listeDeRoles(body.dispoRoles);
 
     await base(env).put('settings', JSON.stringify(clean));
     return json(env, clean);
@@ -2015,10 +2149,11 @@ export default {
           routes: ['login', 'callback', 'me', 'roles', 'permissions', 'settings', 'orga',
                    'vitrine', 'upload', 'relais', 'invites', 'invite-login', 'data',
                    'presence', 'journal', 'logout', 'rappel', 'avertissement',
-                   'quota', 'alias', 'journaux'],
+                   'dispo', 'quota', 'alias', 'journaux'],
           rappelDansLeTexte: true,   /* faux = ancienne version, le rappel partait en embed */
           categoriesTickets: categoriesTickets(env).length,
           salonLogs: /^\d{17,20}$/.test(String(env.DISCORD_LOGS_CHANNEL || '')),
+          roleDispo: /^\d{17,20}$/.test(String(env.DISCORD_DISPO_ROLE || '')),
         });
         case '/api/login':       return await handleLogin(request, env, url);
         case '/api/callback':    return await handleCallback(request, env, url);
@@ -2035,6 +2170,7 @@ export default {
            nom reste en place pour ne rien casser. */
         case '/api/relais':       return await handleDiscord(request, env);
         case '/api/discord':      return await handleDiscord(request, env);
+        case '/api/dispo':        return await handleDispo(request, env);
         case '/api/invites':      return await handleInvites(request, env);
         case '/api/invite-login': return await handleInviteLogin(request, env);
         case '/api/data':        return await handleData(request, env);
