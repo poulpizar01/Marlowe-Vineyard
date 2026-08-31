@@ -27,6 +27,20 @@ OWNER_IDS = "826526979204841482,186397473374208000"
 # posée à son nom. Clic droit sur la catégorie ▸ « Copier l'identifiant ».
 DISCORD_TICKET_CATEGORIES = "1489223949790216303,1489222452495122484,1490079726038024222,1489223226931417208,1490802701846577202"
 
+# Salon Discord où le webhook du serveur de jeu écrit les ventes.
+# Le Worker le relit tout seul toutes les deux minutes (voir [triggers] plus
+# bas) et en tire les quotas. Le bot du VPS n'intervient pas.
+#
+# ATTENTION, une case à cocher indispensable : dans le portail développeur,
+# onglet Bot, activez « Message Content Intent ». Elle vaut AUSSI pour les
+# lectures REST : sans elle, Discord renvoie des embeds vides, sans erreur —
+# le panel afficherait donc zéro vente en croyant que personne n'a produit.
+DISCORD_LOGS_CHANNEL = "1245400913473179729"
+
+# Le nom du métier à retenir dans les logs (champ jobName). Les autres
+# entreprises qui écriraient dans le même salon sont ignorées.
+DISCORD_LOGS_JOB = "Vigneron"
+
 # Salon Discord des runners : identifiant du rôle à mentionner.
 # L'adresse du webhook, elle, est un SECRET : voir README.
 DISCORD_RUNNER_ROLE = "1112654936749125632"
@@ -81,3 +95,17 @@ id = "96dc213dcafc411d8417448b46fc9274"
 #   C'est une autorisation d'écrire dans le salon : elle ne doit jamais
 #   se retrouver dans le code du site.
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Le passage périodique qui lit les logs de vente.
+#
+# Toutes les deux minutes : assez pour que le tableau soit « en direct » sans
+# que personne n'ait à rafraîchir, et très loin des limites de Discord comme
+# de celles de Cloudflare.
+#
+# Rien à craindre d'un passage qui se répète ou qui rattrape du retard : la
+# clé primaire de la table ventes est l'identifiant du message Discord, donc
+# une vente déjà comptée est ignorée.
+# ---------------------------------------------------------------------------
+[triggers]
+crons = ["*/2 * * * *"]

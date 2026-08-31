@@ -1359,6 +1359,264 @@ async function handleRappel(request, env) {
   return json(env, { ok: true, ou: 'prive' });
 }
 
+
+/* ---------------------------------------------------------------------------
+   Les logs de vente
+   ---------------------------------------------------------------------------
+   Un webhook du serveur de jeu écrit dans un salon Discord, une ligne par
+   vente, sous forme d'embed :
+
+       Vente de 54x Vin pour 540$ par Krimo Guendouzi. 270$ pour la société
+       itemId: wine · jobId: 13 · jobName: Vigneron
+
+   C'est la QUANTITÉ qui fait le quota — 54 ici. Ni l'argent brut, ni la part
+   de la société.
+
+   Deux choses à savoir avant de lire ce code.
+
+   1. Le VPS n'intervient pas. Le Worker lit le salon lui-même, en REST, avec
+      le token du bot. Ton bot peut être éteint. En revanche l'intention
+      « Contenu des messages » doit être activée dans le portail développeur :
+      elle vaut aussi pour les réponses REST, et sans elle Discord renvoie des
+      embeds vides — silencieusement.
+
+   2. Le log ne porte AUCUN identifiant Discord, seulement le nom RP. Le
+      rattachement à une fiche se fait donc par le nom, normalisé, avec une
+      table d'alias pour les cas que la normalisation ne rattrape pas. Une
+      vente qu'on n'arrive pas à rattacher n'est ni devinée ni jetée : elle
+      est comptée à part.
+   --------------------------------------------------------------------------- */
+
+/* « Vente de 54x Vin pour 540$ par Krimo Guendouzi. 270$ pour la société »
+   Le nom est pris jusqu'au point, non gourmand : un nom composé passe, et la
+   phrase qui suit n'est pas avalée. */
+const RE_VENTE = /Vente de\s+(\d[\d\s.,]*)\s*x\s+(.+?)\s+pour\s+(\d[\d\s.,]*)\s*\$\s+par\s+(.+?)\.\s+(\d[\d\s.,]*)\s*\$/i;
+
+function nombreFr(x) {
+  return parseInt(String(x).replace(/[^\d]/g, ''), 10) || 0;
+}
+
+/* La clé de rattachement. « Rémi  CASTEL » et « remi castel » sont la même
+   personne ; c'est tout ce que cette fonction promet. Le reste — les surnoms,
+   les noms changés en cours de route — passe par les alias. */
+function clefNom(x) {
+  return String(x || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+/* Un message Discord → une vente, ou null.
+   On lit l'embed et non le texte : le webhook n'écrit rien dans `content`. */
+function lireVente(m, jobAttendu) {
+  const e = (m.embeds && m.embeds[0]) || null;
+  if (!e) return null;
+
+  const desc = String(e.description || '');
+  const g = desc.match(RE_VENTE);
+  if (!g) return null;
+
+  const champ = nom => {
+    const f = (e.fields || []).find(x => String(x.name || '').toLowerCase() === nom);
+    return f ? String(f.value || '').trim() : '';
+  };
+  const job = champ('jobname');
+
+  /* D'autres entreprises peuvent écrire dans le même salon. On ne compte que
+     la nôtre — et si le champ manque, on ne devine pas : on écarte. */
+  if (jobAttendu && job.toLowerCase() !== String(jobAttendu).toLowerCase()) return null;
+
+  const nom = g[4].trim();
+  return {
+    msg: String(m.id),
+    ts: Date.parse(m.timestamp) || Date.now(),
+    nom,
+    cle: clefNom(nom),
+    qte: nombreFr(g[1]),
+    brut: nombreFr(g[3]),
+    part: nombreFr(g[5]),
+    item: champ('itemid') || String(g[2] || '').trim(),
+    job,
+  };
+}
+
+/* Un passage de lecture. Renvoie ce qui s'est passé, pour l'afficher au panel.
+
+   Le curseur est l'identifiant du dernier message lu : Discord rend les
+   messages postérieurs avec ?after=, du plus ancien au plus récent. Au tout
+   premier passage il n'y a pas de curseur — on prend le dernier lot et on
+   pose le curseur dessus, sans remonter tout l'historique.
+
+   Même si le curseur se perd ou recule, rien ne double : la clé primaire est
+   l'identifiant du message. C'est le point qui décide de tout. */
+const LOGS_MAX_LOTS = 5;          /* 500 messages par passage, large */
+
+async function lireLogs(env) {
+  const salon = String(env.DISCORD_LOGS_CHANNEL || '').trim();
+  if (!/^\d{17,20}$/.test(salon)) {
+    return { ok: false, erreur: 'Aucun salon de logs déclaré (DISCORD_LOGS_CHANNEL).' };
+  }
+
+  const job = (env.DISCORD_LOGS_JOB || 'Vigneron').trim();
+  let curseur = await base(env).get('logs:apres');
+  let lus = 0, gardees = 0, ecartees = 0, dernier = curseur || null;
+
+  for (let lot = 0; lot < LOGS_MAX_LOTS; lot++) {
+    const q = curseur ? `?after=${curseur}&limit=100` : '?limit=100';
+    const res = await botFetch(env, `/channels/${salon}/messages${q}`);
+    if (!res.ok) {
+      const t = await res.text().catch(() => '');
+      return { ok: false, erreur: `Discord a refusé la lecture du salon (HTTP ${res.status}). ${t.slice(0, 200)}` };
+    }
+    let msgs = await res.json();
+    if (!Array.isArray(msgs) || !msgs.length) break;
+
+    /* Sans ?after, Discord rend du plus récent au plus ancien. On remet dans
+       l'ordre du temps pour que le curseur finisse sur le dernier. */
+    msgs = msgs.slice().sort((a, b) => (BigInt(a.id) < BigInt(b.id) ? -1 : 1));
+    lus += msgs.length;
+
+    const lignes = [];
+    for (const m of msgs) {
+      const v = lireVente(m, job);
+      if (v) lignes.push(v); else ecartees++;
+    }
+
+    if (lignes.length) {
+      /* INSERT OR IGNORE : un message déjà en base ne compte pas deux fois.
+         C'est ce qui autorise à relire sans réfléchir. */
+      const req = env.DB.prepare(
+        'INSERT OR IGNORE INTO ventes (msg, ts, nom, cle, qte, brut, part, item, job) '
+        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+      await env.DB.batch(lignes.map(v =>
+        req.bind(v.msg, v.ts, v.nom, v.cle, v.qte, v.brut, v.part, v.item, v.job)));
+      gardees += lignes.length;
+    }
+
+    dernier = msgs[msgs.length - 1].id;
+    curseur = dernier;
+    if (msgs.length < 100) break;
+  }
+
+  const etat = {
+    at: new Date().toISOString(),
+    lus, gardees, ecartees,
+    dernier,
+    erreur: null,
+  };
+  if (dernier) await base(env).put('logs:apres', String(dernier));
+  await base(env).put('logs:etat', JSON.stringify(etat));
+  return Object.assign({ ok: true }, etat);
+}
+
+/* Les alias de rattachement : { "clé du log" : "n° civil" }. */
+async function lireAlias(env) {
+  return (await base(env).get('alias', 'json')) || {};
+}
+
+/* GET /api/quota?du=<ms>&au=<ms>
+   Les ventes agrégées par personne sur une période, rattachées au registre.
+
+   Rien n'est deviné : une clé qui ne tombe sur aucune fiche et sur aucun
+   alias ressort dans `orphelines`, avec son nom et son total, et le panel
+   propose de la rattacher. Une vente jetée en silence, personne ne la
+   retrouve ensuite. */
+async function handleQuota(request, env) {
+  const s = await currentSession(request, env);
+  if (!s) return json(env, { error: 'unauthorized' }, 401);
+
+  /* Un paramètre ABSENT et un paramètre à zéro ne sont pas la même chose.
+     Avec un simple « || », ?du=0 — « depuis toujours » — se serait fait
+     remplacer par « il y a sept jours », et le tableau aurait paru vide. */
+  const url = new URL(request.url);
+  const nombre = (nom, defaut) => {
+    const v = url.searchParams.get(nom);
+    if (v === null || v === '') return defaut;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : defaut;
+  };
+  const au = nombre('au', Date.now());
+  const du = nombre('du', au - 7 * 24 * 3600 * 1000);
+
+  const r = await env.DB.prepare(
+    'SELECT cle, nom, SUM(qte) AS qte, SUM(brut) AS brut, SUM(part) AS part, '
+    + 'COUNT(*) AS n, MAX(ts) AS dernier FROM ventes '
+    + 'WHERE ts >= ? AND ts < ? GROUP BY cle ORDER BY qte DESC'
+  ).bind(du, au).all();
+  const lignes = r.results || [];
+
+  const data = await base(env).get('data', 'json') || {};
+  const roster = Array.isArray(data.rhRoster) ? data.rhRoster : [];
+  const alias = await lireAlias(env);
+
+  /* Deux chemins vers une fiche : le nom normalisé, ou un alias posé à la
+     main. L'alias gagne — c'est une décision humaine. */
+  const parClef = new Map();
+  roster.forEach(f => parClef.set(clefNom(f.name), f));
+
+  const rattachees = [], orphelines = [];
+  for (const l of lignes) {
+    const civil = alias[l.cle];
+    const fiche = civil
+      ? roster.find(f => String(f.id) === String(civil))
+      : parClef.get(l.cle);
+    if (fiche) {
+      rattachees.push({
+        civil: String(fiche.id), nom: fiche.name, poste: fiche.poste || '',
+        vins: l.qte, brut: l.brut, part: l.part, ventes: l.n, dernier: l.dernier,
+        via: civil ? 'alias' : 'nom',
+      });
+    } else {
+      orphelines.push({ cle: l.cle, nom: l.nom, vins: l.qte, ventes: l.n, dernier: l.dernier });
+    }
+  }
+
+  const etat = await base(env).get('logs:etat', 'json');
+  return json(env, { du, au, rattachees, orphelines, etat: etat || null });
+}
+
+/* POST /api/alias  {cle, civil}  — rattacher une ligne orpheline, ou la
+   détacher en envoyant un civil vide. Réservé à qui peut écrire le registre. */
+async function handleAlias(request, env) {
+  const s = await currentSession(request, env);
+  if (!s) return json(env, { error: 'unauthorized' }, 401);
+  const perms = await base(env).get('permissions', 'json') || {};
+  const reg = await base(env).get('settings', 'json') || {};
+  if (!canWrite(s, 'rhRoster', perms, reg.permsRO || {})) {
+    return json(env, { error: 'forbidden' }, 403);
+  }
+  if (request.method === 'GET') return json(env, await lireAlias(env));
+  if (request.method !== 'POST') return json(env, { error: 'method_not_allowed' }, 405);
+
+  let body;
+  try { body = await request.json(); }
+  catch (e) { return json(env, { error: 'bad_json' }, 400); }
+
+  const cle = clefNom(body && body.cle);
+  if (!cle) return json(env, { error: 'bad_shape' }, 400);
+
+  const alias = await lireAlias(env);
+  const civil = String((body && body.civil) || '').trim();
+  if (civil) alias[cle] = civil; else delete alias[cle];
+  await base(env).put('alias', JSON.stringify(alias));
+  await appendJournal(env, s,
+    civil ? `a rattaché les ventes de « ${body.cle} » à la fiche ${civil}`
+          : `a détaché les ventes de « ${body.cle} »`, ['rhRoster']);
+  return json(env, { ok: true, alias });
+}
+
+/* GET | POST /api/logs — l'état du flux, et une relecture à la demande. */
+async function handleLogs(request, env) {
+  const s = await currentSession(request, env);
+  if (!s) return json(env, { error: 'unauthorized' }, 401);
+
+  if (request.method === 'POST') {
+    if (!s.isPatron) return json(env, { error: 'forbidden' }, 403);
+    return json(env, await lireLogs(env));
+  }
+  const etat = await base(env).get('logs:etat', 'json');
+  return json(env, etat || { at: null, lus: 0, gardees: 0, erreur: 'jamais lu' });
+}
+
 /* GET | PUT /api/data
    Les données de travail du panel (employés, factures, blacklist…).
    Tout est rangé sous une seule clé : c'est peu volumineux, et ça évite
@@ -1460,6 +1718,25 @@ async function handleLogout(request, env) {
    --------------------------------------------------------------------------- */
 
 export default {
+  /* Le passage périodique : le Worker va lire le salon des logs tout seul.
+     Aucune ligne à écrire sur le VPS, et le bot peut être éteint. Une erreur
+     ici ne doit jamais faire tomber le Worker : elle est rangée dans
+     logs:etat, et le panel l'affiche à la place des chiffres. */
+  async scheduled(evenement, env, ctx) {
+    ctx.waitUntil((async () => {
+      try {
+        await lireLogs(env);
+      } catch (e) {
+        try {
+          await base(env).put('logs:etat', JSON.stringify({
+            at: new Date().toISOString(), lus: 0, gardees: 0,
+            erreur: String((e && e.message) || e),
+          }));
+        } catch (e2) { /* si même ça échoue, le prochain passage réessaiera */ }
+      }
+    })());
+  },
+
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
@@ -1513,6 +1790,9 @@ export default {
         case '/api/presence':    return await handlePresence(request, env);
         case '/api/journal':     return await handleJournal(request, env);
         case '/api/rappel':      return await handleRappel(request, env);
+        case '/api/quota':       return await handleQuota(request, env);
+        case '/api/alias':       return await handleAlias(request, env);
+        case '/api/journaux':    return await handleLogs(request, env);
         case '/api/logout':      return await handleLogout(request, env);
         default:                 return json(env, { error: 'not_found' }, 404);
       }

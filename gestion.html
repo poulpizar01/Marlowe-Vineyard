@@ -198,6 +198,23 @@
     font-family:inherit;line-height:1.55;resize:vertical;}
   .mv-rap-txt:focus{outline:none;border-color:var(--or,#C9A961);}
   .mv-rap-pied{font-size:11.5px;line-height:1.55;color:var(--muted);margin:10px 0 0;}
+  .qd-metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px;}
+  @media (max-width:1100px){ .qd-metrics{grid-template-columns:repeat(2,1fr);} }
+  .qd-select{background:#17130F;border:1px solid var(--band,#3D372C);border-radius:9px;
+    padding:9px 12px;color:var(--ink);font-family:inherit;font-size:13px;}
+  .qd-bandeau{display:none;align-items:center;gap:10px;padding:12px 16px;border-radius:11px;
+    margin-bottom:20px;font-size:13px;line-height:1.55;}
+  .qd-bandeau.on{display:flex;}
+  .qd-bandeau.frais{background:rgba(74,145,90,.12);border:1px solid rgba(74,145,90,.4);color:#8FD2A0;}
+  .qd-bandeau.tiede{background:rgba(227,154,78,.12);border:1px solid rgba(227,154,78,.45);color:#E3B478;}
+  .qd-bandeau.muet{background:rgba(176,60,60,.13);border:1px solid rgba(176,60,60,.45);color:#E39191;}
+  .qd-jauge{position:relative;height:7px;border-radius:99px;background:rgba(255,255,255,.07);min-width:120px;}
+  .qd-jauge i{position:absolute;inset:0 auto 0 0;border-radius:99px;background:linear-gradient(90deg,#B0553F,#E39A4E);}
+  .qd-jauge.ok i{background:linear-gradient(90deg,#4A915A,#8FD2A0);}
+  .qd-pct{font-size:11.5px;color:var(--muted);margin-top:5px;display:block;}
+  .qd-via{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-left:7px;}
+  .qd-sel{background:#17130F;border:1px solid var(--band,#3D372C);border-radius:8px;
+    padding:6px 10px;color:var(--ink);font-family:inherit;font-size:12.5px;max-width:230px;}
   .permis-pill{font:inherit;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;
     padding:5px 11px;border-radius:999px;border:1px solid transparent;transition:filter .15s;}
   .permis-pill:hover{filter:brightness(1.28);}
@@ -699,6 +716,7 @@
       <div class="nav-item" data-page="facturesrecues">Factures reçues</div>
       <div class="nav-section">Stats &amp; Quotas</div>
       <div class="nav-item active" data-page="eligibilite">Éligibilité</div>
+      <div class="nav-item" data-page="quotadirect">Quota en direct</div>
       <div class="nav-item" data-page="statsvue">Vue d'ensemble</div>
       <div class="nav-item" data-page="statsdash">Tableau de bord</div>
       <div class="nav-item" data-page="statsgrades">Grades &amp; quotas</div>
@@ -1213,6 +1231,72 @@
     </div>
   </div>
 
+  <div class="page-content" id="page-quotadirect">
+    <div class="pagehead">
+      <div>
+        <p class="eyebrow">Calculé depuis les logs Discord</p>
+        <h1>Quota <span class="accent">en direct</span></h1>
+        <div class="week-range" id="qdPeriode">Semaine en cours</div>
+      </div>
+      <div class="primes-actions">
+        <select id="qdFenetre" class="qd-select">
+          <option value="semaine">Semaine en cours (lundi → maintenant)</option>
+          <option value="7">Les 7 derniers jours</option>
+          <option value="1">Les dernières 24 h</option>
+          <option value="0">Depuis le début</option>
+        </select>
+        <button class="pbtn" id="qdRelire">↻ Relire maintenant</button>
+      </div>
+    </div>
+
+    <div class="qd-bandeau" id="qdBandeau"></div>
+
+    <div class="qd-metrics">
+      <div class="metric-card"><div class="metric-label">Vins vendus</div>
+        <div class="metric-value" id="qdTotal">—</div>
+        <div class="metric-sub" id="qdTotalSub">sur la période</div></div>
+      <div class="metric-card"><div class="metric-label">Quotas atteints</div>
+        <div class="metric-value" id="qdAtteints">—</div>
+        <div class="metric-sub" id="qdAtteintsSub">employés au registre</div></div>
+      <div class="metric-card"><div class="metric-label">Part société</div>
+        <div class="metric-value" id="qdPart">—</div>
+        <div class="metric-sub">50 % de chaque vente</div></div>
+      <div class="metric-card"><div class="metric-label">Ventes lues</div>
+        <div class="metric-value" id="qdVentes">—</div>
+        <div class="metric-sub" id="qdVentesSub">messages du salon</div></div>
+    </div>
+
+    <div class="panel">
+      <div class="toolbar" style="margin-bottom:14px;">
+        <h3 style="margin:0;flex:1;">Par employé</h3>
+        <div class="search" style="max-width:320px;">
+          <span style="color:var(--muted);font-size:14px;">⌕</span>
+          <input type="text" id="qdSearch" placeholder="Rechercher un employé…">
+        </div>
+      </div>
+      <table class="gtable" id="qdTable">
+        <thead><tr>
+          <th>Employé</th><th>Grade</th>
+          <th class="num">Vins</th><th class="num">Quota</th>
+          <th>Avancement</th><th class="num">Ventes</th><th>Dernier log</th>
+        </tr></thead>
+        <tbody id="qdBody"></tbody>
+      </table>
+    </div>
+
+    <div class="panel" id="qdOrphPanel" style="margin-top:22px;display:none;">
+      <h3 style="margin:0 0 6px;">Ventes non rattachées <span class="mv-cpt-av" id="qdOrphCount"></span></h3>
+      <p class="mv-hint" style="margin:0 0 14px;">Ces noms apparaissent dans les logs mais ne correspondent à
+        aucune fiche du registre. Rien n'est deviné et rien n'est jeté : rattachez-les à la bonne personne,
+        et le panel s'en souviendra pour toutes les ventes suivantes.</p>
+      <table class="gtable">
+        <thead><tr><th>Nom dans le log</th><th class="num">Vins</th><th class="num">Ventes</th>
+          <th>Dernier log</th><th style="text-align:right;">Rattacher à</th></tr></thead>
+        <tbody id="qdOrphBody"></tbody>
+      </table>
+    </div>
+  </div>
+
   <div class="page-content" id="page-statsdash">
     <div class="pagehead">
       <div>
@@ -1700,6 +1784,13 @@ document.querySelectorAll('.nav-item').forEach(item => {
       scope.querySelectorAll('.subpage').forEach(s => s.classList.remove('active'));
       document.querySelector(`.subtab[data-sub="${item.dataset.subtab}"]`).classList.add('active');
       document.getElementById('sub-' + item.dataset.subtab).classList.add('active');
+    }
+    /* Le quota en direct interroge le serveur : on ne le fait qu'à l'ouverture
+       de la page, pas au chargement du panel. Personne n'a besoin d'une
+       requête pour une page qu'il ne regarde pas. */
+    if (item.dataset.page === 'quotadirect'
+        && window.MarloweActions && window.MarloweActions.renderQuotaDirect) {
+      window.MarloweActions.renderQuotaDirect();
     }
   });
 });

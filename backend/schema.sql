@@ -32,3 +32,38 @@ CREATE TABLE IF NOT EXISTS kv (
 -- est comparée telle quelle — d'où un index explicite sur la péremption, qui
 -- sert au ménage des lignes mortes.
 CREATE INDEX IF NOT EXISTS kv_exp ON kv (exp);
+
+-- ----------------------------------------------------------------------------
+--  Les ventes lues dans le salon des logs
+--  ---------------------------------------------------------------------------
+--  Celle-ci est une VRAIE table, et non un document rangé dans kv. Deux
+--  raisons, et une seule compte vraiment :
+--
+--  1. L'IDEMPOTENCE. La clé primaire est l'identifiant du message Discord.
+--     Avec « INSERT OR IGNORE », le Worker peut relire dix fois le même lot —
+--     après un redémarrage, une coupure, un rattrapage d'historique — sans
+--     jamais compter une vente deux fois. Sans ça, la moindre reprise fausse
+--     la semaine, et on ne s'en aperçoit qu'à la clôture.
+--
+--  2. On agrège par personne et par semaine. C'est du SQL, pas du JSON.
+--
+--  `cle` est le nom du log normalisé (sans accents, en minuscules) : les logs
+--  ne portent AUCUN identifiant Discord, seulement le nom RP. C'est par lui
+--  que la vente rejoint une fiche du registre.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS ventes (
+  msg   TEXT PRIMARY KEY,     -- identifiant du message Discord : la garantie anti-doublon
+  ts    INTEGER NOT NULL,     -- date du message, en millisecondes epoch
+  nom   TEXT NOT NULL,        -- le nom RP tel qu'il est écrit dans le log
+  cle   TEXT NOT NULL,        -- le même, normalisé, pour le rattachement
+  qte   INTEGER NOT NULL,     -- le nombre de vins : C'EST LUI le quota
+  brut  INTEGER NOT NULL,     -- le montant de la vente
+  part  INTEGER NOT NULL,     -- la part revenant à la société
+  item  TEXT,                 -- itemId du log (wine, …)
+  job   TEXT                  -- jobName du log (Vigneron, …)
+);
+
+-- Les deux lectures qui comptent : « la semaine en cours » et « les ventes de
+-- cette personne ». Sans ces index, chaque affichage relit toute la table.
+CREATE INDEX IF NOT EXISTS ventes_ts  ON ventes (ts);
+CREATE INDEX IF NOT EXISTS ventes_cle ON ventes (cle, ts);

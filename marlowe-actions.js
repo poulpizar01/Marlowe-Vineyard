@@ -7796,6 +7796,266 @@
     }
   });
 
+
+/* ==========================================================================
+   QUOTA EN DIRECT — les ventes lues dans les logs Discord
+   --------------------------------------------------------------------------
+   Cette page ne calcule rien elle-même : elle demande au Worker, qui a lu le
+   salon des logs et rangé chaque vente sous l'identifiant de son message.
+
+   Elle est VOLONTAIREMENT à part du Tableau de bord, qui reste alimenté par
+   la tablette collée à la main. Les deux chiffres ne se mélangent pas encore :
+   tant qu'une semaine complète de logs réels n'a pas été observée, faire
+   dépendre la clôture et les primes de cette lecture serait un pari. On
+   regarde d'abord, on branche ensuite.
+
+   Trois refus assumés, tous pour la même raison — un chiffre faux qui a l'air
+   juste est pire qu'un tableau vide :
+
+   · un flux qui s'est tu depuis un moment le DIT, en haut, en couleur ;
+   · une vente dont le nom ne tombe sur aucune fiche n'est ni devinée ni
+     jetée : elle est comptée à part, avec un bouton pour la rattacher ;
+   · une erreur de lecture s'affiche telle que Discord l'a formulée.
+   ========================================================================== */
+
+  const QD_QUOTA = { 'Saisonnier': 3000, 'Ouvrier Viticole': 5000, 'Chef de Culture': 8000 };
+  const QD_MUET_MIN = 45;              /* minutes sans log avant de s'inquiéter */
+  let qdDonnees = null, qdFiltre = '', qdEnCours = false;
+
+  function qdQuotaDe(poste) {
+    const p = String(poste || '').trim();
+    const k = Object.keys(QD_QUOTA).find(x => x.toLowerCase() === p.toLowerCase());
+    return k ? QD_QUOTA[k] : 0;
+  }
+
+  /* Le lundi 00 h 00 de la semaine en cours — la même borne que la clôture. */
+  function qdLundi() {
+    const d = new Date();
+    const j = (d.getDay() + 6) % 7;
+    d.setDate(d.getDate() - j);
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  }
+
+  function qdBornes() {
+    const v = ($('qdFenetre') || {}).value || 'semaine';
+    const au = Date.now();
+    if (v === 'semaine') return { du: qdLundi(), au, titre: 'Semaine en cours · depuis lundi' };
+    if (v === '0') return { du: 0, au, titre: 'Depuis le premier log lu' };
+    const j = Number(v) || 7;
+    return { du: au - j * 24 * 3600 * 1000, au,
+             titre: j === 1 ? 'Les dernières 24 heures' : `Les ${j} derniers jours` };
+  }
+
+  function qdAge(iso) {
+    if (!iso) return null;
+    const t = typeof iso === 'number' ? iso : Date.parse(iso);
+    if (!t) return null;
+    return Math.round((Date.now() - t) / 60000);
+  }
+
+  function qdQuandCourt(ts) {
+    if (!ts) return '—';
+    const m = qdAge(ts);
+    if (m === null) return '—';
+    if (m < 1) return "à l'instant";
+    if (m < 60) return `il y a ${m} min`;
+    if (m < 1440) return `il y a ${Math.floor(m / 60)} h`;
+    return new Date(ts).toLocaleDateString('fr-FR');
+  }
+
+  /* Le bandeau de fraîcheur. Un tableau qui affiche 161 000 alors que le flux
+     est tombé il y a deux heures est pire qu'un tableau vide : il a l'air
+     juste. C'est tout l'objet de ces trois lignes. */
+  function qdBandeau(etat) {
+    const el = $('qdBandeau');
+    if (!el) return;
+    el.className = 'qd-bandeau on';
+
+    if (!etat || !etat.at) {
+      el.classList.add('muet');
+      el.innerHTML = '<b>Le flux n\'a jamais été lu.</b> Vérifiez que le salon des logs est déclaré '
+        + 'et que l\'intention « Contenu des messages » est activée dans le portail développeur.';
+      return;
+    }
+    if (etat.erreur) {
+      el.classList.add('muet');
+      el.innerHTML = `<b>La dernière lecture a échoué.</b> ${esc(etat.erreur)}`;
+      return;
+    }
+    const min = qdAge(etat.at);
+    if (min !== null && min > QD_MUET_MIN) {
+      el.classList.add('muet');
+      el.innerHTML = `<b>Le flux s'est tu.</b> Dernière lecture ${qdQuandCourt(Date.parse(etat.at))}. `
+        + 'Les chiffres ci-dessous sont ceux de ce moment-là, pas de maintenant.';
+      return;
+    }
+    if (min !== null && min > 6) {
+      el.classList.add('tiede');
+      el.innerHTML = `Dernière lecture ${qdQuandCourt(Date.parse(etat.at))}. Le passage automatique a lieu toutes les deux minutes.`;
+      return;
+    }
+    el.classList.add('frais');
+    el.innerHTML = `À jour — dernière lecture ${qdQuandCourt(Date.parse(etat.at))}`
+      + (etat.ecartees ? ` · ${etat.ecartees} message(s) du salon écarté(s), hors ventes du domaine.` : '.');
+  }
+
+  function qdLigne(r) {
+    const quota = qdQuotaDe(r.poste);
+    const pct = quota > 0 ? Math.min(100, Math.round(r.vins / quota * 100)) : 0;
+    const atteint = quota > 0 && r.vins >= quota;
+    return `<tr>
+      <td><b>${esc(r.nom)}</b>${r.via === 'alias' ? '<span class="qd-via">rattaché</span>' : ''}
+        <div class="emp-id">#${esc(r.civil)}</div></td>
+      <td class="poste-pill">${esc(r.poste || '—')}</td>
+      <td class="num"><b>${r.vins.toLocaleString('fr-FR')}</b></td>
+      <td class="num">${quota ? quota.toLocaleString('fr-FR') : '<span class="dash-cell">—</span>'}</td>
+      <td>${quota ? `<div class="qd-jauge${atteint ? ' ok' : ''}"><i style="width:${pct}%"></i></div>
+             <span class="qd-pct">${atteint ? '✓ atteint' : `${pct} % · ${(quota - r.vins).toLocaleString('fr-FR')} restants`}</span>`
+           : '<span class="dash-cell">poste sans quota</span>'}</td>
+      <td class="num">${r.ventes}</td>
+      <td class="date-mono">${qdQuandCourt(r.dernier)}</td>
+    </tr>`;
+  }
+
+  function qdOrpheline(o) {
+    const noms = (typeof rhRosterData !== 'undefined' ? rhRosterData : [])
+      .filter(f => f.status !== 'parti');
+    return `<tr>
+      <td><b>${esc(o.nom)}</b></td>
+      <td class="num">${o.vins.toLocaleString('fr-FR')}</td>
+      <td class="num">${o.ventes}</td>
+      <td class="date-mono">${qdQuandCourt(o.dernier)}</td>
+      <td style="text-align:right;">
+        <select class="qd-sel" data-orph="${esc(o.cle)}">
+          <option value="">— choisir une fiche —</option>
+          ${noms.map(f => `<option value="${esc(f.id)}">${esc(f.name)}</option>`).join('')}
+        </select></td>
+    </tr>`;
+  }
+
+  function qdDessiner() {
+    if (!qdDonnees) return;
+    const { rattachees, orphelines, etat } = qdDonnees;
+    qdBandeau(etat);
+
+    const q = qdFiltre.toLowerCase();
+    const vus = q ? rattachees.filter(r => (r.nom + ' ' + r.poste).toLowerCase().includes(q)) : rattachees;
+
+    const corps = $('qdBody');
+    if (corps) {
+      corps.innerHTML = vus.length ? vus.map(qdLigne).join('')
+        : `<tr><td colspan="7"><div class="mv-vide"><div class="mv-vide-t">${
+            rattachees.length ? 'Aucun employé ne correspond à cette recherche.'
+            : 'Aucune vente rattachée sur cette période. Si le salon en contient, regardez les lignes non rattachées ci-dessous.'
+          }</div></div></td></tr>`;
+    }
+
+    const totalVins = rattachees.reduce((s, r) => s + r.vins, 0)
+      + orphelines.reduce((s, o) => s + o.vins, 0);
+    const totalPart = rattachees.reduce((s, r) => s + (r.part || 0), 0);
+    const totalVentes = rattachees.reduce((s, r) => s + r.ventes, 0)
+      + orphelines.reduce((s, o) => s + o.ventes, 0);
+    const atteints = rattachees.filter(r => { const q2 = qdQuotaDe(r.poste); return q2 > 0 && r.vins >= q2; }).length;
+    const avecQuota = rattachees.filter(r => qdQuotaDe(r.poste) > 0).length;
+
+    const met = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+    met('qdTotal', totalVins.toLocaleString('fr-FR'));
+    met('qdAtteints', avecQuota ? `${atteints} / ${avecQuota}` : '—');
+    met('qdPart', totalPart.toLocaleString('fr-FR') + ' $');
+    met('qdVentes', totalVentes.toLocaleString('fr-FR'));
+    met('qdTotalSub', orphelines.length
+      ? `dont ${orphelines.reduce((s, o) => s + o.vins, 0).toLocaleString('fr-FR')} non rattachés`
+      : 'tous rattachés à une fiche');
+    met('qdPeriode', qdBornes().titre);
+
+    const panneau = $('qdOrphPanel');
+    if (panneau) {
+      panneau.style.display = orphelines.length ? '' : 'none';
+      const c = $('qdOrphCount');
+      if (c) c.textContent = orphelines.length;
+      const ob = $('qdOrphBody');
+      if (ob) ob.innerHTML = orphelines.map(qdOrpheline).join('');
+    }
+  }
+
+  async function renderQuotaDirect() {
+    if (!$('qdBody') || qdEnCours) return;
+    const A = window.MarloweAuth;
+    if (estDemo()) {
+      qdDonnees = qdDemo();
+      qdDessiner();
+      return;
+    }
+    qdEnCours = true;
+    const { du, au } = qdBornes();
+    const r = await A.apiBrut(`/api/quota?du=${du}&au=${au}`);
+    qdEnCours = false;
+    if (!r.ok) {
+      qdDonnees = { rattachees: [], orphelines: [], etat: { erreur: phraseRefus(r) } };
+      qdDessiner();
+      return;
+    }
+    qdDonnees = r.data;
+    qdDessiner();
+  }
+
+  /* En démo il n'y a pas de Worker. On montre à quoi ressemble la page pleine
+     — y compris une ligne non rattachée, qui est le cas qu'on veut voir. */
+  function qdDemo() {
+    const base = (typeof rhRosterData !== 'undefined' ? rhRosterData : []).slice(0, 6);
+    return {
+      rattachees: base.map((f, i) => ({
+        civil: String(f.id), nom: f.name, poste: f.poste,
+        vins: [5338, 4120, 2870, 1640, 940, 332][i] || 0,
+        brut: 0, part: ([5338, 4120, 2870, 1640, 940, 332][i] || 0) * 5,
+        ventes: [7, 5, 4, 3, 2, 1][i] || 1,
+        dernier: Date.now() - (i + 1) * 17 * 60000,
+        via: i === 2 ? 'alias' : 'nom',
+      })),
+      orphelines: [{ cle: 'krimo guendouzi', nom: 'Krimo Guendouzi', vins: 54, ventes: 1,
+                     dernier: Date.now() - 40 * 60000 }],
+      etat: { at: new Date().toISOString(), lus: 120, gardees: 22, ecartees: 98, erreur: null },
+    };
+  }
+
+  document.addEventListener('change', async ev => {
+    const f = ev.target.closest('#qdFenetre');
+    if (f) { renderQuotaDirect(); return; }
+
+    const o = ev.target.closest('[data-orph]');
+    if (o) {
+      const civil = o.value;
+      if (!civil) return;
+      if (estDemo()) { toast('(démo) Le rattachement serait enregistré.'); return; }
+      const r = await window.MarloweAuth.apiBrut('/api/alias', {
+        method: 'POST', body: JSON.stringify({ cle: o.dataset.orph, civil }),
+      });
+      if (!r.ok) { toast(phraseRefus(r)); return; }
+      toast('Rattaché — les ventes suivantes suivront toutes seules.');
+      renderQuotaDirect();
+    }
+  });
+
+  document.addEventListener('input', ev => {
+    if (!ev.target.closest('#qdSearch')) return;
+    qdFiltre = ev.target.value || '';
+    qdDessiner();
+  });
+
+  document.addEventListener('click', async ev => {
+    if (!ev.target.closest('#qdRelire')) return;
+    if (estDemo()) { toast('(démo) Le Worker relirait le salon.'); return; }
+    const b = ev.target.closest('#qdRelire');
+    b.disabled = true;
+    const r = await window.MarloweAuth.apiBrut('/api/journaux', { method: 'POST' });
+    b.disabled = false;
+    if (!r.ok) { toast(phraseRefus(r)); return; }
+    if (r.data && r.data.ok === false) { toast(r.data.erreur || 'La lecture a échoué.'); }
+    else { toast(`${(r.data && r.data.gardees) || 0} vente(s) ajoutée(s).`); }
+    renderQuotaDirect();
+  });
+
   window.MarloweActions = {
     recomputeRecruiters, refreshEffectifCount, reprintInvoice,
     refreshWeekDays, refreshWeekHeaders, renderEligibilite, closeWeek, undoClose,
@@ -7814,6 +8074,7 @@
     totalPrimeRecrutement,
     agendaVisible, AGENDA_NIVEAUX,
     basculerPermis, rappelerPermis, estIdDiscord,
+    renderQuotaDirect,
     /* Rejoué quand le patron change les listes de rôles dans Administration ▸ Agenda. */
     rafraichirAgenda() {
       if (typeof renderAgendaList === 'function') renderAgendaList();

@@ -104,6 +104,7 @@
     { id: 'facturesrecues', label: 'Factures reçues', group: 'Commerce' },
 
     { id: 'eligibilite',    label: 'Éligibilité',     group: 'Stats & Quotas' },
+    { id: 'quotadirect',    label: 'Quota en direct', group: 'Stats & Quotas' },
     { id: 'statsvue',       label: "Vue d'ensemble",  group: 'Stats & Quotas' },
     { id: 'statsdash',      label: 'Tableau de bord', group: 'Stats & Quotas' },
     { id: 'statsgrades',    label: 'Grades & quotas', group: 'Stats & Quotas' },
@@ -144,7 +145,7 @@
   const GESTION   = ['histo', 'cloture', 'quotas3'];   /* le journal reste à la direction */
   const RH_PAGES  = ['rhemployes', 'rhrecrutement', 'entretien', 'blacklist'];
   const COMMERCE  = ['facturation', 'catalogue', 'bilan', 'facturesrecues'];
-  const STATS     = ['eligibilite', 'statsvue', 'statsdash', 'statsgrades', 'statseffectif', 'statsprimes'];
+  const STATS     = ['eligibilite', 'quotadirect', 'statsvue', 'statsdash', 'statsgrades', 'statseffectif', 'statsprimes'];
 
   function defaultPermissions() {
     const perms = {};

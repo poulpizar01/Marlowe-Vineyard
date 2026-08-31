@@ -1,4 +1,4 @@
 {
-  "v": "1.32.0",
-  "note": "le permis : une colonne dans RH > Employes, une pastille a trois etats (a renseigner / permis / sans permis) journalisee a chaque bascule, un filtre et un compte, et un bouton de rappel sur les seules fiches rouges. Le rappel part par le Worker, qui relit l'identifiant Discord en base, retrouve le salon du ticket par les permissions et y ecrit ; repli en message prive, une relance par personne toutes les 24 h. Texte par defaut reglable dans Administration > Regles."
+  "v": "1.33.0",
+  "note": "quota en direct : le Worker lit lui-meme le salon des logs toutes les deux minutes, une vente par message, l'identifiant du message servant de cle primaire pour qu'une relecture ne compte jamais deux fois. C'est la quantite de vins qui fait le quota. Le rattachement se fait par le nom RP normalise, avec des alias poses a la main ; une vente sans fiche est comptee a part, jamais devinee ni jetee. Nouvelle page Stats & Quotas > Quota en direct, volontairement separee du Tableau de bord tant qu'une semaine reelle n'a pas ete observee."
 }
