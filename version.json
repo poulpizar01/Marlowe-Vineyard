@@ -1,4 +1,4 @@
 {
-  "v": "1.31.0",
-  "note": "le champ Discord d'une fiche RH demande desormais l'identifiant numerique et non un pseudo : libelle, gabarit et aide corriges, et un avertissement non bloquant a l'ajout, a la modification et a l'import quand la valeur n'y ressemble pas. C'est cet identifiant qui permettra de retrouver le ticket d'une personne."
+  "v": "1.32.0",
+  "note": "le permis : une colonne dans RH > Employes, une pastille a trois etats (a renseigner / permis / sans permis) journalisee a chaque bascule, un filtre et un compte, et un bouton de rappel sur les seules fiches rouges. Le rappel part par le Worker, qui relit l'identifiant Discord en base, retrouve le salon du ticket par les permissions et y ecrit ; repli en message prive, une relance par personne toutes les 24 h. Texte par defaut reglable dans Administration > Regles."
 }

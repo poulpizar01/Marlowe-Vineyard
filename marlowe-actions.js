@@ -3560,7 +3560,7 @@
      qui dit ce qui manque et où l'ajouter.
      ======================================================================== */
   const VIDES = [
-    ['rosterBody',        7,  "Aucun employé au registre — enregistrez une arrivée depuis Recrutement."],
+    ['rosterBody',        8,  "Aucun employé au registre — enregistrez une arrivée depuis Recrutement."],
     ['blacklistBody',     6,  "Personne dans la blacklist."],
     ['clientsBody',       5,  "Aucun client — le premier s'ajoutera tout seul à la première facture."],
     ['articlesBody',      7,  "Aucun article au catalogue."],
@@ -5139,6 +5139,7 @@
     quotaServiceH: 0,       /* heures de service attendues par semaine, 0 = pas de quota */
     primeRecrutMontant: 0,  /* prime versée à une recrue de fin de semaine */
     primeRecrutQuota: 0,    /* vins minimum pour y avoir droit */
+    rappelPermis: '',       /* texte par défaut du rappel de permis, vide = celui du serveur */
   };
 
   const h2m = h => Math.round((Number(h) || 0) * 60);
@@ -5312,6 +5313,17 @@
       </div>
 
       <div class="mv-vit-sec">
+        <h4>Rappel de permis</h4>
+        <p class="mv-hint" style="margin:0 0 12px;">Le texte proposé par défaut quand un RH clique sur
+          « ✉ Rappel » dans le registre. Il reste modifiable au cas par cas avant chaque envoi.
+          Laissé vide, c'est le texte du serveur qui sert.</p>
+        <label class="mv-lab" style="display:block;">Message par défaut
+          <textarea id="mvRegRappel" class="mv-rap-txt" rows="3"
+            placeholder="Bonjour, ton permis n'est toujours pas enregistré au domaine…">${esc(reglages.rappelPermis || '')}</textarea>
+        </label>
+      </div>
+
+      <div class="mv-vit-sec">
         <h4>Liaison Discord</h4>
         <p class="mv-hint" style="margin:0 0 12px;">Vérifie que le bouton « Demander un retrait » du Com Runner
           arrive bien dans le salon. Envoie un message de test et dit précisément ce qui coince, le cas échéant.</p>
@@ -5334,6 +5346,8 @@
     reglages.quotaServiceH      = n('mvRegQuotaS');
     reglages.primeRecrutMontant = Math.round(n('mvRegPrime'));
     reglages.primeRecrutQuota   = Math.round(n('mvRegSeuil'));
+    const rap = $('mvRegRappel');
+    if (rap) reglages.rappelPermis = rap.value.trim().slice(0, 1500);
     D().note('a modifié les règles du domaine');
     D().save('reglages');
     const ok = $('mvRegSaved');
@@ -7626,6 +7640,162 @@
     if (e.target.closest('#mvTestDiscord')) testerDiscord();
   });
 
+
+/* ==========================================================================
+   LE PERMIS — la pastille et le rappel
+   --------------------------------------------------------------------------
+   La pastille se règle ici, dans le registre, comme n'importe quelle autre
+   donnée de fiche. Le rappel, lui, ne part JAMAIS d'ici : le navigateur ne
+   connaît que le n° civil, et c'est le Worker qui relit l'identifiant Discord
+   en base, cherche le ticket et écrit. Un employé connecté ne peut donc pas
+   faire écrire le domaine à qui il veut en bricolant sa requête.
+   ========================================================================== */
+
+  const PERMIS_ETATS = [undefined, true, false];   /* à renseigner → oui → non → … */
+
+  function basculerPermis(civil) {
+    const e = (typeof rhRosterData !== 'undefined' ? rhRosterData : [])
+      .find(x => String(x.id) === String(civil));
+    if (!e) return;
+
+    const i = PERMIS_ETATS.findIndex(v => v === e.permis);
+    const suivant = PERMIS_ETATS[(i < 0 ? 0 : i + 1) % PERMIS_ETATS.length];
+    if (suivant === undefined) delete e.permis; else e.permis = suivant;
+
+    /* Un statut qui ouvre des droits et que tout le monde peut retourner sans
+       trace, c'est une dispute programmée. Chaque bascule part au journal. */
+    const dit = suivant === true ? 'a déclaré le permis de' 
+              : suivant === false ? 'a retiré le permis de'
+              : 'a remis à « à renseigner » le permis de';
+    D().note(`${dit} ${e.name}`);
+    D().saveMany(['rhRoster']);
+    if (typeof renderRhRoster === 'function') renderRhRoster(rhRosterData);
+  }
+
+  function estDemo() {
+    const c = window.MarloweAuth && window.MarloweAuth.CONFIG;
+    return !c || c.MODE !== 'discord';
+  }
+
+  const RAPPEL_DEFAUT_LOCAL =
+    "Bonjour, ton permis n'est toujours pas enregistré au domaine. "
+    + "Merci de le passer et de prévenir un RH pour qu'on mette ta fiche à jour.";
+
+  function heureFr(iso) {
+    if (!iso) return null;
+    const d = new Date(iso);
+    if (isNaN(d)) return null;
+    return d.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
+  }
+
+  /* Ce que dit le panel quand le Worker refuse. Chaque cas a sa phrase : un
+     « échec » générique laisse la personne devant un mur. */
+  function phraseRefus(r) {
+    const d = (r.data && r.data.detail) ? ' (' + r.data.detail + ')' : '';
+    switch (r.data && r.data.error) {
+      case 'sans_identifiant':
+        return "Cette fiche n'a pas d'identifiant Discord — ouvrez-la et renseignez-le d'abord.";
+      case 'trop_tot': {
+        const t = r.data.dernier || {};
+        return `Déjà rappelé ${heureFr(t.at) ? 'le ' + heureFr(t.at) : 'récemment'}`
+             + (t.par ? ` par ${t.par}` : '') + '. Une relance par personne toutes les 24 h.';
+      }
+      case 'refus_salon':
+        return `Le ticket #${r.data.salon} a été trouvé, mais Discord refuse d'y écrire : `
+             + `il manque « Envoyer des messages » à l'application sur cette catégorie${d}.`;
+      case 'aucun_canal':
+      case 'prive_ferme':
+        return `Aucun ticket ouvert, et les messages privés de cette personne sont fermés${d}. `
+             + 'Rien n\'a été envoyé.';
+      case 'inconnu':   return "Cette fiche n'existe plus dans le registre.";
+      case 'forbidden': return "Vous n'avez pas le droit d'envoyer un rappel.";
+      case 'config':    return r.data.detail || 'Les catégories de tickets ne sont pas déclarées.';
+      case 'reseau':    return 'Le serveur du panel est injoignable. Rien n\'a été envoyé.';
+      default:          return `Le rappel n'est pas parti (${(r.data && r.data.error) || r.status})${d}.`;
+    }
+  }
+
+  async function rappelerPermis(civil) {
+    const e = (typeof rhRosterData !== 'undefined' ? rhRosterData : [])
+      .find(x => String(x.id) === String(civil));
+    if (!e) return;
+
+    const A = window.MarloweAuth;
+
+    /* Aperçu : quel salon, et un rappel a-t-il déjà été envoyé ? En démo il
+       n'y a pas de serveur, on montre la fenêtre sans rien promettre. */
+    let apercu = null;
+    if (!estDemo() && A && A.apiBrut) {
+      const r = await A.apiBrut('/api/rappel?civil=' + encodeURIComponent(civil));
+      if (!r.ok) { toast(phraseRefus(r)); return; }
+      apercu = r.data;
+    }
+
+    const defaut = (apercu && apercu.defaut)
+      || (reglages && reglages.rappelPermis)
+      || RAPPEL_DEFAUT_LOCAL;
+    const dernier = apercu && apercu.dernier;
+    const salon = apercu && apercu.salon;
+
+    ensureDialog();
+    dlg.querySelector('.mv-dlg').style.maxWidth = '';
+    dlg.querySelector('.mv-dlg').innerHTML = `
+      <h3>Rappeler le permis à ${esc(e.name)}</h3>
+      <p>Le message part au nom du domaine, signé de votre pseudo Discord.
+         La signature est recomposée par le serveur : personne ne peut écrire au nom d'un autre.</p>
+      <div class="mv-rap-info">
+        <div><span>Destinataire</span><b>${esc(e.name)} · ${esc(e.id)}</b></div>
+        <div><span>Salon trouvé</span><b class="${salon ? 'ok' : 'non'}">${
+          estDemo() ? '(démo — non vérifié)'
+          : salon ? '#' + esc(salon.nom)
+          : 'aucun ticket ouvert — message privé'}</b></div>
+        <div><span>Dernier rappel</span><b>${dernier ? esc(heureFr(dernier.at) || '—') + (dernier.par ? ' · ' + esc(dernier.par) : '') : 'aucun'}</b></div>
+      </div>
+      <label for="mvRapTxt">Message</label>
+      <textarea id="mvRapTxt" class="mv-rap-txt" rows="4">${esc(defaut)}</textarea>
+      <p class="mv-rap-pied">Modifiable. Le texte par défaut se règle dans Administration ▸ Règles du domaine.
+         Une relance par personne toutes les 24 h.</p>
+      <div class="mv-dlg-btns">
+        <button data-no>Annuler</button>
+        <button data-yes class="go">Envoyer le rappel</button>
+      </div>`;
+    dlg.style.display = 'flex';
+    const envoi = new Promise(r => { resolver = r; });
+    dlg.querySelector('[data-no]').onclick = () => close(null);
+    dlg.querySelector('[data-yes]').onclick = () => {
+      const t = $('mvRapTxt');
+      close(t ? t.value.trim() : '');
+    };
+    const texte = await envoi;
+    if (texte === null) return;
+    if (!texte) { toast('Un rappel vide ne sert à rien.'); return; }
+
+    if (estDemo()) {
+      toast(`(démo) Le rappel serait parti à ${e.name}.`);
+      return;
+    }
+
+    const r = await A.apiBrut('/api/rappel', {
+      method: 'POST',
+      body: JSON.stringify({ civil: String(civil), texte }),
+    });
+    if (!r.ok) { toast(phraseRefus(r)); return; }
+    toast(r.data.ou === 'ticket'
+      ? `Rappel envoyé à ${e.name} dans #${r.data.salon}.`
+      : `Aucun ticket ouvert : rappel envoyé à ${e.name} en message privé.`);
+  }
+
+  document.addEventListener('click', ev => {
+    const p = ev.target.closest('[data-permis]');
+    if (p) { basculerPermis(p.dataset.permis); return; }
+    const r = ev.target.closest('[data-rappel]');
+    if (r) {
+      if (r.disabled) return;
+      r.disabled = true;
+      rappelerPermis(r.dataset.rappel).finally(() => { r.disabled = false; });
+    }
+  });
+
   window.MarloweActions = {
     recomputeRecruiters, refreshEffectifCount, reprintInvoice,
     refreshWeekDays, refreshWeekHeaders, renderEligibilite, closeWeek, undoClose,
@@ -7643,6 +7813,7 @@
     railConstruire, railSynchroniser, allerA,
     totalPrimeRecrutement,
     agendaVisible, AGENDA_NIVEAUX,
+    basculerPermis, rappelerPermis, estIdDiscord,
     /* Rejoué quand le patron change les listes de rôles dans Administration ▸ Agenda. */
     rafraichirAgenda() {
       if (typeof renderAgendaList === 'function') renderAgendaList();

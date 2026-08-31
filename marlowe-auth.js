@@ -290,6 +290,23 @@
     return res.json();
   }
 
+  /* Comme api(), mais sans lever d'exception : rend le code et le corps.
+     Une route qui explique POURQUOI elle refuse — pas d'identifiant, relance
+     trop récente, salon interdit — perd tout son intérêt si l'appelant ne
+     reçoit qu'un « API 400 » sec. */
+  async function apiBrut(path, options) {
+    const opts = Object.assign({ headers: {} }, options || {});
+    opts.headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers);
+    const t = token();
+    if (t) opts.headers['Authorization'] = 'Bearer ' + t;
+    let res;
+    try { res = await fetch(CONFIG.API_BASE + path, opts); }
+    catch (e) { return { ok: false, status: 0, data: { error: 'reseau', detail: String(e.message || e) } }; }
+    let data = null;
+    try { data = await res.json(); } catch (e) { data = null; }
+    return { ok: res.ok, status: res.status, data: data || {} };
+  }
+
   const Store = {
     async getPermissions() {
       if (CONFIG.MODE === 'discord') {
@@ -1519,5 +1536,5 @@
   }
 
   /* Exposé pour la console / le débogage */
-  window.MarloweAuth = { CONFIG, PAGES, Auth, Store, defaultPermissions };
+  window.MarloweAuth = { CONFIG, PAGES, Auth, Store, defaultPermissions, api, apiBrut };
 })();

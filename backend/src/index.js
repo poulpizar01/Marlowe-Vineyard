@@ -226,6 +226,23 @@ async function botFetch(env, path) {
   return res;
 }
 
+/* Même chose en écriture. botFetch lit ; celle-ci poste, et rend le corps
+   déjà décodé — les erreurs de Discord sont parlantes et on veut les garder
+   pour les remonter au panel plutôt que d'afficher « échec » tout court. */
+async function botPost(env, path, corps) {
+  const res = await fetch(DISCORD + path, {
+    method: 'POST',
+    headers: {
+      Authorization: 'Bot ' + env.DISCORD_BOT_TOKEN,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(corps),
+  });
+  let data = null;
+  try { data = await res.json(); } catch (e) { /* 204, ou corps vide */ }
+  return { ok: res.ok, status: res.status, data };
+}
+
 /* Tous les rôles du serveur : {id -> name}, plus la liste ordonnée. */
 async function guildRoles(env) {
   const cached = memGet('roles');
@@ -1140,6 +1157,208 @@ async function handleSettings(request, env) {
   return json(env, { error: 'method_not_allowed' }, 405);
 }
 
+
+/* ---------------------------------------------------------------------------
+   Le rappel de permis
+   ---------------------------------------------------------------------------
+   Un RH clique dans le registre ; le message part dans le ticket de la
+   personne. Trois choses se décident ICI et nulle part ailleurs :
+
+   1. L'identifiant Discord est relu dans le registre rangé en base. Le
+      navigateur n'envoie que le n° civil. Sans ça, n'importe quel membre
+      connecté pourrait faire écrire le domaine à n'importe qui sur Discord,
+      en appelant l'API directement avec l'identifiant de son choix.
+
+   2. La signature est recomposée depuis la session. Le texte du message est
+      modifiable, la signature non : personne ne rappelle au nom d'un autre.
+
+   3. Le salon est retrouvé par les PERMISSIONS, pas par le nom. Un salon de
+      ticket se renomme ; une permission nominative, non. On garde, dans les
+      catégories déclarées, le salon où l'identifiant de la personne a une
+      permission posée à son nom.
+
+   Le bot du VPS n'intervient à aucun moment : le Worker détient le token et
+   parle à Discord directement, comme il le fait déjà pour lire les rôles.
+   --------------------------------------------------------------------------- */
+
+/* Une relance par personne toutes les 24 h. Le bouton n'est pas une arme. */
+const RAPPEL_TTL = 24 * 3600;
+
+const RAPPEL_DEFAUT =
+  "Bonjour, ton permis n'est toujours pas enregistré au domaine. "
+  + "Merci de le passer et de prévenir un RH pour qu'on mette ta fiche à jour.";
+
+function categoriesTickets(env) {
+  return String(env.DISCORD_TICKET_CATEGORIES || '')
+    .split(',').map(x => x.trim()).filter(x => /^\d{17,20}$/.test(x));
+}
+
+/* Les salons du serveur, gardés une minute : chercher un ticket ne doit pas
+   redemander la liste complète à chaque clic. */
+async function guildChannels(env) {
+  const cached = memGet('salons');
+  if (cached) return cached;
+  const res = await botFetch(env, `/guilds/${env.DISCORD_GUILD_ID}/channels`);
+  if (!res.ok) throw new Error('channels ' + res.status);
+  const list = await res.json();
+  memSet('salons', list, 60);
+  return list;
+}
+
+/* Le salon de ticket d'une personne, ou null.
+
+   type 0 = salon textuel. type 1 dans une permission = un membre (type 0
+   serait un rôle) : c'est cette distinction qui fait tout le repérage, car
+   les rôles du staff sont posés sur TOUS les tickets, et le demandeur sur
+   un seul. Si la personne en a plusieurs ouverts, on prend le plus récent —
+   l'identifiant d'un salon Discord croît avec le temps. */
+async function ticketDe(env, discordId) {
+  const cats = categoriesTickets(env);
+  if (!cats.length) return null;
+
+  const salons = await guildChannels(env);
+  const candidats = salons.filter(c =>
+    c.type === 0
+    && c.parent_id && cats.includes(String(c.parent_id))
+    && Array.isArray(c.permission_overwrites)
+    && c.permission_overwrites.some(o => String(o.id) === String(discordId) && Number(o.type) === 1));
+
+  if (!candidats.length) return null;
+  candidats.sort((a, b) => (BigInt(a.id) < BigInt(b.id) ? 1 : -1));
+  return candidats[0];
+}
+
+/* Le corps du message. allowed_mentions verrouille les mentions à la seule
+   personne visée : même si quelqu'un glisse « @everyone » dans le texte
+   modifiable, Discord ne le notifiera pas. */
+function corpsRappel(discordId, texte, parQui) {
+  return {
+    content: `<@${discordId}>`,
+    allowed_mentions: { parse: [], users: [String(discordId)] },
+    embeds: [{
+      title: 'Rappel — permis de conduire',
+      description: String(texte).slice(0, 2000),
+      color: 0xE39A4E,
+      footer: { text: `Demandé par ${String(parQui).slice(0, 80)} · Marlowe Vineyard` },
+      timestamp: new Date().toISOString(),
+    }],
+  };
+}
+
+/* La fiche visée, relue en base. Renvoie {fiche} ou {erreur, code}. */
+async function ficheParCivil(env, civil) {
+  const data = await base(env).get('data', 'json') || {};
+  const roster = Array.isArray(data.rhRoster) ? data.rhRoster : [];
+  const fiche = roster.find(f => String(f && f.id) === String(civil));
+  if (!fiche) return { erreur: 'inconnu', code: 404 };
+
+  const discord = String(fiche.discord || '').trim();
+  if (!/^\d{17,20}$/.test(discord)) return { erreur: 'sans_identifiant', code: 400, fiche };
+  return { fiche, discord };
+}
+
+/* GET | POST /api/rappel
+
+   GET  ?civil=…  → ce que la fenêtre affiche avant l'envoi : le salon trouvé
+                    et la date du dernier rappel. N'envoie rien.
+   POST {civil, texte?} → envoie. */
+async function handleRappel(request, env) {
+  const s = await currentSession(request, env);
+  if (!s) return json(env, { error: 'unauthorized' }, 401);
+
+  /* Le droit d'écrire le registre RH, et rien de moins : c'est le même
+     verrou que pour modifier une fiche. */
+  const perms = await base(env).get('permissions', 'json') || {};
+  const reglagesSrv = await base(env).get('settings', 'json') || {};
+  if (!canWrite(s, 'rhRoster', perms, reglagesSrv.permsRO || {})) {
+    return json(env, { error: 'forbidden' }, 403);
+  }
+
+  if (!categoriesTickets(env).length) {
+    return json(env, { error: 'config', detail:
+      'Aucune catégorie de tickets déclarée. Renseignez DISCORD_TICKET_CATEGORIES '
+      + 'dans wrangler.toml, puis redéployez.' }, 500);
+  }
+
+  const url = new URL(request.url);
+
+  if (request.method === 'GET') {
+    const civil = url.searchParams.get('civil') || '';
+    const r = await ficheParCivil(env, civil);
+    if (r.erreur === 'inconnu') return json(env, { error: 'inconnu' }, 404);
+    if (r.erreur === 'sans_identifiant') {
+      return json(env, { error: 'sans_identifiant', nom: r.fiche.name || '' }, 400);
+    }
+    const salon = await ticketDe(env, r.discord);
+    const dernier = await base(env).get('rappel:' + r.discord, 'json');
+    return json(env, {
+      nom: r.fiche.name || '',
+      salon: salon ? { id: salon.id, nom: salon.name } : null,
+      dernier: dernier || null,
+      defaut: (await base(env).get('data', 'json') || {}).reglages?.rappelPermis || RAPPEL_DEFAUT,
+    });
+  }
+
+  if (request.method !== 'POST') return json(env, { error: 'method_not_allowed' }, 405);
+
+  let body;
+  try { body = await request.json(); }
+  catch (e) { return json(env, { error: 'bad_json' }, 400); }
+
+  const r = await ficheParCivil(env, body && body.civil);
+  if (r.erreur === 'inconnu') return json(env, { error: 'inconnu' }, 404);
+  if (r.erreur === 'sans_identifiant') {
+    return json(env, { error: 'sans_identifiant', nom: r.fiche.name || '' }, 400);
+  }
+
+  /* La relance déjà partie. On refuse AVANT d'écrire quoi que ce soit à
+     Discord, et on dit quand le bouton se rouvre. */
+  const dernier = await base(env).get('rappel:' + r.discord, 'json');
+  if (dernier) {
+    return json(env, { error: 'trop_tot', dernier }, 429);
+  }
+
+  const texte = (typeof body.texte === 'string' && body.texte.trim())
+    ? body.texte.trim().slice(0, 1500)
+    : ((await base(env).get('data', 'json') || {}).reglages?.rappelPermis || RAPPEL_DEFAUT);
+
+  const corps = corpsRappel(r.discord, texte, s.user.name);
+
+  /* 1. le ticket */
+  const salon = await ticketDe(env, r.discord);
+  if (salon) {
+    const env1 = await botPost(env, `/channels/${salon.id}/messages`, corps);
+    if (env1.ok) {
+      const trace = { at: new Date().toISOString(), par: s.user.name, ou: 'ticket', salon: salon.name };
+      await base(env).put('rappel:' + r.discord, JSON.stringify(trace), { expirationTtl: RAPPEL_TTL });
+      await appendJournal(env, s, `a rappelé son permis à ${r.fiche.name} (#${salon.name})`, ['rhRoster']);
+      return json(env, { ok: true, ou: 'ticket', salon: salon.name });
+    }
+    /* Le salon existe mais Discord refuse d'y écrire : c'est une permission
+       manquante, pas un ticket introuvable. On le dit tel quel plutôt que de
+       basculer en privé, sinon l'erreur de configuration ne se voit jamais. */
+    return json(env, { error: 'refus_salon', salon: salon.name,
+      detail: (env1.data && env1.data.message) || ('HTTP ' + env1.status) }, 502);
+  }
+
+  /* 2. à défaut, le message privé */
+  const canal = await botPost(env, '/users/@me/channels', { recipient_id: r.discord });
+  if (!canal.ok || !canal.data || !canal.data.id) {
+    return json(env, { error: 'aucun_canal',
+      detail: (canal.data && canal.data.message) || ('HTTP ' + canal.status) }, 502);
+  }
+  const env2 = await botPost(env, `/channels/${canal.data.id}/messages`, corps);
+  if (!env2.ok) {
+    return json(env, { error: 'prive_ferme',
+      detail: (env2.data && env2.data.message) || ('HTTP ' + env2.status) }, 502);
+  }
+
+  const trace = { at: new Date().toISOString(), par: s.user.name, ou: 'prive' };
+  await base(env).put('rappel:' + r.discord, JSON.stringify(trace), { expirationTtl: RAPPEL_TTL });
+  await appendJournal(env, s, `a rappelé son permis à ${r.fiche.name} (message privé)`, ['rhRoster']);
+  return json(env, { ok: true, ou: 'prive' });
+}
+
 /* GET | PUT /api/data
    Les données de travail du panel (employés, factures, blacklist…).
    Tout est rangé sous une seule clé : c'est peu volumineux, et ça évite
@@ -1293,6 +1512,7 @@ export default {
         case '/api/data':        return await handleData(request, env);
         case '/api/presence':    return await handlePresence(request, env);
         case '/api/journal':     return await handleJournal(request, env);
+        case '/api/rappel':      return await handleRappel(request, env);
         case '/api/logout':      return await handleLogout(request, env);
         default:                 return json(env, { error: 'not_found' }, 404);
       }

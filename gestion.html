@@ -185,6 +185,30 @@
      large, tout le vide se retrouvait d'un seul côté. Les marges automatiques
      le répartissent des deux. */
   .content{flex:1;padding:36px 40px 80px;max-width:1240px;margin-left:auto;margin-right:auto;}
+  .mv-rap-info{border:1px solid var(--band,#3D372C);border-radius:11px;padding:4px 14px;margin:16px 0 4px;}
+  .mv-rap-info > div{display:flex;justify-content:space-between;gap:16px;align-items:baseline;
+    padding:11px 0;border-bottom:1px solid rgba(61,55,44,.55);font-size:12.5px;}
+  .mv-rap-info > div:last-child{border-bottom:0;}
+  .mv-rap-info span{color:var(--muted);}
+  .mv-rap-info b{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px;font-weight:500;text-align:right;}
+  .mv-rap-info b.ok{color:#8FD2A0;}
+  .mv-rap-info b.non{color:var(--muted);}
+  .mv-rap-txt{width:100%;background:rgba(0,0,0,.25);border:1px solid var(--band,#3D372C);
+    border-radius:9px;padding:10px 12px;color:var(--parchment,#EDE3CF);font-size:13.5px;
+    font-family:inherit;line-height:1.55;resize:vertical;}
+  .mv-rap-txt:focus{outline:none;border-color:var(--or,#C9A961);}
+  .mv-rap-pied{font-size:11.5px;line-height:1.55;color:var(--muted);margin:10px 0 0;}
+  .permis-pill{font:inherit;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;
+    padding:5px 11px;border-radius:999px;border:1px solid transparent;transition:filter .15s;}
+  .permis-pill:hover{filter:brightness(1.28);}
+  .permis-pill.oui{background:rgba(74,145,90,.16);border-color:rgba(74,145,90,.45);color:#8FD2A0;}
+  .permis-pill.non{background:rgba(176,60,60,.16);border-color:rgba(176,60,60,.48);color:#E39191;}
+  .permis-pill.vide{background:transparent;border-color:#3A342C;color:var(--muted);}
+  .btn-rappel{font:inherit;font-size:12px;cursor:pointer;margin-right:8px;padding:6px 12px;
+    border-radius:8px;border:1px solid #3A342C;background:#1A1712;color:var(--ink);white-space:nowrap;}
+  .btn-rappel:hover{border-color:var(--prime);color:var(--prime);}
+  .btn-rappel[disabled]{opacity:.45;cursor:default;}
+  .rh-sp{color:#E39191;}
   .page-content{display:none;}
   .page-content.active{display:block;}
 
@@ -764,7 +788,7 @@
     <!-- ================= RH — EMPLOYÉS ================= -->
     <div class="page-content" id="page-rhemployes">
       <h1 class="page-title">Employés</h1>
-      <p class="page-sub">Registre du domaine — <span id="rhEffectif">0</span> employé(s) actif(s).</p>
+      <p class="page-sub">Registre du domaine — <span id="rhEffectif">0</span> employé(s) actif(s)<span id="rhSansPermis"></span>.</p>
 
       <div class="toolbar">
         <div class="search">
@@ -776,6 +800,7 @@
         <div class="chip">Terrain</div>
         <div class="chip">Saisonniers</div>
         <div class="chip">Absents</div>
+        <div class="chip">Sans permis</div>
       </div>
 
       <table class="rh-roster" id="rosterTable">
@@ -786,6 +811,7 @@
             <th>Poste</th>
             <th>Recruteur</th>
             <th>Arrivée</th>
+            <th>Permis</th>
             <th>Statut</th>
             <th style="text-align:right;">Action</th>
           </tr>
@@ -2079,7 +2105,27 @@ const rhSeal = (initials, tier) => `<div class="seal seal-${tier}">${initials}</
 const rhRosterData = [];
 document.getElementById('rhEffectif').textContent = rhRosterData.filter(e => e.status === 'actif').length;
 
+/* La pastille de permis.
+   ---------------------------------------------------------------------------
+   Trois états et non deux : une fiche jamais renseignée n'est pas une fiche
+   « sans permis ». Confondre les deux ferait apparaître en rouge, dès le
+   premier import, quatre-vingt-dix personnes dont on ne sait rien — et le
+   bouton de rappel partirait sur des gens en règle. */
+function permisCellule(e){
+  if (e.permis === true)  return `<button class="permis-pill oui" data-permis="${e.id}" title="Cliquer pour retirer le permis">● Permis</button>`;
+  if (e.permis === false) return `<button class="permis-pill non" data-permis="${e.id}" title="Cliquer pour déclarer le permis obtenu">● Sans permis</button>`;
+  return `<button class="permis-pill vide" data-permis="${e.id}" title="Jamais renseigné — cliquer pour déclarer le permis obtenu">— à renseigner</button>`;
+}
+
+function majSansPermis(){
+  const el = document.getElementById('rhSansPermis');
+  if (!el) return;
+  const n = rhRosterData.filter(e => e.status === 'actif' && e.permis === false).length;
+  el.innerHTML = n ? `, dont <b class="rh-sp">${n} sans permis</b>` : '';
+}
+
 function renderRhRoster(list){
+  majSansPermis();
   document.getElementById('rosterBody').innerHTML = list.map(e => `
     <tr>
       <td>${rhSeal(e.init, e.tier)}</td>
@@ -2090,10 +2136,13 @@ function renderRhRoster(list){
       <td class="poste-pill">${e.poste}</td>
       <td class="rec">${e.rec}</td>
       <td class="date-mono">${e.date}</td>
+      <td>${permisCellule(e)}</td>
       <td>${e.status === 'actif'
           ? `<span class="statut statut-actif">Actif</span>`
           : `<span class="statut statut-absent">Absent · ${e.absence}</span>`}</td>
-      <td style="text-align:right;white-space:nowrap;"><button class="icon-btn" data-emp-edit="${e.id}" title="Modifier la fiche">✎</button><button class="btn-depart" data-depart="${e.id}">Déclarer un départ</button></td>
+      <td style="text-align:right;white-space:nowrap;">${e.permis === true ? ''
+        : `<button class="btn-rappel" data-rappel="${e.id}" title="Rappeler le permis dans son ticket">✉ Rappel</button>`
+      }<button class="icon-btn" data-emp-edit="${e.id}" title="Modifier la fiche">✎</button><button class="btn-depart" data-depart="${e.id}">Déclarer un départ</button></td>
     </tr>
   `).join('');
 }
@@ -2111,6 +2160,7 @@ document.querySelectorAll('.chip').forEach(chip => {
     const label = chip.textContent.trim();
     const map = {'Tous':null, 'Direction':'direction', 'Terrain':'terrain', 'Saisonniers':'saisonnier'};
     if(label === 'Absents'){ renderRhRoster(rhRosterData.filter(r => r.status === 'absent')); return; }
+    if(label === 'Sans permis'){ renderRhRoster(rhRosterData.filter(r => r.permis === false)); return; }
     const key = map[label];
     renderRhRoster(key ? rhRosterData.filter(r => r.dept === key) : rhRosterData);
   });

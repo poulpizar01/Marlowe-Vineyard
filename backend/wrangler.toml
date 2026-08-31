@@ -21,6 +21,12 @@ PATRON_ROLES = "Patron,Co-Patron"
 # 826526979204841482 = Thomas, développeur du site.
 OWNER_IDS = "826526979204841482,186397473374208000"
 
+# Catégories Discord où vivent les tickets, séparées par des virgules.
+# Le Worker y cherche le salon d'une personne pour lui rappeler son permis :
+# il retient celui où l'identifiant Discord de l'employé a une permission
+# posée à son nom. Clic droit sur la catégorie ▸ « Copier l'identifiant ».
+DISCORD_TICKET_CATEGORIES = "1489223949790216303,1489222452495122484,1490079726038024222,1489223226931417208,1490802701846577202"
+
 # Salon Discord des runners : identifiant du rôle à mentionner.
 # L'adresse du webhook, elle, est un SECRET : voir README.
 DISCORD_RUNNER_ROLE = "1112654936749125632"
