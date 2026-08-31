@@ -1,4 +1,4 @@
 {
-  "v": "1.33.0",
-  "note": "quota en direct : le Worker lit lui-meme le salon des logs toutes les deux minutes, une vente par message, l'identifiant du message servant de cle primaire pour qu'une relecture ne compte jamais deux fois. C'est la quantite de vins qui fait le quota. Le rattachement se fait par le nom RP normalise, avec des alias poses a la main ; une vente sans fiche est comptee a part, jamais devinee ni jetee. Nouvelle page Stats & Quotas > Quota en direct, volontairement separee du Tableau de bord tant qu'une semaine reelle n'a pas ete observee."
+  "v": "1.33.1",
+  "note": "le rappel de permis arrivait avec la seule mention : Discord retire les embeds d'un message quand l'application n'a pas la permission Integrer des liens sur le salon, sans erreur ni avertissement. Tout le rappel tient desormais dans le texte du message, qui ne depend plus que d'Envoyer des messages."
 }

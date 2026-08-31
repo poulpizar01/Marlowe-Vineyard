@@ -1228,20 +1228,32 @@ async function ticketDe(env, discordId) {
   return candidats[0];
 }
 
-/* Le corps du message. allowed_mentions verrouille les mentions à la seule
-   personne visée : même si quelqu'un glisse « @everyone » dans le texte
-   modifiable, Discord ne le notifiera pas. */
+/* Le corps du message.
+   ---------------------------------------------------------------------------
+   TOUT tient dans le texte, et rien dans un embed. Ce n'est pas un choix
+   esthétique, c'est une leçon apprise en production : le premier rappel est
+   arrivé avec la seule mention, l'encadré ayant disparu en route. Discord
+   retire les embeds d'un message quand l'application n'a pas la permission
+   « Intégrer des liens » sur le salon — sans erreur, sans prévenir. Le
+   destinataire recevait donc une notification vide de sens.
+
+   Un message dont le contenu dépend d'une permission facultative est un
+   message qui finira par ne rien dire. « Envoyer des messages » suffit ici,
+   et c'est la seule permission dont ce rappel a besoin.
+
+   allowed_mentions verrouille les mentions sur la seule personne visée : même
+   si quelqu'un glisse « @everyone » dans le texte modifiable, Discord ne
+   notifiera personne d'autre. */
 function corpsRappel(discordId, texte, parQui) {
+  const corps = String(texte).slice(0, 1500).trim();
+  const signature = `Demandé par ${String(parQui).slice(0, 80)} · Marlowe Vineyard`;
+  const message = `<@${discordId}>\n\n`
+    + `**Rappel — permis de conduire**\n`
+    + `${corps}\n\n`
+    + `*${signature}*`;
   return {
-    content: `<@${discordId}>`,
+    content: message.slice(0, 2000),
     allowed_mentions: { parse: [], users: [String(discordId)] },
-    embeds: [{
-      title: 'Rappel — permis de conduire',
-      description: String(texte).slice(0, 2000),
-      color: 0xE39A4E,
-      footer: { text: `Demandé par ${String(parQui).slice(0, 80)} · Marlowe Vineyard` },
-      timestamp: new Date().toISOString(),
-    }],
   };
 }
 

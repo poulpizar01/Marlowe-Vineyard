@@ -180,13 +180,23 @@ console.log('\nL\'envoi dans le ticket');
   const b = await r.json();
   dit('part dans le bon salon', b.ok && b.ou === 'ticket' && b.salon === 'ticket-0412', b);
   const e = ENVOIS[0];
-  dit('mentionne la personne', e && e.corps.content === `<@${MOI}>`, e && e.corps.content);
+  dit('mentionne la personne', e && e.corps.content.startsWith(`<@${MOI}>`), e && e.corps.content);
+  /* LE DÉFAUT VU EN PRODUCTION : le premier rappel est arrivé avec la seule
+     mention, l'encadré ayant disparu en route — Discord retire les embeds
+     quand l'application n'a pas « Intégrer des liens » sur le salon, sans
+     erreur ni avertissement. Le message doit donc se suffire à lui-même. */
+  dit('le message dit ce qu\'il veut SANS aucun embed',
+    e && !e.corps.embeds
+      && /Rappel — permis de conduire/.test(e.corps.content)
+      && /Passe ton permis stp\./.test(e.corps.content), e && e.corps);
   dit('IGNORE l\'identifiant envoyé par le navigateur',
     e && e.salon === '900000000000000412' && !JSON.stringify(e.corps).includes('000000000000000000'));
   dit('signe du pseudo de la session, pas du corps de la requête',
-    e && e.corps.embeds[0].footer.text.startsWith('Demandé par Nella Valmora'),
-    e && e.corps.embeds[0].footer.text);
-  dit('reprend le texte modifié', e && e.corps.embeds[0].description === 'Passe ton permis stp.');
+    e && /Demandé par Nella Valmora/.test(e.corps.content),
+    e && e.corps.content);
+  dit('reprend le texte modifié', e && /Passe ton permis stp\./.test(e.corps.content));
+  dit('tient dans la limite des 2 000 caractères de Discord',
+    e && e.corps.content.length <= 2000, e && e.corps.content.length);
   dit('verrouille les mentions sur la seule personne visée',
     e && e.corps.allowed_mentions.parse.length === 0
       && e.corps.allowed_mentions.users.length === 1
@@ -223,8 +233,8 @@ console.log('\nLe repli en message privé');
   const b = await r.json();
   dit('sans ticket, le rappel part en privé', b.ok && b.ou === 'prive', b);
   dit('avec le texte par défaut du domaine',
-    ENVOIS[0] && ENVOIS[0].corps.embeds[0].description === 'Texte du domaine.',
-    ENVOIS[0] && ENVOIS[0].corps.embeds[0].description);
+    ENVOIS[0] && /Texte du domaine\./.test(ENVOIS[0].corps.content),
+    ENVOIS[0] && ENVOIS[0].corps.content);
 }
 
 console.log('\nQuand Discord refuse');
@@ -250,13 +260,28 @@ console.log('\nQuand Discord refuse');
   REFUSER_SALON = false;
 }
 
+console.log('\nUn texte trop long');
+{
+  TABLE.delete('rappel:' + MOI);
+  TABLE.set('data', JSON.stringify({ rhRoster: [{ id: '550219', name: 'Rémi Castel', discord: MOI }] }));
+  ENVOIS = [];
+  await W.handleRappel(req('POST', '/api/rappel', 'jeton-drh',
+    { civil: '550219', texte: 'x'.repeat(5000) }), ENV);
+  const e = ENVOIS[0];
+  dit('est coupé avant la limite de Discord', e && e.corps.content.length <= 2000, e && e.corps.content.length);
+  dit('et garde quand même la mention et le titre',
+    e && e.corps.content.startsWith(`<@${MOI}>`) && /Rappel — permis/.test(e.corps.content));
+}
+
 console.log('\nL\'aperçu avant envoi');
 {
   TABLE.delete('rappel:' + MOI);
   const r = await W.handleRappel(req('GET', '/api/rappel?civil=550219', 'jeton-drh'), ENV);
   const b = await r.json();
   dit('annonce le salon qui sera utilisé', b.salon && b.salon.nom === 'ticket-0412', b.salon);
-  dit('n\'envoie rien', ENVOIS.filter(e => e.corps.embeds[0].description === undefined).length === 0);
+  const avantApercu = ENVOIS.length;
+  await W.handleRappel(req('GET', '/api/rappel?civil=550219', 'jeton-drh'), ENV);
+  dit('n\'envoie rien', ENVOIS.length === avantApercu, { avant: avantApercu, apres: ENVOIS.length });
 }
 
 console.log('\nLa configuration manquante');
