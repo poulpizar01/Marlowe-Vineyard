@@ -494,26 +494,44 @@
      Discrète par construction : elle vit sous le pied de page, en retrait, et
      ne réclame l'attention qu'au survol. Une signature qui crie plus fort que
      le domaine qu'elle a servi à bâtir est une signature ratée. */
-  /* La signature n'est plus un lien unique vers Discord : la marque reste du
-     texte, et les deux destinations sont proposées côte à côte. Un visiteur
-     qui cherche le site n'a plus à passer par Discord pour le trouver. */
+  /* La signature reste UN SEUL objet.
+     -------------------------------------------------------------------------
+     Elle était une pastille unique menant à Discord. En ajoutant le site,
+     j'avais éclaté la marque et les deux liens en trois morceaux qui
+     flottaient côte à côte — trois choses là où l'œil en cherchait une.
+
+     Retour à une pastille, avec les deux destinations DEDANS, séparées de la
+     marque par un trait fin. Le cadre n'apparaît qu'au survol : au repos,
+     l'ensemble reste la ligne discrète qu'il doit être en pied de page. */
   .signature{border-top:1px solid var(--line);padding:20px 0 40px;
-    display:flex;justify-content:center;align-items:center;gap:10px;flex-wrap:wrap;}
-  .sig-marque{display:inline-flex;align-items:center;gap:9px;
-    color:var(--muted);font-size:11px;letter-spacing:.06em;opacity:.55;padding:7px 0 7px 14px;}
-  .sig-liens{display:inline-flex;align-items:center;gap:6px;font-size:11px;letter-spacing:.06em;}
-  .sig-sep{color:var(--muted);opacity:.4;}
-  .signature a{display:inline-flex;align-items:center;gap:9px;text-decoration:none;
-    color:var(--muted);font-size:11px;letter-spacing:.06em;opacity:.7;
-    padding:6px 12px;border-radius:999px;border:1px solid transparent;
-    transition:opacity .2s ease, color .2s ease, border-color .2s ease, background .2s ease;}
-  .signature a:hover{opacity:1;color:var(--text);border-color:var(--line-2);background:var(--gold-tint);}
+    display:flex;justify-content:center;}
+  .sig-pastille{display:inline-flex;align-items:center;gap:10px;
+    padding:7px 8px 7px 14px;border-radius:999px;
+    border:1px solid transparent;background:transparent;
+    transition:border-color .25s ease, background .25s ease;}
+  .sig-pastille:hover{border-color:var(--line-2);background:var(--gold-tint);}
+  .sig-txt{color:var(--muted);font-size:11px;letter-spacing:.06em;opacity:.55;
+    transition:opacity .25s ease;white-space:nowrap;}
+  .sig-pastille:hover .sig-txt{opacity:.9;}
+  .sig-trait{width:1px;height:13px;background:var(--line-2);opacity:.5;}
+  /* Les deux liens forment un GROUPE, resserré. Laissés dans l'espacement
+     général de la pastille, ils s'écartaient de vingt-huit pixels et se
+     lisaient comme deux objets sans rapport plutôt que comme un choix. */
+  .sig-actions{display:inline-flex;align-items:center;gap:2px;margin-left:-3px;}
+  .signature a{text-decoration:none;color:var(--muted);font-size:11px;letter-spacing:.06em;
+    opacity:.6;padding:4px 8px;border-radius:999px;white-space:nowrap;
+    transition:opacity .18s ease, color .18s ease, background .18s ease;}
+  .signature a:hover{opacity:1;color:var(--gold);background:rgba(255,255,255,.05);}
   .signature img{width:20px;height:20px;object-fit:contain;
-    filter:saturate(.55) brightness(.9);transition:filter .2s ease;}
-  .signature:hover img{filter:none;}
-  .signature:hover .sig-marque{opacity:.85;}
-  .signature b{font-weight:500;color:var(--gold-soft);}
-  .signature:hover b{color:var(--gold);}
+    filter:saturate(.55) brightness(.9);transition:filter .25s ease;}
+  .sig-pastille:hover img{filter:none;}
+  .signature b{font-weight:500;color:var(--gold-soft);transition:color .25s ease;}
+  .sig-pastille:hover b{color:var(--gold);}
+
+  @media (max-width:520px){
+    .sig-pastille{flex-wrap:wrap;justify-content:center;padding:9px 12px;row-gap:2px;}
+    .sig-trait{display:none;}
+  }
 </style>
 </head>
 <body>
@@ -1054,18 +1072,16 @@
   </footer>
 
   <div class="signature">
-    <span class="sig-marque">
+    <div class="sig-pastille">
       <img src="img/roxwood.png" alt="" width="20" height="20"
            onerror="this.remove();" loading="lazy">
-      <span>Développé par <b>Roxwood Network</b></span>
-    </span>
-    <span class="sig-liens">
-      <a href="https://roxwood-network.fbfa.fr/" target="_blank" rel="noopener"
-         title="Roxwood Network — le site">le site</a>
-      <span class="sig-sep">·</span>
-      <a href="https://discord.gg/dDAFWxeU8" target="_blank" rel="noopener"
-         title="Roxwood Network — rejoindre le Discord">le Discord</a>
-    </span>
+      <span class="sig-txt">Développé par <b>Roxwood Network</b></span>
+      <span class="sig-trait" aria-hidden="true"></span>
+      <span class="sig-actions">
+        <a href="https://roxwood-network.fbfa.fr/" target="_blank" rel="noopener">Site</a>
+        <a href="https://discord.gg/dDAFWxeU8" target="_blank" rel="noopener">Discord</a>
+      </span>
+    </div>
   </div>
 
 </div>

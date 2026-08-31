@@ -1,4 +1,4 @@
 {
-  "v": "1.39.0",
-  "note": "les polices sont desormais servies par le site : plus aucun appel a Google, ni depuis la vitrine, ni depuis le panel, ni depuis la facture. Le bouton sous quota de l'Effectif devient actif — retrogradation d'un cran, avertissement pour un saisonnier faute de cran en dessous, et RIEN pour un absent. Les recrutements de la page Primes viennent du registre sur la semaine en cours au lieu de deux noms ecrits en dur. Nouveautes de la vitrine : defilement automatique toutes les 10 s. Telephone 923 et RIB 20013. La signature Roxwood propose le site et le Discord."
+  "v": "1.39.1",
+  "note": "la signature du pied de page redevient UN objet : la marque et les deux destinations tiennent dans une seule pastille, separees d'un trait fin, le cadre n'apparaissant qu'au survol. La version precedente eclatait la marque et les liens en trois morceaux qui flottaient cote a cote."
 }
