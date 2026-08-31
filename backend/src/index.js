@@ -14,6 +14,20 @@
    ============================================================================ */
 
 const DISCORD = 'https://discord.com/api/v10';
+
+/* La version du Worker EN LIGNE.
+   ---------------------------------------------------------------------------
+   Elle existe pour une seule raison, apprise à la dure : un correctif serveur
+   qui n'a pas été redéployé se comporte exactement comme un correctif qui ne
+   marche pas. On a cherché un bogue dans du code juste, pendant que l'ancien
+   tournait toujours.
+
+   /api/version répond sans authentification et ne divulgue rien : un numéro,
+   et la liste des routes que CETTE version connaît. Avant de conclure qu'une
+   correction serveur n'a rien changé, on la lit.
+
+   À tenir en phase avec version.json à chaque déploiement. */
+const VERSION = '1.34.1';
 const SESSION_TTL = 60 * 60 * 24 * 7;   // 7 jours
 const STATE_TTL   = 600;                // 10 minutes
 
@@ -1781,6 +1795,15 @@ export default {
       }
 
       switch (url.pathname) {
+        case '/api/version':     return json(env, {
+          version: VERSION,
+          routes: ['login', 'callback', 'me', 'roles', 'permissions', 'settings', 'orga',
+                   'vitrine', 'upload', 'relais', 'invites', 'invite-login', 'data',
+                   'presence', 'journal', 'logout', 'rappel', 'quota', 'alias', 'journaux'],
+          rappelDansLeTexte: true,   /* faux = ancienne version, le rappel partait en embed */
+          categoriesTickets: categoriesTickets(env).length,
+          salonLogs: /^\d{17,20}$/.test(String(env.DISCORD_LOGS_CHANNEL || '')),
+        });
         case '/api/login':       return await handleLogin(request, env, url);
         case '/api/callback':    return await handleCallback(request, env, url);
         case '/api/me':          return await handleMe(request, env);
