@@ -1,4 +1,4 @@
 {
-  "v": "1.41.0",
-  "note": "le bouton sous quota d'un saisonnier donne desormais l'avertissement SANS formulaire : le niveau se deduit du dossier (rappel a l'ordre, puis avertissement, puis dernier, sans jamais en inventer un quatrieme) et le motif du chiffre manquant. Et TOUT avertissement, qu'il vienne de ce bouton ou du formulaire manuel, previent la personne dans son ticket — meme mecanisme que le rappel de permis, avec repli en message prive. Le dossier RH est ecrit avant la notification : un refus de Discord n'annule pas une sanction, le panel le dit et c'est tout."
+  "v": "1.41.1",
+  "note": "le bouton sous quota d'un saisonnier donne l'avertissement SANS formulaire : le niveau se deduit du dossier (rappel a l'ordre, puis avertissement, puis dernier, sans jamais en inventer un quatrieme) et le motif du chiffre manquant. TOUT avertissement, bouton ou formulaire, previent la personne dans son ticket, avec repli en message prive. Le dossier RH est ecrit avant la notification : un refus de Discord n'annule pas une sanction. 1.41.1 : quand le serveur ne connait pas la route demandee, le panel le dit clairement (« redeploie le Worker ») au lieu d'afficher un echec generique qui faisait chercher une permission Discord."
 }

@@ -8135,7 +8135,15 @@
       case 'forbidden': return "Vous n'avez pas le droit d'envoyer un rappel.";
       case 'config':    return r.data.detail || 'Les catégories de tickets ne sont pas déclarées.';
       case 'reseau':    return 'Le serveur du panel est injoignable. Rien n\'a été envoyé.';
-      default:          return `Le rappel n'est pas parti (${(r.data && r.data.error) || r.status})${d}.`;
+      /* Le routeur du Worker rend « not_found » quand l'URL demandée ne
+         correspond à aucune de ses routes. Ce n'est donc pas un refus : c'est
+         un serveur plus ancien que le panel qui lui parle. Le dire, sinon on
+         cherche une permission Discord qui n'est pas en cause. */
+      case 'not_found':
+        return 'Cette version du serveur ne connaît pas encore cette fonction. '
+             + 'Le Worker doit être redéployé (cd backend && npx wrangler deploy), '
+             + 'puis /api/version doit afficher la version attendue.';
+      default:          return `Le serveur a refusé (${(r.data && r.data.error) || r.status})${d}.`;
     }
   }
 
@@ -8203,7 +8211,9 @@
       method: 'POST',
       body: JSON.stringify({ civil: String(civil), texte }),
     });
-    if (!r.ok) { toast(phraseRefus(r)); return; }
+    /* phraseRefus est commune à plusieurs pages : c'est ici, et seulement ici,
+       qu'on sait qu'il s'agissait d'un rappel de permis. */
+    if (!r.ok) { toast('Le rappel n\'est pas parti — ' + phraseRefus(r)); return; }
     toast(r.data.ou === 'ticket'
       ? `Rappel envoyé à ${e.name} dans #${r.data.salon}.`
       : `Aucun ticket ouvert : rappel envoyé à ${e.name} en message privé.`);
