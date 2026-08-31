@@ -349,6 +349,10 @@
   .search input{background:none;border:none;outline:none;color:var(--parchment);font-family:'Inter';font-size:13px;width:100%;}
   .search input::placeholder{color:var(--muted);}
   .toolbar{display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap;}
+  /* Ce champ vit au milieu d'une phrase : pas de cadre, pas de fond.
+     La règle est ici et non en style « en ligne », car un style en ligne
+     l'emporterait aussi sur le chevron posé par marlowe-liste.js. */
+  #bcPalierMode{background-color:transparent;}
   .toolbar select{background:var(--stone);border:1px solid var(--band);border-radius:9px;padding:10px 12px;color:var(--parchment);font-family:'Inter';font-size:12.5px;}
 
   .metric-grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:20px;}
@@ -1130,7 +1134,10 @@
           <div class="bilan-chip">Plafond salaire : <b id="bcSalCap">—</b> emp/dir</div>
           <div class="bilan-chip">Plafond prime : <b id="bcPrimeCap">—</b> emp/dir</div>
           <div class="bilan-chip accent" style="padding:0;">
-            <select id="bcPalierMode" style="background:transparent;border:none;color:inherit;
+            <!-- Le fond et le chevron sont laissés à marlowe-liste.js : un style
+                 « background » écrit ici l'emporterait sur lui, et la liste
+                 n'aurait plus rien qui signale qu'elle s'ouvre. -->
+            <select id="bcPalierMode" style="border:none;color:inherit;
               font:inherit;padding:6px 10px;cursor:pointer;">
               <option value="auto">palier détecté automatiquement</option>
             </select>
@@ -3213,5 +3220,8 @@ const tombolaParticipants = [];
 </script>
 <script src="marlowe-data.js"></script>
 <script src="marlowe-actions.js"></script>
+<!-- Habille les listes déroulantes : un <select> ouvert est dessiné par
+     Windows, pas par la page, et aucune règle CSS ne l'atteint. -->
+<script src="marlowe-liste.js"></script>
 </body>
 </html>

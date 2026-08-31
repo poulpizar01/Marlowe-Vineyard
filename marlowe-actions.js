@@ -133,6 +133,11 @@
     return new Promise(r => { resolver = r; });
   }
 
+  /* L'ordre alphabétique français : « Émilio » se range à E, pas après Z.
+     Le tri par défaut de JavaScript compare des codes de caractères, ce qui
+     rejette tous les accents en fin de liste. */
+  const parNom = (a, b) => String(a).localeCompare(String(b), 'fr', { sensitivity: 'base' });
+
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g,
       c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -3225,7 +3230,7 @@
     const noms = [...new Set([
       ...dash.map(d => d.name),
       ...rhRosterData.map(e => e.name),
-    ])].sort();
+    ])].sort(parNom);
 
     const r = await askForm('Prime exceptionnelle', [
       { key: 'nom', label: 'Bénéficiaire', value: noms[0] || '', options: noms.length ? noms : undefined },
@@ -3776,7 +3781,7 @@
     const noms = [...new Set([
       ...anciennes.flatMap(w => (w.production || []).map(p => p.name)),
       ...effectifData.filter(e => e.active).map(e => e.name),
-    ])].sort();
+    ])].sort(parNom);
 
     const lignes = noms.map(nom => {
       const cases = anciennes.map(w => (w.production || []).find(p => p.name === nom) || null);
@@ -5469,7 +5474,8 @@
   }
 
   async function donnerAvertissement() {
-    const noms = (typeof rhRosterData !== 'undefined' ? rhRosterData : []).map(e => e.name);
+    const noms = (typeof rhRosterData !== 'undefined' ? rhRosterData : [])
+      .map(e => e.name).sort(parNom);
     if (!noms.length) { toast("Le registre est vide — enregistrez d'abord un employé."); return; }
 
     const r = await askForm('Donner un avertissement', [
