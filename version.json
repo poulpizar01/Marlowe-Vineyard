@@ -1,4 +1,4 @@
 {
-  "v": "1.33.1",
-  "note": "le rappel de permis arrivait avec la seule mention : Discord retire les embeds d'un message quand l'application n'a pas la permission Integrer des liens sur le salon, sans erreur ni avertissement. Tout le rappel tient desormais dans le texte du message, qui ne depend plus que d'Envoyer des messages."
+  "v": "1.34.0",
+  "note": "les bornes de semaine du quota en direct : la fenetre reutilise mondayOf(), la meme definition que la cloture et les primes, au lieu d'en avoir une a elle. Nouvelle fenetre Semaine close (lundi 00h00 au dimanche 23h59min59s999), qui est exactement la periode que la cloture du lundi arrete ; la Semaine en cours dit desormais qu'elle s'arrete a maintenant et non au dimanche."
 }

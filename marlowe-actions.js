@@ -7828,22 +7828,52 @@
     return k ? QD_QUOTA[k] : 0;
   }
 
-  /* Le lundi 00 h 00 de la semaine en cours — la même borne que la clôture. */
-  function qdLundi() {
-    const d = new Date();
-    const j = (d.getDay() + 6) % 7;
-    d.setDate(d.getDate() - j);
+  /* Les bornes de la semaine.
+     -------------------------------------------------------------------------
+     On réutilise mondayOf(), qui sert déjà à la clôture et aux primes : deux
+     définitions de « la semaine » dans le même panel, c'est la garantie que
+     les chiffres finiront par ne plus se recouper.
+
+     Le Worker filtre en « ts >= du ET ts < au ». Une semaine complète va donc
+     du lundi 00 h 00 au lundi suivant 00 h 00 EXCLU — ce qui couvre très
+     exactement jusqu'au dimanche 23 h 59 min 59 s 999. Pas de seconde perdue
+     entre les deux semaines, et aucune vente comptée deux fois. */
+  const QD_JOUR = 24 * 3600 * 1000;
+
+  function qdLundi(decalage) {
+    const d = mondayOf(new Date());
+    d.setDate(d.getDate() - 7 * (decalage || 0));
     d.setHours(0, 0, 0, 0);
     return d.getTime();
   }
 
+  function qdDateCourte(t) {
+    return new Date(t).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+  }
+
   function qdBornes() {
     const v = ($('qdFenetre') || {}).value || 'semaine';
-    const au = Date.now();
-    if (v === 'semaine') return { du: qdLundi(), au, titre: 'Semaine en cours · depuis lundi' };
-    if (v === '0') return { du: 0, au, titre: 'Depuis le premier log lu' };
+    const maintenant = Date.now();
+
+    if (v === 'semaine') {
+      const du = qdLundi(0);
+      /* La borne haute est « maintenant » et non le dimanche à venir : rien
+         n'a encore été vendu dans le futur, et afficher une fin de semaine
+         qui n'existe pas laisserait croire que le compte est arrêté. */
+      return { du, au: maintenant,
+               titre: `Semaine en cours · du lundi ${qdDateCourte(du)} 00 h 00 à maintenant` };
+    }
+    if (v === 'derniere') {
+      const du = qdLundi(1);
+      const au = qdLundi(0);
+      return { du, au,
+               titre: `Semaine close · du lundi ${qdDateCourte(du)} 00 h 00 `
+                    + `au dimanche ${qdDateCourte(au - 1)} 23 h 59` };
+    }
+    if (v === '0') return { du: 0, au: maintenant, titre: 'Depuis le premier log lu' };
+
     const j = Number(v) || 7;
-    return { du: au - j * 24 * 3600 * 1000, au,
+    return { du: maintenant - j * QD_JOUR, au: maintenant,
              titre: j === 1 ? 'Les dernières 24 heures' : `Les ${j} derniers jours` };
   }
 
