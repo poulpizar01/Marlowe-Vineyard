@@ -1,4 +1,4 @@
 {
-  "v": "1.40.0",
-  "note": "la colonne laterale passe de 212 a 296 px (x1,4), avec deux paliers : 236 px sous 1300 px et 168 px sous 900 px, parce que ces 84 px sont pris au contenu et poussaient une page de plus hors champ sur un ecran etroit. La grappe reste un filigrane de 162 px, recentree, au lieu de grandir avec la colonne. La colonne de contenu recoit min-width:0, sans quoi un seul tableau reclamant 640 px imposait sa largeur a toute la page."
+  "v": "1.41.0",
+  "note": "le bouton sous quota d'un saisonnier donne desormais l'avertissement SANS formulaire : le niveau se deduit du dossier (rappel a l'ordre, puis avertissement, puis dernier, sans jamais en inventer un quatrieme) et le motif du chiffre manquant. Et TOUT avertissement, qu'il vienne de ce bouton ou du formulaire manuel, previent la personne dans son ticket — meme mecanisme que le rappel de permis, avec repli en message prive. Le dossier RH est ecrit avant la notification : un refus de Discord n'annule pas une sanction, le panel le dit et c'est tout."
 }

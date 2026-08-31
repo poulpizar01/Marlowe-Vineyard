@@ -27,7 +27,7 @@ const DISCORD = 'https://discord.com/api/v10';
    correction serveur n'a rien changé, on la lit.
 
    À tenir en phase avec version.json à chaque déploiement. */
-const VERSION = '1.38.0';
+const VERSION = '1.41.0';
 const SESSION_TTL = 60 * 60 * 24 * 7;   // 7 jours
 const STATE_TTL   = 600;                // 10 minutes
 
@@ -1295,6 +1295,127 @@ async function ficheParCivil(env, civil) {
   return { fiche, discord };
 }
 
+
+/* ---------------------------------------------------------------------------
+   Écrire dans le ticket de quelqu'un — le mécanisme commun
+   ---------------------------------------------------------------------------
+   Le rappel de permis a ouvert la voie ; l'avertissement RH emprunte la même.
+   Tout ce qui suit vaut pour les deux, et vaudra pour le prochain :
+
+     · le ticket est retrouvé par la permission NOMINATIVE, pas par le nom du
+       salon — un salon se renomme, une permission posée sur quelqu'un non ;
+     · à défaut de ticket, le message part en privé ;
+     · si le privé est fermé, on le DIT, on ne fait pas semblant d'avoir
+       envoyé. Une notification qu'on croit partie est pire que pas de
+       notification du tout ;
+     · le message tient entièrement dans le texte, jamais dans un embed :
+       Discord retire les embeds quand « Intégrer des liens » manque, sans
+       erreur, et le destinataire reçoit alors une mention vide de sens. On l'a
+       appris en production.
+   --------------------------------------------------------------------------- */
+
+/* Le corps d'un message au domaine : titre en gras, corps, signature. */
+function corpsMessage(discordId, titre, texte, parQui) {
+  const corps = String(texte).slice(0, 1400).trim();
+  const message = `<@${discordId}>\n\n`
+    + `**${String(titre).slice(0, 120)}**\n`
+    + `${corps}\n\n`
+    + `*${String(parQui).slice(0, 80)} · Marlowe Vineyard*`;
+  return {
+    content: message.slice(0, 2000),
+    allowed_mentions: { parse: [], users: [String(discordId)] },
+  };
+}
+
+/* Envoie, et rend {ok, ou, salon} ou {erreur, detail, status}. */
+async function ecrireDansTicket(env, discord, corps) {
+  const salon = await ticketDe(env, discord);
+  if (salon) {
+    const r = await botPost(env, `/channels/${salon.id}/messages`, corps);
+    if (r.ok) return { ok: true, ou: 'ticket', salon: salon.name };
+    /* Le salon existe mais Discord refuse : c'est une permission manquante,
+       pas un ticket introuvable. On le dit tel quel plutôt que de basculer en
+       privé — sinon l'erreur de configuration ne se voit jamais. */
+    return { erreur: 'refus_salon', salon: salon.name, status: 502,
+             detail: (r.data && r.data.message) || ('HTTP ' + r.status) };
+  }
+
+  const canal = await botPost(env, '/users/@me/channels', { recipient_id: discord });
+  if (!canal.ok || !canal.data || !canal.data.id) {
+    return { erreur: 'aucun_canal', status: 502,
+             detail: (canal.data && canal.data.message) || ('HTTP ' + canal.status) };
+  }
+  const r2 = await botPost(env, `/channels/${canal.data.id}/messages`, corps);
+  if (!r2.ok) {
+    return { erreur: 'prive_ferme', status: 502,
+             detail: (r2.data && r2.data.message) || ('HTTP ' + r2.status) };
+  }
+  return { ok: true, ou: 'prive' };
+}
+
+/* POST /api/avertissement  {civil, niveau, motif}
+   ---------------------------------------------------------------------------
+   PAS de limite de 24 h ici, contrairement au rappel de permis : un
+   avertissement est un acte RH délibéré, et si deux sont donnés le même jour,
+   les deux doivent arriver. Seul un envoi strictement identique dans les deux
+   minutes est écarté — c'est un double-clic, pas une deuxième sanction. */
+const AVERT_DOUBLON = 120;   /* secondes */
+
+async function handleAvertissement(request, env) {
+  const s = await currentSession(request, env);
+  if (!s) return json(env, { error: 'unauthorized' }, 401);
+  if (request.method !== 'POST') return json(env, { error: 'method_not_allowed' }, 405);
+
+  const perms = await base(env).get('permissions', 'json') || {};
+  const reg = await base(env).get('settings', 'json') || {};
+  if (!canWrite(s, 'avertissements', perms, reg.permsRO || {})) {
+    return json(env, { error: 'forbidden' }, 403);
+  }
+
+  let body;
+  try { body = await request.json(); }
+  catch (e) { return json(env, { error: 'bad_json' }, 400); }
+
+  const r = await ficheParCivil(env, body && body.civil);
+  if (r.erreur === 'inconnu') return json(env, { error: 'inconnu' }, 404);
+  if (r.erreur === 'sans_identifiant') {
+    return json(env, { error: 'sans_identifiant', nom: r.fiche.name || '' }, 400);
+  }
+
+  const niveau = String((body && body.niveau) || 'Avertissement').slice(0, 60);
+  const motif = String((body && body.motif) || '').trim().slice(0, 1200);
+  if (!motif) return json(env, { error: 'sans_motif' }, 400);
+
+  /* L'empreinte du double-clic : même personne, même niveau, même motif.
+     Une empreinte courte suffit — on ne cherche pas à résister à une attaque,
+     seulement à reconnaître deux clics sur le même bouton. */
+  let h = 2166136261;
+  for (const c of (niveau + '|' + motif)) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); }
+  const empreinte = 'avert:' + r.discord + ':' + (h >>> 0).toString(36);
+  if (await base(env).get(empreinte)) {
+    return json(env, { error: 'doublon' }, 429);
+  }
+
+  const corps = corpsMessage(r.discord, `Avertissement — ${niveau}`,
+    `Motif : ${motif}`, `Donné par ${s.user.name}`);
+  const envoi = await ecrireDansTicket(env, r.discord, corps);
+
+  await base(env).put(empreinte, '1', { expirationTtl: AVERT_DOUBLON });
+
+  if (!envoi.ok) {
+    /* L'avertissement lui-même est enregistré par le panel, indépendamment :
+       ce n'est pas parce que Discord refuse que la sanction n'a pas eu lieu.
+       On renvoie l'échec pour que le panel le DISE, sans rien annuler. */
+    return json(env, { error: envoi.erreur, detail: envoi.detail, salon: envoi.salon }, envoi.status || 502);
+  }
+
+  await appendJournal(env, s,
+    `a notifié un avertissement (${niveau}) à ${r.fiche.name}`
+    + (envoi.ou === 'ticket' ? ` dans #${envoi.salon}` : ' en message privé'),
+    ['avertissements']);
+  return json(env, { ok: true, ou: envoi.ou, salon: envoi.salon });
+}
+
 /* GET | POST /api/rappel
 
    GET  ?civil=…  → ce que la fenêtre affiche avant l'envoi : le salon trouvé
@@ -1893,7 +2014,8 @@ export default {
           version: VERSION,
           routes: ['login', 'callback', 'me', 'roles', 'permissions', 'settings', 'orga',
                    'vitrine', 'upload', 'relais', 'invites', 'invite-login', 'data',
-                   'presence', 'journal', 'logout', 'rappel', 'quota', 'alias', 'journaux'],
+                   'presence', 'journal', 'logout', 'rappel', 'avertissement',
+                   'quota', 'alias', 'journaux'],
           rappelDansLeTexte: true,   /* faux = ancienne version, le rappel partait en embed */
           categoriesTickets: categoriesTickets(env).length,
           salonLogs: /^\d{17,20}$/.test(String(env.DISCORD_LOGS_CHANNEL || '')),
@@ -1919,6 +2041,7 @@ export default {
         case '/api/presence':    return await handlePresence(request, env);
         case '/api/journal':     return await handleJournal(request, env);
         case '/api/rappel':      return await handleRappel(request, env);
+        case '/api/avertissement': return await handleAvertissement(request, env);
         case '/api/quota':       return await handleQuota(request, env);
         case '/api/alias':       return await handleAlias(request, env);
         case '/api/journaux':    return await handleLogs(request, env);

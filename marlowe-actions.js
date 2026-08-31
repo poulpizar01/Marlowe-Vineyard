@@ -1978,31 +1978,83 @@
     toast(`${e.name} est rétrogradé ${bas.bas}.`);
   }
 
-  /* L'avertissement du saisonnier sous quota. Il rejoint le dossier RH comme
-     n'importe quel autre, avec son motif rempli — pas une note à part que
-     personne ne retrouverait. */
+  /* Le NIVEAU qui vient ensuite pour quelqu'un.
+     -------------------------------------------------------------------------
+     Trois crans, et on monte d'un à chaque fois : rappel à l'ordre, puis
+     avertissement, puis dernier avertissement. Au-delà, on reste au dernier —
+     le panel ne va pas inventer une quatrième sanction, c'est une décision
+     humaine qui se prend ailleurs qu'en cliquant sur un bouton. */
+  function niveauSuivant(nom) {
+    const deja = avertissements.filter(a => a.nom === nom).length;
+    return NIVEAUX[Math.min(deja, NIVEAUX.length - 1)];
+  }
+
+  /* L'avertissement du saisonnier sous quota, SANS formulaire.
+     -------------------------------------------------------------------------
+     Le niveau se déduit du dossier, le motif du chiffre : il n'y a rien à
+     saisir que le panel ne sache déjà. Reste une confirmation — « automatique »
+     veut dire sans formulaire, pas sans qu'on demande. */
   async function avertirSousQuota(e) {
     const manque = Math.max(0, (e.quota || 0) - (e.barils || 0));
     const motif = `Quota non atteint : ${Number(e.barils || 0).toLocaleString('fr-FR')} / `
                 + `${Number(e.quota || 0).toLocaleString('fr-FR')} vins, ${manque.toLocaleString('fr-FR')} manquants.`;
+    const niveau = niveauSuivant(e.name);
+    const deja = avertissements.filter(a => a.nom === e.name).length;
 
-    const r = await askForm(`Avertir ${e.name}`, [
-      { key: 'niveau', label: 'Niveau', value: NIVEAUX[0], options: NIVEAUX },
-      { key: 'motif',  label: 'Motif', value: motif },
-    ], `${e.name} est saisonnier : c'est le premier grade, il n'y a pas de cran en dessous. `
-     + `L'avertissement est enregistré au dossier RH.`);
-    if (!r) return;
-    if (!r.motif.trim()) { toast('Un avertissement sans motif ne sert à rien.'); return; }
+    if (!await confirmAction(`Avertir ${e.name}`,
+      `${e.name} est saisonnier — premier grade, pas de cran en dessous. `
+      + `Niveau : ${niveau}${deja ? ` (${deja} déjà au dossier)` : ''}. `
+      + `Motif : ${motif} L'avertissement rejoint le dossier RH et part dans son ticket.`)) return;
 
+    await enregistrerAvertissement({ nom: e.name, niveau, motif });
+  }
+
+  /* Enregistrer un avertissement, et le NOTIFIER.
+     -------------------------------------------------------------------------
+     Deux actes distincts, et l'ordre compte : le dossier RH d'abord, la
+     notification ensuite. Ce n'est pas parce que Discord refuse d'écrire que
+     la sanction n'a pas eu lieu — l'avertissement reste au dossier, et le
+     panel dit que le message n'est pas parti. L'inverse — ne rien enregistrer
+     parce que l'envoi a échoué — perdrait une décision RH pour une histoire
+     de permission. */
+  async function enregistrerAvertissement({ nom, niveau, motif, date }) {
     const sess = window.MarloweSession;
     avertissements.unshift({
-      nom: e.name, niveau: r.niveau, motif: r.motif.trim(), date: todayFR(),
+      nom, niveau, motif: String(motif).trim(),
+      /* Le formulaire manuel laisse antidater ; le bouton ⚠ ne passe rien et
+         c'est la date du jour qui sert. */
+      date: (date && String(date).trim()) || todayFR(),
       par: (sess && sess.name) || 'Direction',
     });
-    D().note(`a averti ${e.name} pour quota non atteint (${r.niveau})`);
+    D().note(`a donné un avertissement à ${nom} (${niveau})`);
     D().saveMany(['avertissements', 'rhRoster']);
     if (typeof renderAvertissements === 'function') renderAvertissements();
-    toast(`Avertissement enregistré pour ${e.name}.`);
+
+    const envoi = await notifierAvertissement(nom, niveau, motif);
+    toast(`Avertissement enregistré pour ${nom}. ${envoi}`);
+  }
+
+  /* Prévient la personne dans son ticket. Rend une phrase à afficher. */
+  async function notifierAvertissement(nom, niveau, motif) {
+    const fiche = (typeof rhRosterData !== 'undefined' ? rhRosterData : [])
+      .find(f => String(f.name).trim() === String(nom).trim());
+    if (!fiche) return "Aucune fiche à ce nom : personne n'a été prévenu.";
+    if (estDemo()) return '(démo) La personne aurait été prévenue dans son ticket.';
+
+    const A = window.MarloweAuth;
+    if (!A || !A.apiBrut) return "Le panel n'a pas pu joindre le serveur : personne n'a été prévenu.";
+
+    const r = await A.apiBrut('/api/avertissement', {
+      method: 'POST',
+      body: JSON.stringify({ civil: String(fiche.id), niveau, motif: String(motif).trim() }),
+    });
+    if (r.ok) {
+      return r.data.ou === 'ticket'
+        ? `Prévenu dans #${r.data.salon}.`
+        : 'Prévenu en message privé (aucun ticket ouvert).';
+    }
+    if (r.data && r.data.error === 'doublon') return 'Déjà notifié à l\'instant.';
+    return 'MAIS la notification n\'est pas partie — ' + phraseRefus(r);
   }
 
   async function editEffectif(name) {
@@ -4498,7 +4550,7 @@
         '[data-hist-del],[data-hist-pdf],[data-client-del],[data-client-edit],' +
         '[data-article-del],[data-article-edit],[data-fr-del],[data-fr-edit],' +
         '[data-canva-del],[data-dash-del],[data-agenda-del],' +
-        '[data-eff-promote],[data-eff-edit],[data-eff-del],[data-abs-del],' +
+        '[data-eff-promote],[data-eff-down],[data-eff-edit],[data-eff-del],[data-abs-del],' +
         '[data-histo-del],[data-primeexc-del],[data-step-go],[data-step-action],' +
         '[data-step-toggle],[data-step-reset]');
       if (!t) return;
@@ -5429,14 +5481,11 @@
     if (!r) return;
     if (!r.motif.trim()) { toast('Un avertissement sans motif ne sert à rien.'); return; }
 
-    const s = window.MarloweSession;
-    avertissements.unshift({
-      nom: r.nom, niveau: r.niveau, motif: r.motif.trim(), date: r.date,
-      par: (s && s.name) || 'Direction',
-    });
-    D().note(`a donné un avertissement à ${r.nom} (${r.niveau})`);
-    D().saveMany(['avertissements', 'rhRoster']);
-    toast(`Avertissement enregistré pour ${r.nom}.`);
+    /* Le formulaire manuel passe par le MÊME chemin que le bouton ⚠ : un
+       avertissement notifie la personne, quelle que soit la porte par laquelle
+       il a été donné. Deux chemins d'enregistrement, c'était la garantie qu'un
+       des deux oublierait de prévenir. */
+    await enregistrerAvertissement({ nom: r.nom, niveau: r.niveau, motif: r.motif, date: r.date });
   }
 
   function retirerAvertissement(i) {
@@ -8517,6 +8566,7 @@
     totalPrimeRecrutement,
     agendaVisible, AGENDA_NIVEAUX,
     basculerPermis, rappelerPermis, estIdDiscord, recruesSemaine,
+    enregistrerAvertissement, niveauSuivant, notifierAvertissement,
     retrograderEmploye, actionSousQuota,
     renderQuotaDirect,
     /* Rejoué quand le patron change les listes de rôles dans Administration ▸ Agenda. */
