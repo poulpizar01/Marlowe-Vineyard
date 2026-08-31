@@ -7685,7 +7685,9 @@
     if (!iso) return null;
     const d = new Date(iso);
     if (isNaN(d)) return null;
-    return d.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
+    /* Heure de Paris : le panel parle une seule heure, celle du domaine. */
+    return d.toLocaleString('fr-FR',
+      { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Paris' });
   }
 
   /* Ce que dit le panel quand le Worker refuse. Chaque cas a sa phrase : un
@@ -7828,27 +7830,65 @@
     return k ? QD_QUOTA[k] : 0;
   }
 
-  /* Les bornes de la semaine.
+  /* Les bornes de la semaine — à l'heure de PARIS.
      -------------------------------------------------------------------------
-     On réutilise mondayOf(), qui sert déjà à la clôture et aux primes : deux
-     définitions de « la semaine » dans le même panel, c'est la garantie que
-     les chiffres finiront par ne plus se recouper.
+     La semaine du domaine commence le lundi à minuit, heure de Paris, et pas
+     à minuit chez celui qui regarde. Sans ça, deux personnes dans deux fuseaux
+     verraient les mêmes ventes découpées différemment, et l'une des deux
+     clôturerait sur des chiffres que l'autre ne retrouverait pas.
+
+     mondayOf(), juste au-dessus, ne convient pas ici : elle répond à une
+     question de CALENDRIER (« de quelle semaine relève le 21/08 ? ») sur des
+     dates saisies en jj/mm/aaaa, où le fuseau n'a aucun sens. Ce qu'il faut
+     ici est un INSTANT précis — la milliseconde où commence le lundi parisien
+     — parce qu'on le compare à l'horodatage réel de messages Discord. Deux
+     objets différents, deux fonctions.
 
      Le Worker filtre en « ts >= du ET ts < au ». Une semaine complète va donc
      du lundi 00 h 00 au lundi suivant 00 h 00 EXCLU — ce qui couvre très
      exactement jusqu'au dimanche 23 h 59 min 59 s 999. Pas de seconde perdue
-     entre les deux semaines, et aucune vente comptée deux fois. */
+     entre deux semaines, et aucune vente comptée deux fois. */
   const QD_JOUR = 24 * 3600 * 1000;
+  const QD_FUSEAU = 'Europe/Paris';
 
-  function qdLundi(decalage) {
-    const d = mondayOf(new Date());
-    d.setDate(d.getDate() - 7 * (decalage || 0));
-    d.setHours(0, 0, 0, 0);
-    return d.getTime();
+  /* Le décalage de Paris à un instant donné. On lit l'heure murale parisienne
+     dans un format ISO, on la relit comme si elle était en UTC : l'écart avec
+     l'instant réel EST le décalage. Vaut +1 h l'hiver, +2 h l'été, sans qu'on
+     ait à savoir quand bascule l'heure d'été. */
+  function qdDecalageParis(t) {
+    /* On tronque À LA SECONDE avant de comparer. Le format sv-SE ne rend pas
+       les millisecondes : sans cette troncature, l'écart calculé emporterait
+       le reste de millisecondes de t, et le lundi retombait 246 ms après
+       minuit. Assez pour que « dimanche 23 h 59 » s'affiche « lundi » — c'est
+       exactement ce qu'on a vu à l'écran. */
+    const sec = Math.floor(t / 1000) * 1000;
+    const mur = new Date(sec).toLocaleString('sv-SE', { timeZone: QD_FUSEAU });
+    return Date.parse(mur.replace(' ', 'T') + 'Z') - sec;
+  }
+
+  /* Lundi 00 h 00 heure de Paris, en millisecondes epoch. */
+  function qdLundi(semainesAvant) {
+    const maintenant = Date.now();
+    const d1 = qdDecalageParis(maintenant);
+
+    /* On raisonne dans « l'heure de Paris lue comme de l'UTC », où les
+       getters UTC donnent directement le jour et l'heure parisiens. */
+    const mur = new Date(maintenant + d1);
+    const jour = (mur.getUTCDay() + 6) % 7;              // lundi = 0
+    mur.setUTCDate(mur.getUTCDate() - jour - 7 * (semainesAvant || 0));
+    mur.setUTCHours(0, 0, 0, 0);
+
+    /* Le décalage de ce lundi-là n'est pas forcément celui d'aujourd'hui :
+       une semaine peut enjamber le passage à l'heure d'hiver. On le recalcule
+       sur place. Minuit n'est jamais dans l'heure escamotée du changement
+       (elle tombe un dimanche à 2 h), donc un seul tour suffit. */
+    const approx = mur.getTime() - d1;
+    return mur.getTime() - qdDecalageParis(approx);
   }
 
   function qdDateCourte(t) {
-    return new Date(t).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+    return new Date(t).toLocaleDateString('fr-FR',
+      { day: '2-digit', month: '2-digit', timeZone: QD_FUSEAU });
   }
 
   function qdBornes() {
@@ -7891,7 +7931,7 @@
     if (m < 1) return "à l'instant";
     if (m < 60) return `il y a ${m} min`;
     if (m < 1440) return `il y a ${Math.floor(m / 60)} h`;
-    return new Date(ts).toLocaleDateString('fr-FR');
+    return new Date(ts).toLocaleDateString('fr-FR', { timeZone: QD_FUSEAU });
   }
 
   /* Le bandeau de fraîcheur. Un tableau qui affiche 161 000 alors que le flux

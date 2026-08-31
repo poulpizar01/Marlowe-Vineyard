@@ -1,4 +1,4 @@
 {
-  "v": "1.35.0",
-  "note": "le salon des logs passe a 1219050214086676591, l'identifiant precedent n'etait pas le bon. Et quand Discord repond 50001, le Worker lui repose la question qui departage : le salon est-il sur le serveur du panel ou sur un autre ? Un salon d'un autre serveur ne se corrige pas en cochant une permission, et c'est frequent quand les logs arrivent par webhook."
+  "v": "1.36.0",
+  "note": "la semaine du quota est desormais ancree sur l'heure de PARIS et non sur celle du navigateur : deux personnes dans deux fuseaux voient le meme decoupage. Le decalage suit l'heure d'ete tout seul, et une semaine qui enjambe le changement d'heure fait 167 ou 169 heures sans qu'aucune seconde ne se perde entre deux semaines. Les dates et heures affichees sur la page sont elles aussi a l'heure de Paris."
 }
