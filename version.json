@@ -1,4 +1,4 @@
 {
-  "v": "1.34.1",
-  "note": "le Worker expose /api/version : numero de version, routes connues et etat de la configuration, sans authentification et sans rien divulguer. Un correctif serveur non redeploye se comporte exactement comme un correctif qui ne marche pas ; cette route permet de trancher en une seconde."
+  "v": "1.35.0",
+  "note": "le salon des logs passe a 1219050214086676591, l'identifiant precedent n'etait pas le bon. Et quand Discord repond 50001, le Worker lui repose la question qui departage : le salon est-il sur le serveur du panel ou sur un autre ? Un salon d'un autre serveur ne se corrige pas en cochant une permission, et c'est frequent quand les logs arrivent par webhook."
 }

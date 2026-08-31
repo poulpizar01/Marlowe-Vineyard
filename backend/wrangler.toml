@@ -35,7 +35,7 @@ DISCORD_TICKET_CATEGORIES = "1489223949790216303,1489222452495122484,14900797260
 # onglet Bot, activez « Message Content Intent ». Elle vaut AUSSI pour les
 # lectures REST : sans elle, Discord renvoie des embeds vides, sans erreur —
 # le panel afficherait donc zéro vente en croyant que personne n'a produit.
-DISCORD_LOGS_CHANNEL = "1245400913473179729"
+DISCORD_LOGS_CHANNEL = "1219050214086676591"
 
 # Le nom du métier à retenir dans les logs (champ jobName). Les autres
 # entreprises qui écriraient dans le même salon sont ignorées.

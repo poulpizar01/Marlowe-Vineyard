@@ -27,7 +27,7 @@ const DISCORD = 'https://discord.com/api/v10';
    correction serveur n'a rien changé, on la lit.
 
    À tenir en phase avec version.json à chaque déploiement. */
-const VERSION = '1.34.1';
+const VERSION = '1.35.0';
 const SESSION_TTL = 60 * 60 * 24 * 7;   // 7 jours
 const STATE_TTL   = 600;                // 10 minutes
 
@@ -1465,6 +1465,54 @@ function lireVente(m, jobAttendu) {
   };
 }
 
+/* Pourquoi Discord refuse-t-il ce salon ?
+   ---------------------------------------------------------------------------
+   Le code 50001 « Missing Access » recouvre deux situations très différentes,
+   et la deuxième ne se corrige pas en cochant des permissions :
+
+     a) le salon est sur le serveur du panel, mais l'application n'y a pas
+        accès — là, il faut lui donner « Voir les salons » et « Voir
+        l'historique des messages » ;
+
+     b) le salon est sur un AUTRE serveur Discord que celui du panel. Le
+        token du bot ne vaut que là où le bot a été invité : aucune
+        permission cochée ailleurs n'y changera quoi que ce soit.
+
+   Le cas (b) est loin d'être théorique quand les logs du jeu arrivent par un
+   webhook : un webhook écrit sans que le bot soit là, donc un salon peut très
+   bien recevoir les ventes tout en étant hors de portée du panel.
+
+   On distingue les deux en demandant le salon en direct : la réponse porte
+   son guild_id. C'est la seule question qui départage. */
+async function diagnosticSalon(env, salon) {
+  const guilde = String(env.DISCORD_GUILD_ID || '');
+  const res = await botFetch(env, `/channels/${salon}`);
+
+  if (res.ok) {
+    const c = await res.json().catch(() => null);
+    const sien = c && String(c.guild_id || '');
+    if (sien && sien !== guilde) {
+      return `Ce salon appartient à un AUTRE serveur Discord (${sien}) que celui du panel `
+           + `(${guilde}). Le bot n'y est pas invité, et aucune permission cochée ne peut y `
+           + `remédier : il faut soit inviter l'application sur ce serveur, soit faire écrire `
+           + `le webhook des logs dans un salon du serveur du domaine.`;
+    }
+    return `Le salon est bien sur le serveur du domaine et l'application le voit`
+         + (c && c.name ? ` (#${c.name})` : '')
+         + `, mais elle n'a pas pu en lire l'historique. Donnez-lui « Voir l'historique des `
+         + `messages » sur ce salon.`;
+  }
+
+  if (res.status === 404) {
+    return `Aucun salon ne porte cet identifiant (${salon}). Vérifiez-le : clic droit sur le `
+         + `salon ▸ « Copier l'identifiant », avec le mode développeur activé.`;
+  }
+  return `L'application ne voit pas du tout ce salon (${salon}). Deux causes possibles : soit `
+       + `il est sur un autre serveur Discord que celui du panel — le bot n'y est alors pas `
+       + `invité — soit « Voir les salons » lui manque dessus. Le premier cas est fréquent `
+       + `quand les logs arrivent par un webhook : un webhook écrit sans que le bot soit là.`;
+}
+
 /* Un passage de lecture. Renvoie ce qui s'est passé, pour l'afficher au panel.
 
    Le curseur est l'identifiant du dernier message lu : Discord rend les
@@ -1477,9 +1525,29 @@ function lireVente(m, jobAttendu) {
 const LOGS_MAX_LOTS = 5;          /* 500 messages par passage, large */
 
 async function lireLogs(env) {
+  /* Un échec doit s'ÉCRIRE, pas seulement se renvoyer.
+     -------------------------------------------------------------------------
+     Défaut vu en production : le passage automatique échouait toutes les deux
+     minutes, sortait sans rien enregistrer, et le panel affichait « le flux
+     n'a jamais été lu » — un message qui envoyait chercher au mauvais endroit
+     pendant que Discord répondait, lui, très précisément. Une panne qui se
+     répète en silence est une panne qu'on ne corrige jamais. */
+  const echec = async (erreur) => {
+    const avant = await base(env).get('logs:etat', 'json');
+    const etat = {
+      at: new Date().toISOString(),
+      lus: 0, gardees: 0, ecartees: 0,
+      dernier: (avant && avant.dernier) || null,
+      dernierSucces: (avant && !avant.erreur && avant.at) || (avant && avant.dernierSucces) || null,
+      erreur,
+    };
+    try { await base(env).put('logs:etat', JSON.stringify(etat)); } catch (e) { /* tant pis */ }
+    return Object.assign({ ok: false }, etat);
+  };
+
   const salon = String(env.DISCORD_LOGS_CHANNEL || '').trim();
   if (!/^\d{17,20}$/.test(salon)) {
-    return { ok: false, erreur: 'Aucun salon de logs déclaré (DISCORD_LOGS_CHANNEL).' };
+    return echec('Aucun salon de logs déclaré (DISCORD_LOGS_CHANNEL).');
   }
 
   const job = (env.DISCORD_LOGS_JOB || 'Vigneron').trim();
@@ -1491,7 +1559,21 @@ async function lireLogs(env) {
     const res = await botFetch(env, `/channels/${salon}/messages${q}`);
     if (!res.ok) {
       const t = await res.text().catch(() => '');
-      return { ok: false, erreur: `Discord a refusé la lecture du salon (HTTP ${res.status}). ${t.slice(0, 200)}` };
+      /* 50001 « Missing Access » ne veut PAS dire « intention manquante » : le
+         bot ne voit tout simplement pas le salon. On traduit, parce que le
+         code brut de Discord envoie chercher au mauvais endroit. */
+      /* On ne se contente pas de recopier le code de Discord : on lui repose
+         la question qui départage vraiment les causes possibles. */
+      let detail;
+      if (/50001/.test(t) || res.status === 403 || res.status === 404) {
+        detail = await diagnosticSalon(env, salon).catch(() => t.slice(0, 200));
+      } else if (/50013/.test(t)) {
+        detail = "L'application voit le salon mais n'a pas le droit d'y lire l'historique "
+               + '(« Voir l\'historique des messages »).';
+      } else {
+        detail = t.slice(0, 200);
+      }
+      return echec(`Lecture du salon refusée (HTTP ${res.status}). ${detail}`);
     }
     let msgs = await res.json();
     if (!Array.isArray(msgs) || !msgs.length) break;

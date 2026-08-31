@@ -101,6 +101,7 @@ function faireDB() {
 let SALON_MSGS = [];
 let REFUS = 0;
 let VIDER_EMBEDS = false;
+let SALON_AILLEURS = false, SALON_INTROUVABLE = false, SALON_INVISIBLE = false;
 
 globalThis.fetch = async (url) => {
   const u = String(url);
@@ -108,7 +109,7 @@ globalThis.fetch = async (url) => {
 
   const m = u.match(/\/channels\/(\d+)\/messages(\?(.*))?$/);
   if (m) {
-    if (REFUS) return rep({ message: 'Missing Access' }, REFUS);
+    if (REFUS) return rep({ message: 'Missing Access', code: 50001 }, REFUS);
     const q = new URLSearchParams(m[3] || '');
     const after = q.get('after');
     let out = SALON_MSGS.slice();
@@ -117,6 +118,13 @@ globalThis.fetch = async (url) => {
     out = out.slice(0, 100);
     if (VIDER_EMBEDS) out = out.map(x => ({ ...x, embeds: [], content: '' }));
     return rep(out);
+  }
+  const seul = u.match(/\/channels\/(\d+)$/);
+  if (seul) {
+    if (SALON_AILLEURS) return rep({ id: seul[1], name: 'logs-vente-run', guild_id: '999999999999999999' });
+    if (SALON_INTROUVABLE) return rep({ message: 'Unknown Channel', code: 10003 }, 404);
+    if (SALON_INVISIBLE) return rep({ message: 'Missing Access', code: 50001 }, 403);
+    return rep({ id: seul[1], name: 'logs-vente-run', guild_id: '932301610128912414' });
   }
   if (/\/guilds\/\d+\/roles$/.test(u)) return rep([{ id: '222', name: 'DRH', position: 5, managed: false }]);
   if (/\/guilds\/\d+\/members\/(\d+)$/.test(u)) return rep({ roles: ['222'], nick: null });
@@ -247,7 +255,46 @@ console.log('\nQuand quelque chose cloche');
   REFUS = 403;
   const r = await W.lireLogs(ENV);
   dit('un refus de Discord est dit, pas avalé', !r.ok && /403/.test(r.erreur), r);
+  /* Défaut vu en production : l'échec sortait sans rien écrire, et le panel
+     affichait « jamais lu » pendant que le cron échouait toutes les 2 min. */
+  const trace = JSON.parse(KV.get('logs:etat'));
+  dit('l\'échec LAISSE UNE TRACE que le panel peut lire', !!trace && !!trace.erreur, trace);
+  dit('et le code brut de Discord est remplacé par une phrase utile',
+    !/50001/.test(trace.erreur) && trace.erreur.length > 60, trace.erreur);
+  dit('la trace se souvient de la dernière lecture réussie', trace.dernierSucces !== undefined, trace);
+
+  /* Le vrai cas rencontré : 50001 ne veut pas dire « coche une permission ».
+     Le salon peut être sur un AUTRE serveur — fréquent quand les logs
+     arrivent par webhook, puisqu'un webhook écrit sans que le bot soit là. */
+  SALON_AILLEURS = true;
+  const ailleurs = await W.lireLogs(ENV);
+  dit('un salon sur un autre serveur est nommé comme tel',
+    /AUTRE serveur/.test(ailleurs.erreur) && /999999999999999999/.test(ailleurs.erreur), ailleurs.erreur);
+  dit('et le panel dit que cocher une permission n\'y changera rien',
+    /aucune permission/.test(ailleurs.erreur), ailleurs.erreur);
+  SALON_AILLEURS = false;
+
+  SALON_INTROUVABLE = true;
+  const introuvable = await W.lireLogs(ENV);
+  dit('un identifiant qui n\'existe pas est nommé comme tel',
+    /Aucun salon ne porte cet identifiant/.test(introuvable.erreur), introuvable.erreur);
+  SALON_INTROUVABLE = false;
+
+  SALON_INVISIBLE = true;
+  const invisible = await W.lireLogs(ENV);
+  dit('un salon invisible expose les DEUX causes possibles',
+    /autre serveur/.test(invisible.erreur) && /Voir les salons/.test(invisible.erreur), invisible.erreur);
+  SALON_INVISIBLE = false;
+
+  const memeServeur = await W.lireLogs(ENV);
+  dit('un salon du bon serveur pointe vers l\'historique, pas vers le serveur',
+    /bien sur le serveur du domaine/.test(memeServeur.erreur)
+      && /historique des messages/.test(memeServeur.erreur), memeServeur.erreur);
   REFUS = 0;
+
+  const sansSalon = await W.lireLogs({ ...ENV, DISCORD_LOGS_CHANNEL: '' });
+  dit('un salon non déclaré laisse aussi une trace',
+    !sansSalon.ok && JSON.parse(KV.get('logs:etat')).erreur.includes('DISCORD_LOGS_CHANNEL'));
 
   const avant = VENTES.size;
   VIDER_EMBEDS = true;
@@ -258,8 +305,6 @@ console.log('\nQuand quelque chose cloche');
     r2.ok && r2.gardees === 0 && r2.ecartees > 0, r2);
   VIDER_EMBEDS = false;
 
-  const sans = await W.lireLogs({ ...ENV, DISCORD_LOGS_CHANNEL: '' });
-  dit('sans salon déclaré, le Worker le dit', !sans.ok && /DISCORD_LOGS_CHANNEL/.test(sans.erreur), sans);
 }
 
 console.log('\nLes droits');
