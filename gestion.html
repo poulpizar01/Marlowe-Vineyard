@@ -92,7 +92,12 @@
      posé plus bas. .sidebar est en position:sticky, qui suffit à contenir
      les absolus.
      ========================================================================= */
-  .sidebar{width:212px;flex-shrink:0;
+  /* 296 px, une fois et demie moins un poil l'ancienne largeur.
+     -------------------------------------------------------------------------
+     Ces 84 px viennent du contenu : sur un écran étroit ils faisaient déborder
+     une page de plus qu'avant. La colonne se resserre donc quand la place
+     manque — large là où c'est confortable, discrète là où ça coûte. */
+  .sidebar{width:296px;flex-shrink:0;
     background:
       linear-gradient(180deg,#2A1E3C 0%,#6B3050 22%,#B0553F 48%,#E39A4E 72%,#F3D08A 100%) left/5px 100% no-repeat,
       #100E0C;
@@ -102,11 +107,11 @@
   /* la lueur du soleil couchant, et le voile violet qui referme le bas */
   .sidebar::before{content:'';position:absolute;inset:0;pointer-events:none;z-index:0;
     background:
-      radial-gradient(circle 150px at 30px calc(100% - 300px), rgba(227,154,78,.34), rgba(176,85,63,.14) 48%, transparent 70%),
+      radial-gradient(circle 165px at 76px calc(100% - 300px), rgba(227,154,78,.30), rgba(176,85,63,.13) 48%, transparent 70%),
       linear-gradient(180deg, transparent 52%, rgba(107,48,80,.24) 80%, rgba(42,30,60,.30));}
 
   /* la grappe, calée au-dessus du pied de colonne pour ne jamais le traverser */
-  .sidebar::after{content:'';position:absolute;left:22px;bottom:186px;width:150px;height:189px;
+  .sidebar::after{content:'';position:absolute;left:66px;bottom:186px;width:162px;height:204px;
     pointer-events:none;z-index:0;opacity:.55;
     background:url("data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%2062%2078%22%20fill=%22none%22%20stroke=%22%23F3D08A%22%20stroke-width=%221.7%22%20stroke-linecap=%22round%22%20stroke-linejoin=%22round%22%3E%3Cpath%20d=%22M31%2020%20C%2031%2012,%2026%208,%2020%209%20C%2015%2010,%2015%2016,%2020%2016%20C%2024%2016,%2025%2012,%2023%2010%22/%3E%3Cpath%20d=%22M33%2017%20C%2040%208,%2052%2010,%2053%2019%20C%2054%2028,%2042%2030,%2037%2024%22%20fill=%22%23F3D08A%22%20fill-opacity=%22.18%22/%3E%3Cpath%20d=%22M44%2012%20L%2042%2025%20M%2037%2015%20L%2045%2020%20M%2050%2015%20L%2043%2022%22%20stroke-opacity=%22.7%22/%3E%3Ccircle%20cx=%2214%22%20cy=%2231%22%20r=%226.4%22%20fill=%22%23E08B4A%22%20fill-opacity=%22.8%22/%3E%3Ccircle%20cx=%2227%22%20cy=%2231%22%20r=%226.4%22%20fill=%22%23E08B4A%22%20fill-opacity=%22.8%22/%3E%3Ccircle%20cx=%2240%22%20cy=%2231%22%20r=%226.4%22%20fill=%22%23E08B4A%22%20fill-opacity=%22.8%22/%3E%3Ccircle%20cx=%2220%22%20cy=%2243%22%20r=%226.4%22%20fill=%22%23E08B4A%22%20fill-opacity=%22.8%22/%3E%3Ccircle%20cx=%2233%22%20cy=%2243%22%20r=%226.4%22%20fill=%22%23E08B4A%22%20fill-opacity=%22.8%22/%3E%3Ccircle%20cx=%2246%22%20cy=%2243%22%20r=%226.4%22%20fill=%22%23E08B4A%22%20fill-opacity=%22.8%22/%3E%3Ccircle%20cx=%2226%22%20cy=%2255%22%20r=%226.4%22%20fill=%22%23E08B4A%22%20fill-opacity=%22.8%22/%3E%3Ccircle%20cx=%2239%22%20cy=%2255%22%20r=%226.4%22%20fill=%22%23E08B4A%22%20fill-opacity=%22.8%22/%3E%3Ccircle%20cx=%2232%22%20cy=%2267%22%20r=%226.4%22%20fill=%22%23E08B4A%22%20fill-opacity=%22.8%22/%3E%3C/svg%3E") center/contain no-repeat;}
 
@@ -146,15 +151,31 @@
 
   /* Sur un écran étroit, deux colonnes de menu mangent la moitié de la place :
      le rail garde ses icônes, la colonne se réduit à l'essentiel. */
+  /* Palier intermédiaire : sous 1 300 px, la colonne rend au contenu ce
+     qu'elle lui avait pris. */
+  @media(max-width:1300px){
+    .sidebar{width:236px;padding:24px 12px 24px 16px;}
+    .sidebar::after{left:38px;width:150px;height:189px;}
+  }
+
   @media(max-width:900px){
     .mv-rail{width:54px;}
     .mv-rail-btn{width:44px;font-size:8px;}
+    /* Sous 900 px on revient à la largeur d'origine : élargir la colonne
+       là où l'écran est déjà étroit ne fait que pousser le contenu
+       dehors. Le 1,4× demandé vaut pour le bureau, pas pour un mobile. */
     .sidebar{width:168px;padding:20px 10px;}
-    /* 156 px de grappe dans 168 px de colonne : on la retire plutôt que de la
-       coller aux bords. */
+    /* 162 px de grappe dans 204 px de colonne, padding déduit : elle
+       toucherait les bords. On la retire plutôt que de l'y coller. */
     .sidebar::after{display:none;}
     .mv-signature{font-size:9px;letter-spacing:.1em;}
-    .content{padding:26px 20px 70px;}
+    .content{padding:26px 20px 70px;
+    /* Sans cette ligne, la colonne de contenu est un élément flex à
+       min-width:auto : elle refuse de descendre sous la largeur minimale
+       de son plus large enfant. Un seul tableau qui réclame 640 px
+       imposait donc 690 px à toute la page, et c'est la PAGE qui
+       défilait au lieu du tableau. */
+    min-width:0;}
   }
   .sidebar-brand{display:flex;align-items:center;gap:12px;padding:0 8px 22px;border-bottom:1px solid var(--band);margin-bottom:18px;
     text-decoration:none;color:inherit;position:relative;transition:opacity .16s ease;}
@@ -207,8 +228,24 @@
   .fr-lien{color:var(--prime);font-size:12px;}
   .mv-sal-grille{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px 14px;}
   .mv-sal-l input{width:100%;}
+  /* Un tableau large fait défiler SON cadre, jamais la page entière. */
+  .qd-defile{overflow-x:auto;}
+  .qd-defile table{min-width:640px;}
+  /* Le vrai coupable du débordement n'était pas le tableau mais le menu
+     déroulant : « Semaine en cours (lundi 00 h 00 → maintenant) » fait 350 px
+     et ne se laissait pas rétrécir, ce qui imposait sa largeur à toute la
+     colonne. Il plie maintenant comme le reste. */
+  .qd-select{max-width:100%;}
+  @media(max-width:1100px){
+    #page-quotadirect .pagehead{flex-direction:column;align-items:stretch;gap:14px;}
+    #page-quotadirect .primes-actions{flex-wrap:wrap;}
+    .qd-select{flex:1 1 220px;min-width:0;}
+  }
   .qd-metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px;}
   @media (max-width:1100px){ .qd-metrics{grid-template-columns:repeat(2,1fr);} }
+  /* Deux cartes de 338 px ne tiennent pas dans les 600 px qui restent une
+     fois la colonne et le rail déduits : elles passent en pile. */
+  @media (max-width:1100px){ .qd-metrics{grid-template-columns:1fr;} }
   .qd-select{background:#17130F;border:1px solid var(--band,#3D372C);border-radius:9px;
     padding:9px 12px;color:var(--ink);font-family:inherit;font-size:13px;}
   .qd-bandeau{display:none;align-items:center;gap:10px;padding:12px 16px;border-radius:11px;
@@ -1292,6 +1329,7 @@
           <input type="text" id="qdSearch" placeholder="Rechercher un employé…">
         </div>
       </div>
+      <div class="qd-defile">
       <table class="gtable" id="qdTable">
         <thead><tr>
           <th>Employé</th><th>Grade</th>
@@ -1300,6 +1338,7 @@
         </tr></thead>
         <tbody id="qdBody"></tbody>
       </table>
+      </div>
     </div>
 
     <div class="panel" id="qdOrphPanel" style="margin-top:22px;display:none;">

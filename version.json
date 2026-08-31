@@ -1,4 +1,4 @@
 {
-  "v": "1.39.1",
-  "note": "la signature du pied de page redevient UN objet : la marque et les deux destinations tiennent dans une seule pastille, separees d'un trait fin, le cadre n'apparaissant qu'au survol. La version precedente eclatait la marque et les liens en trois morceaux qui flottaient cote a cote."
+  "v": "1.40.0",
+  "note": "la colonne laterale passe de 212 a 296 px (x1,4), avec deux paliers : 236 px sous 1300 px et 168 px sous 900 px, parce que ces 84 px sont pris au contenu et poussaient une page de plus hors champ sur un ecran etroit. La grappe reste un filigrane de 162 px, recentree, au lieu de grandir avec la colonne. La colonne de contenu recoit min-width:0, sans quoi un seul tableau reclamant 640 px imposait sa largeur a toute la page."
 }
