@@ -2328,11 +2328,20 @@ const salaireDe = r => (window.mvSalaireGrade ? window.mvSalaireGrade(r) : 0);
 function primesRows(){
   return dash.map(e => {
     const barils = Math.round(e.runs / 5);
-    const quota = baseQuota[e.rank] || 3000;
+    /* Le quota vient de la fiche d'effectif de la personne, pas du barème de
+       son grade : c'est la fiche qui fait foi, et c'est elle que le bilan
+       regarde. Les deux pages lisaient deux quotas différents. */
+    const quota = window.mvQuotaFiche ? window.mvQuotaFiche(e.name, e.rank)
+                                      : (baseQuota[e.rank] || 3000);
     const atteint = barils >= quota;
     const mult = multDe(e.rank);
-    const prime = atteint ? (window.mvCalculPrime ? window.mvCalculPrime(e.runs, e.rank, null)
-                                                  : Math.min(barils, PLAFOND) * mult) : null;
+    /* AVEC le palier : la prime affichée ici est celle que le bilan paiera,
+       plafond compris. Sans lui, cette page annonçait des montants que le
+       bilan écrêtait ensuite. */
+    const prime = window.mvCalculPrime
+      ? (window.mvCalculPrime(e.runs, e.rank,
+           window.mvPalierCourant ? window.mvPalierCourant() : null, e.name) || null)
+      : (atteint ? Math.min(barils, PLAFOND) * mult : null);
     const recrues = recruesDe(e.name);
     const salaire = salaireDe(e.rank);
     /* La prime de recrutement est une PRIME, pas un salaire : elle se gagne
@@ -2985,6 +2994,10 @@ const baremeData = [
 ];
 const palierIndex = baremeData.findIndex(b => beneficeImposable >= b.min && beneficeImposable <= b.max);
 const palier = baremeData[palierIndex >= 0 ? palierIndex : baremeData.length - 1];
+/* La page Primes a été peinte plus haut dans ce fichier, avant que le palier
+   n'existe : elle a donc affiché des primes sans plafond. On la redessine
+   maintenant que le plafond est connu. */
+if (typeof renderPrimes === 'function') renderPrimes();
 
 document.getElementById('palierActuel').textContent = (palierIndex >= 0 ? palierIndex + 1 : baremeData.length);
 document.getElementById('bcTaux').textContent = palier.taux + '%';
@@ -3044,7 +3057,12 @@ function bcRenderDetail(){
     const primeCap = isDir ? palier.primeDir : palier.primeEmp;
     const barils = Math.round(e.runs / 5);
     const mult = multDe(e.rank);
-    const prime = Math.min(barils * mult, primeCap);
+    /* Ce tableau recalculait la prime dans son coin : sans plafond de vins,
+       sans seuil de quota, et donc jamais d'accord avec la page Primes. Il
+       passe par la formule commune comme tout le monde. */
+    const prime = window.mvCalculPrime
+      ? window.mvCalculPrime(e.runs, e.rank, palier, e.name)
+      : Math.min(barils * mult, primeCap);
     return `
     <tr>
       <td>${e.name}</td>

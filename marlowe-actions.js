@@ -2537,10 +2537,38 @@
      ------------------------------------------------------------------------ */
   const PLAFOND_BARILS = (typeof PLAFOND !== 'undefined') ? PLAFOND : 19000;
 
-  window.mvCalculPrime = function (runs, rang, palier) {
+  /* Le quota d'une personne vient de SA fiche d'effectif, pas du barème de son
+     grade : deux saisonniers peuvent avoir des attentes différentes, et c'est
+     la fiche qui fait foi. Le barème ne sert que de repli tant que la fiche
+     n'a pas de quota. Un quota nul ne bloque rien — sinon la direction, qui
+     n'a pas de fiche de production, perdrait sa prime. */
+  const QUOTA_DEFAUT_GRADE = { 'Saisonnier': 3000, 'Ouvrier Viticole': 5000, 'Chef de Culture': 8000 };
+
+  function quotaDeLaFiche(nom, grade) {
+    const lignes = (typeof effectifData !== 'undefined' && Array.isArray(effectifData)) ? effectifData : [];
+    const f = nom ? lignes.find(e => clefNom(e.name) === clefNom(nom)) : null;
+    const q = f ? Number(f.quota) || 0 : 0;
+    if (q > 0) return q;
+    const g = String(grade || '').trim();
+    const k = Object.keys(QUOTA_DEFAUT_GRADE).find(x => x.toLowerCase() === g.toLowerCase());
+    return k ? QUOTA_DEFAUT_GRADE[k] : 0;
+  }
+  window.mvQuotaFiche = quotaDeLaFiche;
+
+  window.mvCalculPrime = function (runs, rang, palier, nom) {
     const barils = Math.min(Math.round((runs || 0) / 5), PLAFOND_BARILS);
+
+    /* Le quota est un SEUIL, pas une part : en dessous, aucune prime ; au-delà,
+       la production réelle compte. La règle était appliquée sur la page Primes
+       et NULLE PART ailleurs — le bilan payait donc une prime à quelqu'un que
+       la page Primes laissait à zéro. Elle vit ici désormais, avec le reste de
+       la formule. */
+    const seuil = quotaDeLaFiche(nom, rang);
+    if (seuil > 0 && barils < seuil) return 0;
+
     const mult = multiplicateurDuGrade(rang);
     let prime = barils * mult;
+    /* Le plafond du palier : « sans dépasser le max » du bilan comptable. */
     if (palier) {
       const dir = DIR_RANKS().includes(rang);
       prime = Math.min(prime, dir ? palier.primeDir : palier.primeEmp);
@@ -2651,7 +2679,7 @@
     const detail = rows.map(e => {
       const dir = isDir(e.rank);
       const exc = primesExc.filter(x => x.nom === e.name).reduce((s, x) => s + x.montant, 0);
-      const prime = window.mvCalculPrime(e.runs, e.rank, palier) + exc;
+      const prime = window.mvCalculPrime(e.runs, e.rank, palier, e.name) + exc;
       return Object.assign({}, e, {
         prime: Math.round(prime),
         primeExc: exc,
@@ -2685,6 +2713,14 @@
       auto: bilanConfig.palier === 'auto',
     };
   }
+
+  /* Le palier retenu par le bilan — override manuel compris. La page Primes
+     appelait la formule commune SANS palier : elle affichait donc des primes
+     que le bilan écrêtait ensuite. Deux chiffres pour la même prime, sur deux
+     pages voisines. */
+  window.mvPalierCourant = function () {
+    try { return bilanCompute().palier || null; } catch (e) { return null; }
+  };
 
   function renderBilan() {
     if (typeof dash === 'undefined' || !$('bcDetailBody')) return;
