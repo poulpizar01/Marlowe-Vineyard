@@ -2225,21 +2225,27 @@ window.onload = function(){
        pas quelqu'un qui est déjà au premier grade — on l'avertit. */
   };
 
-  /* Ce que le bouton ▼ propose pour une fiche donnée.
+  /* Ce que le panel propose pour une fiche sous quota.
      -------------------------------------------------------------------------
-     Trois cas, et le premier est le plus important :
+     Un ABSENT ne reçoit rien, et c'est le point le plus important : un employé
+     en absence déclarée n'a pas produit parce qu'il n'était pas là. Le
+     sanctionner pour ça n'a aucun sens, et c'est le genre d'automatisme qui
+     fâche une équipe.
 
-       absent   → RIEN. Un employé en absence déclarée n'a pas produit parce
-                  qu'il n'était pas là. Le sanctionner pour ça n'a aucun sens,
-                  et c'est le genre d'automatisme qui fâche une équipe.
-       saisonnier → un avertissement : il n'y a pas de cran en dessous.
-       les autres → une rétrogradation d'un cran. */
+     Pour les autres, DEUX sanctions et non plus une seule au choix du panel.
+     L'avertissement était réservé aux saisonniers, pour la seule raison qu'il
+     n'existe pas de grade en dessous du leur — la rétrogradation prenait
+     automatiquement le pas partout ailleurs. C'était confondre « la sanction
+     la plus lourde possible » avec « la sanction qui convient » : un chef de
+     culture à 200 vins près ne mérite pas de perdre son grade. L'avertissement
+     vaut donc pour tout le monde ; la rétrogradation s'y ajoute quand il
+     existe un cran en dessous, et c'est un humain qui choisit. */
   function actionSousQuota(e) {
     if (!e || !e.active) return null;
     const pct = e.quota > 0 ? (e.barils / e.quota) * 100 : 100;
     if (pct >= 100) return null;
     const bas = GRADE_INFERIEUR[e.grade];
-    return bas ? { type: 'retro', vers: bas.bas } : { type: 'avert' };
+    return { avert: true, vers: bas ? bas.bas : null };
   }
   window.mvActionSousQuota = actionSousQuota;
 
@@ -2298,11 +2304,23 @@ window.onload = function(){
     const deja = avertissements.filter(a => a.nom === e.name).length;
 
     if (!await confirmAction(`Avertir ${e.name}`,
-      `${e.name} est saisonnier — premier grade, pas de cran en dessous. `
+      `${e.name} est ${e.grade} et n'a pas fait son quota. `
       + `Niveau : ${niveau}${deja ? ` (${deja} déjà au dossier)` : ''}. `
-      + `Motif : ${motif} L'avertissement rejoint le dossier RH et part dans son ticket.`)) return;
+      + `Motif : ${motif} L'avertissement rejoint le dossier RH et part dans son ticket.`,
+      'Avertir')) return;
 
     await enregistrerAvertissement({ nom: e.name, niveau, motif });
+  }
+
+  /* Le bouton ⚠ de la page Effectif : il part d'un nom, comme les autres. */
+  async function avertirEmploye(name) {
+    const e = effectifData.find(x => x.name === name);
+    if (!e) return;
+    if (!e.active) {
+      toast(`${e.name} est absent cette semaine — aucune sanction n'est proposée.`);
+      return;
+    }
+    await avertirSousQuota(e);
   }
 
   /* Enregistrer un avertissement, et le NOTIFIER.
@@ -4719,7 +4737,7 @@ window.onload = function(){
         '[data-hist-del],[data-hist-pdf],[data-client-del],[data-client-edit],' +
         '[data-article-del],[data-article-edit],[data-fr-del],[data-fr-edit],' +
         '[data-canva-del],[data-dash-del],[data-agenda-del],' +
-        '[data-eff-promote],[data-eff-down],[data-eff-edit],[data-eff-del],[data-abs-del],' +
+        '[data-eff-promote],[data-eff-down],[data-eff-warn],[data-eff-edit],[data-eff-del],[data-abs-del],' +
         '[data-histo-del],[data-primeexc-del],[data-step-go],[data-step-action],' +
         '[data-step-toggle],[data-step-reset]');
       if (!t) return;
@@ -4749,6 +4767,7 @@ window.onload = function(){
       if (d.primeexcDel)   return removePrimeExc(d.primeexcDel);
       if (d.effPromote)    return promoteEmployee(d.effPromote);
       if (d.effDown)       return retrograderEmploye(d.effDown);
+      if (d.effWarn)       return avertirEmploye(d.effWarn);
       if (d.effEdit)       return editEffectif(d.effEdit);
       if (d.effDel)        return deleteEffectif(d.effDel);
       if (d.agendaDel !== undefined) return deleteEvent(Number(d.agendaDel));
@@ -9288,7 +9307,7 @@ window.onload = function(){
     basculerPermis, rappelerPermis, estIdDiscord, recruesSemaine, recruesSemaineDetail,
     clefNom,
     enregistrerAvertissement, niveauSuivant, notifierAvertissement,
-    retrograderEmploye, actionSousQuota,
+    retrograderEmploye, avertirEmploye, actionSousQuota,
     renderQuotaDirect,
     /* Le collage de la tablette vit dans gestion.html, hors de cette portée :
        sans cet export il n'aurait que les fenêtres du navigateur pour parler. */

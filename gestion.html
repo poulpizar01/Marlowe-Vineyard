@@ -2274,12 +2274,18 @@ function renderEffectif(list){
         <div class="eq-actions">
           ${(() => {
             /* Un ABSENT ne reçoit rien : il n'a pas produit parce qu'il
-               n'était pas là. Le ▼ ne s'affiche même pas sur sa ligne. */
+               n'était pas là. Aucun des deux boutons ne s'affiche sur sa ligne.
+
+               Sinon les deux sanctions cohabitent : ⚠ avertit, ▼ rétrograde.
+               L'avertissement est offert à tous les grades — il ne l'était
+               qu'aux saisonniers, faute de grade en dessous du leur. */
             const act = window.mvActionSousQuota ? window.mvActionSousQuota(e) : null;
             if (!act) return '';
-            return act.type === 'retro'
+            const avert = `<button class="eq-icon warn" data-eff-warn="${e.name}" title="Sous quota — donner un avertissement">⚠</button>`;
+            const retro = act.vers
               ? `<button class="eq-icon warn" data-eff-down="${e.name}" title="Sous quota — rétrograder vers ${act.vers}">▼</button>`
-              : `<button class="eq-icon warn" data-eff-down="${e.name}" title="Sous quota — saisonnier, donc avertissement (pas de grade en dessous)">⚠</button>`;
+              : '';
+            return avert + retro;
           })()}
           <button class="eq-icon promote ${canPromote ? '' : 'inactive'}" ${canPromote ? `data-eff-promote="${e.name}"` : ''} title="${canPromote ? 'Promouvoir vers ' + e.nextGrade : 'Promotion non éligible'}">▲</button>
           <button class="eq-icon" data-eff-edit="${e.name}" title="Modifier la production">✎</button>
