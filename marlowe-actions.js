@@ -2539,7 +2539,7 @@
 
   window.mvCalculPrime = function (runs, rang, palier) {
     const barils = Math.min(Math.round((runs || 0) / 5), PLAFOND_BARILS);
-    const mult = (typeof multiplierFor === 'object' && multiplierFor[rang]) || 1;
+    const mult = multiplicateurDuGrade(rang);
     let prime = barils * mult;
     if (palier) {
       const dir = DIR_RANKS().includes(rang);
@@ -5602,7 +5602,44 @@
     primeRecrutQuota: 0,    /* vins minimum pour y avoir droit */
     rappelPermis: '',       /* texte par défaut du rappel de permis, vide = celui du serveur */
     salaires: {},           /* salaire fixe par grade, en dollars ; absent ou 0 = pas de salaire */
+    multiplicateurs: {},    /* multiplicateur de prime par grade ; vide = le barème d'origine */
   };
+
+  /* Le MULTIPLICATEUR de prime, par grade.
+     -------------------------------------------------------------------------
+     Il vivait en dur dans la page : « Saisonnier 1, Ouvrier 2, Chef 3 ». Un
+     barème qui change au fil des saisons n'a rien à faire dans le code — il
+     se règle maintenant dans Paramètres ▸ Règles du domaine.
+
+     Le barème d'origine reste le point de départ : tant que personne n'a
+     touché au réglage, rien ne bouge. Un grade absent du réglage retombe
+     dessus, et un grade inconnu vaut 1 — jamais 0, sinon une faute de frappe
+     dans un nom de grade supprimerait la prime de quelqu'un en silence. */
+  const MULT_DEFAUT = { 'Saisonnier': 1, 'Ouvrier Viticole': 2, 'Chef de Culture': 3 };
+
+  /* Les grades concernés, tirés du barème lui-même : ajouter un grade au
+     barème le fait apparaître dans l'écran de réglage, sans double liste à
+     tenir à jour. */
+  const GRADES_PRIME = Object.keys(MULT_DEFAUT);
+
+  function multiplicateurDuGrade(grade) {
+    const g = String(grade || '').trim();
+    const table = (reglages && reglages.multiplicateurs) || {};
+    const dans = (t) => {
+      if (t[g] !== undefined) return t[g];
+      /* Le registre écrit « Chef de culture », la tablette « Chef de Culture ».
+         On ne va pas faire dépendre une prime d'une majuscule. */
+      const k = Object.keys(t).find(x => x.toLowerCase() === g.toLowerCase());
+      return k ? t[k] : undefined;
+    };
+    const v = dans(table);
+    if (v !== undefined && Number(v) > 0) return Number(v);
+    const d = dans(MULT_DEFAUT);
+    return d !== undefined ? Number(d) : 1;
+  }
+
+  /* La page de gestion s'en sert aussi : elle vit hors de cette portée. */
+  window.mvMultGrade = multiplicateurDuGrade;
 
   /* Le SALAIRE d'un grade — à ne pas confondre avec la prime.
      -------------------------------------------------------------------------
@@ -5811,6 +5848,22 @@
       </div>
 
       <div class="mv-vit-sec">
+        <h4>Multiplicateur de prime par grade</h4>
+        <p class="mv-hint" style="margin:0 0 12px;">La prime se calcule <b>vins × multiplicateur</b>, puis
+          se plafonne au palier du bilan. C'est ce qui récompense la montée en grade : à production égale,
+          un chef de culture touche davantage qu'un saisonnier. Le barème du domaine est
+          1 · 2 · 3 ; changez-le ici s'il évolue. Une valeur laissée à 0 ou vide reprend ce barème —
+          pour retirer une prime, c'est le quota qu'on relève, pas le multiplicateur qu'on annule.</p>
+        <div class="mv-sal-grille">
+          ${GRADES_PRIME.map(g => `
+            <label class="mv-lab mv-sal-l">${esc(g)}
+              <input type="number" min="0" max="99" step="1" data-mult="${esc(g)}"
+                value="${multiplicateurDuGrade(g)}">
+            </label>`).join('')}
+        </div>
+      </div>
+
+      <div class="mv-vit-sec">
         <h4>Rappel de permis</h4>
         <p class="mv-hint" style="margin:0 0 12px;">Le texte proposé par défaut quand un RH clique sur
           « ✉ Rappel » dans le registre. Il reste modifiable au cas par cas avant chaque envoi.
@@ -5852,8 +5905,23 @@
       if (v) sal[el.dataset.salaire] = v;      /* on ne stocke pas les zéros */
     });
     reglages.salaires = sal;
+    const mults = {};
+    document.querySelectorAll('[data-mult]').forEach(el => {
+      const v = Math.max(0, Math.round(Number(el.value) || 0));
+      /* Un champ vide ou à zéro n'est pas un multiplicateur de zéro : c'est
+         « je n'y touche pas ». On ne le stocke donc pas, et le barème
+         d'origine reprend la main. */
+      if (v > 0) mults[el.dataset.mult] = v;
+    });
+    reglages.multiplicateurs = mults;
     D().note('a modifié les règles du domaine');
     D().save('reglages');
+    /* Le multiplicateur et les salaires entrent dans des chiffres déjà
+       affichés ailleurs. Sans ce rafraîchissement, la page Primes et le bilan
+       montreraient l'ancien barème jusqu'au prochain rechargement — et on
+       croirait que le réglage n'a pas pris. */
+    if (typeof window.mvRenderPrimes === 'function') window.mvRenderPrimes();
+    if (typeof renderBilan === 'function') renderBilan();
     const ok = $('mvRegSaved');
     if (ok) { ok.classList.add('on'); setTimeout(() => ok.classList.remove('on'), 1800); }
     toast('Règles enregistrées.');

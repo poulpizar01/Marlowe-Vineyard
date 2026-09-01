@@ -2300,7 +2300,13 @@ const baseQuota = {'Saisonnier':3000, 'Ouvrier Viticole':5000, 'Chef de culture'
    « Chef de culture » avec un c minuscule ne correspondait à aucun grade :
    rewardsByGrade et gradePillClass écrivent « Chef de Culture ». La prime
    retombait donc sur le multiplicateur par défaut au lieu du sien. */
+/* Le barème d'origine. Il n'est plus la source de vérité : le multiplicateur
+   se règle dans Paramètres ▸ Règles du domaine, et marlowe-actions.js le sert
+   par window.mvMultGrade. Cet objet reste ici parce qu'il nomme encore les
+   grades concernés — et comme repli tant que le panel n'a pas fini de se
+   charger. */
 const multiplierFor = {'Saisonnier':1, 'Ouvrier Viticole':2, 'Chef de Culture':3};
+const multDe = r => (window.mvMultGrade ? window.mvMultGrade(r) : (multiplierFor[r] || 1));
 /* Les recrutements de la SEMAINE EN COURS, comptés depuis le registre.
    ---------------------------------------------------------------------------
    Deux personnes étaient nommées en dur ici, avec 2 et 1 recrue : personne
@@ -2324,7 +2330,7 @@ function primesRows(){
     const barils = Math.round(e.runs / 5);
     const quota = baseQuota[e.rank] || 3000;
     const atteint = barils >= quota;
-    const mult = multiplierFor[e.rank] || 1;
+    const mult = multDe(e.rank);
     const prime = atteint ? (window.mvCalculPrime ? window.mvCalculPrime(e.runs, e.rank, null)
                                                   : Math.min(barils, PLAFOND) * mult) : null;
     const recrues = recruesDe(e.name);
@@ -2377,6 +2383,9 @@ function renderPrimes(query){
   }).join('');
 }
 renderPrimes();
+/* Le multiplicateur se règle dans Paramètres : quand il change, cette page
+   doit se redessiner sans qu'on ait à recharger. */
+window.mvRenderPrimes = renderPrimes;
 
 document.getElementById('primesSearch').addEventListener('input', (e) => renderPrimes(e.target.value));
 
@@ -3034,7 +3043,7 @@ function bcRenderDetail(){
     const isDir = bcDirectionRanks.includes(e.rank);
     const primeCap = isDir ? palier.primeDir : palier.primeEmp;
     const barils = Math.round(e.runs / 5);
-    const mult = multiplierFor[e.rank] || 1;
+    const mult = multDe(e.rank);
     const prime = Math.min(barils * mult, primeCap);
     return `
     <tr>
