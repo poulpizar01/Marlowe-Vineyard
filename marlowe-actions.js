@@ -324,6 +324,33 @@
     return [...par.values()];
   }
 
+  /* Le prix d'un recrutement, pour celui qui recrute.
+     -------------------------------------------------------------------------
+     À ne pas confondre avec la prime de BIENVENUE, réglée juste à côté : la
+     bienvenue va à celui qui arrive, celle-ci va à celui qui l'a amené. Les
+     deux portaient le même nom dans le panel, et une seule des deux était
+     réglable — l'autre valait 4 000 $ écrits en dur dans la page Primes.
+
+     4 000 $ reste le montant tant que personne n'a rien enregistré : un
+     réglage qui apparaît ne doit pas changer une paie en silence. Une fois
+     enregistré, zéro compris, c'est le réglage qui commande. */
+  const PRIME_RECRUTEUR_DEFAUT = 4000;
+
+  function primeParRecrutement() {
+    const v = reglages ? reglages.primeParRecrutement : undefined;
+    if (v === undefined || v === null || v === '') return PRIME_RECRUTEUR_DEFAUT;
+    return Math.max(0, Math.round(Number(v) || 0));
+  }
+  window.mvPrimeRecruteur = primeParRecrutement;
+
+  /* Ce que le domaine doit à ses recruteurs cette semaine, tous confondus. */
+  function primeRecruteurTotale(roster) {
+    const montant = primeParRecrutement();
+    if (!montant) return 0;
+    return recruesSemaineDetail(roster || rhRosterData)
+      .reduce((s, r) => s + r.n, 0) * montant;
+  }
+
   /* La forme dont la page Primes a besoin : clef normalisée → nombre. */
   function recruesSemaine(roster) {
     const out = {};
@@ -3003,17 +3030,23 @@ window.onload = function(){
     }
     const palier = bareme[idx] || { taux: 0, salEmp: 0, salDir: 0, primeEmp: 0, primeDir: 0 };
 
+    const recrues = recruesSemaine(rhRosterData);
     const detail = rows.map(e => {
       const patron = estPatron(e.rank);
       const exc = e.exEmploye ? 0
         : primesExc.filter(x => x.nom === e.name).reduce((s, x) => s + x.montant, 0);
+      /* La prime de recrutement était payée sur la page Primes et invisible
+         ici : le bilan sous-évaluait donc ce que le domaine sort réellement.
+         Elle rejoint la colonne PRIME, comme sur la page Primes. */
+      const rec = e.exEmploye ? 0 : (recrues[clefNom(e.name)] || 0) * primeParRecrutement();
       /* Un ancien employé apporte sa production et rien d'autre : plus de
          salaire à lui verser, et pas de prime à lui calculer. */
       const prime = e.exEmploye ? 0
-        : window.mvCalculPrime(e.runs, e.rank, palier, e.name) + exc;
+        : window.mvCalculPrime(e.runs, e.rank, palier, e.name) + exc + rec;
       return Object.assign({}, e, {
         prime: Math.round(prime),
         primeExc: exc,
+        primeRec: rec,
         salairePlafonne: e.exEmploye ? 0
           : Math.round(Math.min(e.salaire || 0, patron ? palier.salDir : palier.salEmp)),
         isDir: patron,
@@ -3028,10 +3061,19 @@ window.onload = function(){
     const excHorsTableau = primesExc.filter(p => !nomsDetail.has(p.nom))
       .reduce((s, p) => s + p.montant, 0);
 
+    /* Un recruteur peut ne pas figurer dans la tablette collée — la direction
+       recrute sans forcément produire. Sa prime est due quand même : on ajoute
+       ce que le détail n'a pas pu porter, plutôt que de la perdre. */
+    const clefsDetail = new Set(detail.filter(e => !e.exEmploye).map(e => clefNom(e.name)));
+    const recHorsTableau = Object.keys(recrues)
+      .filter(k => !clefsDetail.has(k))
+      .reduce((s, k) => s + recrues[k], 0) * primeParRecrutement();
+
     const salaires = detail.reduce((s, e) => s + e.salairePlafonne, 0);
     /* La prime de recrutement ne dépend pas de la production hebdomadaire :
        elle s'ajoute au total, sinon la masse salariale serait sous-évaluée. */
-    const primes = detail.reduce((s, e) => s + e.prime, 0) + excHorsTableau + totalPrimeRecrutement();
+    const primes = detail.reduce((s, e) => s + e.prime, 0)
+      + excHorsTableau + recHorsTableau + totalPrimeRecrutement();
     const depenses = salaires + autres;
 
     const beneficeImposable = caTotal - depenses;
@@ -5999,8 +6041,9 @@ window.onload = function(){
 
   const reglages = {
     quotaServiceH: 0,       /* heures de service attendues par semaine, 0 = pas de quota */
-    primeRecrutMontant: 0,  /* prime versée à une recrue de fin de semaine */
+    primeRecrutMontant: 0,  /* prime de BIENVENUE, versée à une recrue de fin de semaine */
     primeRecrutQuota: 0,    /* vins minimum pour y avoir droit */
+    primeParRecrutement: undefined, /* prime versée au RECRUTEUR, par personne amenée */
     rappelPermis: '',       /* texte par défaut du rappel de permis, vide = celui du serveur */
     quotas: {},             /* quota MINIMUM de vins par grade ; 0 = aucun quota exigé */
     salaires: {},           /* salaire fixe par grade, en dollars ; absent ou 0 = pas de salaire */
@@ -6230,7 +6273,7 @@ window.onload = function(){
       </div>
 
       <div class="mv-vit-sec">
-        <h4>Prime de recrutement</h4>
+        <h4>Prime de bienvenue — versée à la recrue</h4>
         <p class="mv-hint" style="margin:0 0 12px;">Versée aux employés arrivés <b>entre le jeudi et le dimanche</b>
           de la semaine en cours, à condition d'avoir atteint le nombre de vins indiqué. Ils n'ont que
           quelques jours pour produire : c'est la raison d'être de cette barre plus basse. Montant à 0 = prime désactivée.</p>
@@ -6240,6 +6283,19 @@ window.onload = function(){
           </label>
           <label class="mv-lab">Vins minimum
             <input type="number" id="mvRegSeuil" min="0" step="100" value="${reglages.primeRecrutQuota}">
+          </label>
+        </div>
+      </div>
+
+      <div class="mv-vit-sec">
+        <h4>Prime de recrutement — versée au recruteur</h4>
+        <p class="mv-hint" style="margin:0 0 12px;">Ce que touche <b>celui qui recrute</b>, pour chaque personne
+          arrivée dans la semaine en cours et dont il est inscrit comme recruteur sur la fiche. C'est le chiffre
+          de la colonne <b>RECRUES</b> de la page Primes. À ne pas confondre avec la prime de bienvenue
+          ci-dessus, qui va à celui qui arrive. <b>0</b> = plus de prime au recruteur.</p>
+        <div class="mv-vit-champs">
+          <label class="mv-lab">Montant par recrue ($)
+            <input type="number" id="mvRegPrimeRec" min="0" step="500" value="${primeParRecrutement()}">
           </label>
         </div>
       </div>
@@ -6329,6 +6385,9 @@ window.onload = function(){
     reglages.quotaServiceH      = n('mvRegQuotaS');
     reglages.primeRecrutMontant = Math.round(n('mvRegPrime'));
     reglages.primeRecrutQuota   = Math.round(n('mvRegSeuil'));
+    /* Toujours stocké, zéro compris : ici le zéro veut dire « plus de prime
+       au recruteur », et non « je n'y touche pas ». */
+    reglages.primeParRecrutement = Math.round(n('mvRegPrimeRec'));
     const rap = $('mvRegRappel');
     if (rap) reglages.rappelPermis = rap.value.trim().slice(0, 1500);
     const sal = {};
@@ -9532,7 +9591,7 @@ window.onload = function(){
     renderComRunner, testerDiscord, renderQuotaService, renderPrimeRecrutement,
     renderTombola, ticketsDe, renderEntretien, renderDocuments,
     railConstruire, railSynchroniser, allerA,
-    totalPrimeRecrutement,
+    totalPrimeRecrutement, primeParRecrutement, primeRecruteurTotale,
     agendaVisible, AGENDA_NIVEAUX,
     basculerPermis, rappelerPermis, estIdDiscord, recruesSemaine, recruesSemaineDetail,
     clefNom,

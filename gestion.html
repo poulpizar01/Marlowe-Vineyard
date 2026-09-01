@@ -2391,7 +2391,10 @@ function primesRows(){
     /* La prime de recrutement est une PRIME, pas un salaire : elle se gagne
        en amenant quelqu'un. Elle est comptée à part pour que les deux totaux
        du haut de page veuillent dire ce qu'ils annoncent. */
-    const primeRecrues = recrues * 4000;
+    /* Le montant se règle dans Administration ▸ Règles du domaine. Il valait
+       4 000 $ écrits en dur ici : le réglage existait à côté, mais pour l'autre
+       prime — celle versée à la recrue, pas au recruteur. */
+    const primeRecrues = recrues * (window.mvPrimeRecruteur ? window.mvPrimeRecruteur() : 4000);
     const total = (prime || 0) + primeRecrues + salaire;
     return {name:e.name, rank:e.rank, barils, quota, atteint, mult, prime, recrues, primeRecrues, salaire, total};
   }).sort((a, b) => b.barils - a.barils);
