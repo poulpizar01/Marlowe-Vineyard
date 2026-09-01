@@ -97,34 +97,36 @@
     { id: 'rhrecrutement',  label: 'Recrutement',     group: 'RH' },
     { id: 'entretien',      label: "Kit d'entretien", group: 'RH' },
     { id: 'blacklist',      label: 'Blacklist',       group: 'RH' },
+    { id: 'statseffectif',  label: 'Effectif',        group: 'RH' },
 
     { id: 'facturation',    label: 'Facturation',     group: 'Commerce' },
     { id: 'catalogue',      label: 'Catalogue',       group: 'Commerce' },
-    { id: 'bilan',          label: 'Bilan comptable', group: 'Commerce' },
-    { id: 'facturesrecues', label: 'Factures reçues', group: 'Commerce' },
 
-    { id: 'eligibilite',    label: 'Éligibilité',     group: 'Stats & Quotas' },
-    { id: 'quotadirect',    label: 'Quota en direct', group: 'Stats & Quotas' },
-    { id: 'statsvue',       label: "Vue d'ensemble",  group: 'Stats & Quotas' },
-    { id: 'statsdash',      label: 'Tableau de bord', group: 'Stats & Quotas' },
-    { id: 'statsgrades',    label: 'Grades & quotas', group: 'Stats & Quotas' },
-    { id: 'statseffectif',  label: 'Effectif',        group: 'Stats & Quotas' },
-    { id: 'statsprimes',    label: 'Primes',          group: 'Stats & Quotas' },
+    { id: 'bilan',          label: 'Bilan comptable', group: 'Comptabilité' },
+    { id: 'facturesrecues', label: 'Factures reçues', group: 'Comptabilité' },
+    { id: 'statsprimes',    label: 'Primes',          group: 'Comptabilité' },
+
+    { id: 'eligibilite',    label: 'Éligibilité',     group: 'Quotas' },
+    { id: 'quotadirect',    label: 'Quota en direct', group: 'Quotas' },
+    { id: 'statsgrades',    label: 'Grades & quotas', group: 'Quotas' },
+    { id: 'quotas3',        label: 'Quotas 3 semaines', group: 'Quotas' },
+
+    { id: 'statsvue',       label: "Vue d'ensemble",  group: 'Gestion' },
+    { id: 'statsdash',      label: 'Tableau de bord', group: 'Gestion' },
 
     { id: 'magcommandes',   label: 'Bons de commande', group: 'Magasin' },
     { id: 'magstock',       label: 'Stock',           group: 'Magasin' },
     { id: 'magrecap',       label: 'Récap magasin',   group: 'Magasin' },
 
     { id: 'cloture',        label: 'Clôture du lundi', group: 'Gestion' },
-    { id: 'quotas3',        label: 'Quotas 3 semaines', group: 'Gestion' },
     { id: 'journal',        label: 'Journal',         group: 'Gestion' },
     { id: 'histo',          label: 'Historique',      group: 'Gestion' },
+    { id: 'tombola',        label: 'Tombola',         group: 'Gestion' },
 
-    { id: 'documents',      label: 'Documents',       group: 'Personnel' },
-    { id: 'comrunner',      label: 'Com Runner',      group: 'Personnel' },
-    { id: 'masemaine',      label: 'Ma semaine',      group: 'Personnel' },
-    { id: 'agenda',         label: 'Agenda',          group: 'Personnel' },
-    { id: 'tombola',        label: 'Tombola',         group: 'Personnel' },
+    { id: 'documents',      label: 'Documents',       group: 'Perso' },
+    { id: 'comrunner',      label: 'Com Runner',      group: 'Perso' },
+    { id: 'masemaine',      label: 'Ma semaine',      group: 'Perso' },
+    { id: 'agenda',         label: 'Agenda',          group: 'Perso' },
 
     /* Les écrans d'Administration. Ils étaient réservés au patron sans qu'on
        puisse rien y faire ; ils sont désormais dans la matrice comme les

@@ -6450,10 +6450,11 @@ window.onload = function(){
   const RAIL_ICONES = {
     'rh':        '<path d="M16 21v-2a4 4 0 0 0-8 0v2"/><circle cx="12" cy="8" r="4"/>',
     'commerce':  '<path d="M3 3h18v5H3zM6 8v13h12V8"/><path d="M10 12h4"/>',
-    'stats':     '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+    'comptabilite': '<path d="M3 5h18v14H3Z"/><path d="M3 9h18"/><path d="M8 13h2M8 16h2M14 13h2M14 16h2"/>',
+    'quotas':    '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
     'magasin':   '<path d="M3 7h18l-2 12H5Z"/><path d="M8 7a4 4 0 0 1 8 0"/>',
     'gestion':   '<path d="M4 19V5a2 2 0 0 1 2-2h11l3 3v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><path d="M8 8h7M8 12h7M8 16h4"/>',
-    'personnel': '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18M8 2v4M16 2v4"/>',
+    'perso':     '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18M8 2v4M16 2v4"/>',
     'parametres':'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3 15a2 2 0 0 1-2-2 2 2 0 0 1 2-2 1.6 1.6 0 0 0 1.1-2.7l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 9 4.6 2 2 0 0 1 11 3a2 2 0 0 1 2 2 1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1A1.6 1.6 0 0 0 21 11a2 2 0 0 1 0 4Z"/>',
     'defaut':    '<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>',
   };
@@ -6461,8 +6462,8 @@ window.onload = function(){
   /* Étiquette courte pour le rail : « Stats & Quotas » ne tient pas sous une
      icône de 48 px, et un mot coupé se lit plus mal qu'un mot choisi. */
   const RAIL_COURT = {
-    'rh': 'RH', 'commerce': 'Commerce', 'stats': 'Quotas', 'magasin': 'Magasin',
-    'gestion': 'Gestion', 'personnel': 'Perso', 'parametres': 'Réglages',
+    'rh': 'RH', 'commerce': 'Commerce', 'comptabilite': 'Compta', 'quotas': 'Quotas',
+    'gestion': 'Gestion', 'magasin': 'Magasin', 'perso': 'Perso', 'parametres': 'Réglages',
   };
 
   function railSlug(titre) {
@@ -6471,10 +6472,14 @@ window.onload = function(){
       .replace(/[^a-z0-9]+/g, ' ').trim();
     if (k.startsWith('rh')) return 'rh';
     if (k.startsWith('commerce')) return 'commerce';
-    if (k.startsWith('stats')) return 'stats';
+    if (k.startsWith('compta')) return 'comptabilite';
+    /* « Stats & Quotas » s'appelle « Quotas » depuis que la comptabilité a sa
+       propre section ; l'ancien nom reste reconnu, un menu plus vieux que le
+       rail ne doit pas se retrouver sans icône. */
+    if (k.startsWith('quotas') || k.startsWith('stats')) return 'quotas';
     if (k.startsWith('magasin')) return 'magasin';
     if (k.startsWith('gestion')) return 'gestion';
-    if (k.startsWith('personnel')) return 'personnel';
+    if (k.startsWith('perso')) return 'perso';
     if (k.startsWith('parametre') || k.startsWith('administration')) return 'parametres';
     return k.replace(/\s+/g, '-') || 'defaut';
   }
@@ -8027,7 +8032,8 @@ window.onload = function(){
 
     if (!comRunner.length) {
       fil.innerHTML = `<div class="panel"><p class="empty-note" style="text-align:center;padding:24px;">
-        Rien pour l'instant. Le premier message lance le fil.</p></div>`;
+        Rien pour l'instant. Le fil se remplit tout seul : une demande de retrait,
+        une disponibilité annoncée, et l'entrée s'inscrit ici.</p></div>`;
       return;
     }
 
@@ -8077,26 +8083,10 @@ window.onload = function(){
     D().save('comRunner');
   }
 
-  function envoyerMessage() {
-    const champ = $('crTexte');
-    if (!champ) return;
-    const texte = champ.value.trim();
-    if (!texte) return;
-
-    comRunner.unshift({
-      id: 'M' + Date.now().toString(36),
-      auteur: moiSession(), par: (window.MarloweSession || {}).id || null,
-      texte: texte.slice(0, 800),
-      quand: quandFR(new Date()), type: 'msg',
-    });
-    /* Le fil est plafonné : sans ça il grossirait indéfiniment et finirait
-       par dépasser la taille maximale d'enregistrement. */
-    if (comRunner.length > CR_MAX) comRunner.length = CR_MAX;
-
-    champ.value = '';
-    D().note('a écrit dans le Com Runner');
-    D().save('comRunner');
-  }
+  /* Le champ « Un mot pour l'équipe… » et son envoi ont été retirés de la
+     page : plus rien ne les appelait, ils partent avec. Les entrées de type
+     « msg » déjà enregistrées continuent de s'afficher dans le fil, et on
+     peut toujours y répondre. */
 
   /* --- La demande de retrait ------------------------------------------------
      Le nom n'est pas demandé : il vient de la session Discord. Le serveur
@@ -8309,7 +8299,6 @@ window.onload = function(){
   }
 
   document.addEventListener('click', e => {
-    if (e.target.closest('#crEnvoyer')) { envoyerMessage(); return; }
     if (e.target.closest('#crRetrait')) { demanderRetrait(); return; }
     if (e.target.closest('#crDispo'))   { annoncerDispo(); return; }
 
@@ -8378,10 +8367,7 @@ window.onload = function(){
     if (e.target.id === 'crRepTexte' && e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       if (crRepondreA) crEnvoyerReponse(crRepondreA);
-      return;
     }
-    if (e.target.id !== 'crTexte') return;
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); envoyerMessage(); }
   });
 
   window.MarloweComRunner = comRunner;
