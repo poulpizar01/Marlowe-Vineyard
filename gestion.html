@@ -1518,7 +1518,7 @@
       <div class="primes-titlewrap">
         <p class="eyebrow">Clôture hebdomadaire</p>
         <h1>Semaine 34 — <span class="accent">Primes</span></h1>
-        <p class="primes-sub">du lundi 17 août au dimanche 23 août · prime = vins × multiplicateur, plafonné à 19 000 vins/semaine</p>
+        <p class="primes-sub">du lundi 17 août au dimanche 23 août · prime = vins × multiplicateur, dans la limite du plafond de prime du palier</p>
       </div>
       <div class="primes-actions">
         <button class="pbtn" id="primesExcBtn">Primes exceptionnelles</button>
@@ -2296,7 +2296,9 @@ document.getElementById('sortDir').addEventListener('click', (ev) => {
 });
 
 /* ---- Primes ---- */
-const PLAFOND = 19000;
+/* Les quotas 3 000 / 5 000 / 8 000 sont un MINIMUM de production exigé, pas
+   un maximum servi : il n'y a plus d'écrêtage des vins. Le seul plafond est
+   celui du palier, appliqué par window.mvCalculPrime. */
 const baseQuota = {'Saisonnier':3000, 'Ouvrier Viticole':5000, 'Chef de culture':8000};
 /* Barème officiel : ×1 / ×2 / ×3.
    « Chef de culture » avec un c minuscule ne correspondait à aucun grade :
@@ -2343,7 +2345,7 @@ function primesRows(){
     const prime = window.mvCalculPrime
       ? (window.mvCalculPrime(e.runs, e.rank,
            window.mvPalierCourant ? window.mvPalierCourant() : null, e.name) || null)
-      : (atteint ? Math.min(barils, PLAFOND) * mult : null);
+      : (atteint ? barils * mult : null);
     const recrues = recruesDe(e.name);
     const salaire = salaireDe(e.rank);
     /* La prime de recrutement est une PRIME, pas un salaire : elle se gagne

@@ -2498,7 +2498,7 @@ window.onload = function(){
     const sub = document.querySelector('#page-statsprimes .primes-sub');
     if (sub) {
       sub.textContent = `Prochaine clôture : du ${frDate(start)} au ${frDate(end)} · `
-        + `prime = vins × multiplicateur, plafonné à 19 000 vins/semaine`;
+        + `prime = vins × multiplicateur, dans la limite du plafond de prime du palier`;
     }
     const h = document.querySelector('#page-statsprimes .primes-titlewrap h1');
     if (h) h.innerHTML = `Semaine ${isoWeek(start)} — <span class="accent">Primes</span>`;
@@ -2634,16 +2634,22 @@ window.onload = function(){
      LA formule de prime — une seule, partagée.
      Le fichier d'origine en contenait deux qui ne donnaient pas le même
      résultat : la page Primes plafonnait les vins puis multipliait, le
-     bilan multipliait puis plafonnait la somme. Les deux plafonds existent
-     bel et bien, ils s'appliquent donc l'un après l'autre :
+     bilan multipliait puis plafonnait la somme.
 
-         vins   = runs / 5, écrêtés à PLAFOND (19 000 par semaine)
-         prime  = vins   × multiplicateur du grade
+         vins   = runs / 5        (TOUTE la production compte)
+         prime  = vins × multiplicateur du grade
          prime  = min(prime, plafond de prime du palier)
+
+     L'écrêtage des vins à 19 000 par semaine a disparu. Il inventait un
+     second plafond que personne n'avait demandé : au-delà de 19 000 vins,
+     produire davantage ne rapportait plus rien, et deux personnes aux
+     productions très différentes ressortaient avec la même prime. Les
+     3 000 / 5 000 / 8 000 sont un MINIMUM exigé, pas un maximum servi.
+     Le seul plafond qui reste est celui du palier — celui du bilan
+     comptable, qui est une règle du serveur et se règle dans Règles.
 
      Toute modification de la règle se fait ici et nulle part ailleurs.
      ------------------------------------------------------------------------ */
-  const PLAFOND_BARILS = (typeof PLAFOND !== 'undefined') ? PLAFOND : 19000;
 
   /* Le quota d'une personne vient de SA fiche d'effectif, pas du barème de son
      grade : deux saisonniers peuvent avoir des attentes différentes, et c'est
@@ -2664,7 +2670,7 @@ window.onload = function(){
   window.mvQuotaFiche = quotaDeLaFiche;
 
   window.mvCalculPrime = function (runs, rang, palier, nom) {
-    const barils = Math.min(Math.round((runs || 0) / 5), PLAFOND_BARILS);
+    const barils = Math.round((runs || 0) / 5);
 
     /* Le quota est un SEUIL, pas une part : en dessous, aucune prime ; au-delà,
        la production réelle compte. La règle était appliquée sur la page Primes
