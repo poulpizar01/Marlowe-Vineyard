@@ -1004,7 +1004,7 @@
     /* Le parchemin est un vrai fichier du site. La fenêtre de la facture est
        ouverte vide, donc son adresse de base est « about:blank » : un chemin
        relatif n'y résoudrait rien. On calcule l'adresse absolue ici. */
-    const PARCHEMIN = new URL('img/parchemin.jpg', location.href).href;
+    const PARCHEMIN = new URL('img/parchemin-v2.jpg', location.href).href;
 
     const w = window.open('', '_blank');
     if (!w) { toast('Le navigateur a bloqué la fenêtre. Autorisez les pop-ups.'); return; }
@@ -1063,8 +1063,14 @@
   body{background:#3A342A;font-family:'Cormorant Garamond',Georgia,serif;color:#4A3B22;}
   @media screen{body{padding:26px 0;}}
 
+  /* La feuille a EXACTEMENT les proportions du visuel — 1600 x 1920, soit
+     210 x 252 mm. Le forcer au format A4 étirait le parchemin de 18 % en
+     hauteur : le cadre doré s'allongeait, la grappe se déformait, et le
+     « fond à l'identique » n'en était plus un. Une facture de domaine se
+     regarde à l'écran ; qu'elle laisse un peu de blanc en bas d'une feuille
+     A4 imprimée est sans conséquence, l'inverse ne l'était pas. */
   .sheet{
-    width:210mm;min-height:297mm;margin:0 auto;position:relative;overflow:hidden;
+    width:210mm;height:252mm;margin:0 auto;position:relative;overflow:hidden;
     background:#E6D4A6;   /* teinte de repli si le visuel ne charge pas */
     box-shadow:0 18px 60px rgba(0,0,0,.5);
   }
@@ -1132,13 +1138,25 @@
   tbody tr:first-child td{padding-top:3.4mm;}
   .spacer td{height:5mm;padding:0;}
 
-  .bottom{position:absolute;left:24mm;right:24mm;bottom:28mm;z-index:3;
-    display:flex;justify-content:flex-end;align-items:flex-end;gap:14mm;}
+  /* Sur l'ancien parchemin la villa occupait le coin BAS-GAUCHE : signature et
+     totaux étaient donc poussés ensemble à droite, sur du vide. Le nouveau
+     visuel place la villa au centre-gauche et fait descendre une vigne à
+     droite — le bloc groupé à droite retombait sur le feuillage, et le mot
+     SIGNATURE se perdait dans les toits. On sépare : la signature à gauche,
+     les totaux à droite, chacun sur une zone claire. */
+  .bottom{position:absolute;left:20mm;right:20mm;bottom:22mm;z-index:3;
+    display:flex;justify-content:space-between;align-items:flex-end;gap:10mm;}
   .sig{font-family:'Great Vibes','Segoe Script','Brush Script MT','Apple Chancery',cursive;
     font-size:28pt;color:#3E3118;line-height:1;text-align:center;
     transform:rotate(-2deg);white-space:nowrap;}
+  /* Le mot SIGNATURE tombe désormais sur les rangs de vigne du visuel : en or
+     clair il y disparaissait purement et simplement. Encre sombre et léger
+     halo clair — le même que celui du nom — pour qu'il se lise sur un fond
+     chargé sans faire tache. */
   .sig small{display:block;font-family:'Cinzel',Georgia,serif;font-size:8.5pt;letter-spacing:.16em;
-    color:#8A6E2A;transform:rotate(2deg);margin-top:2mm;}
+    color:#4A3A18;transform:rotate(2deg);margin-top:2mm;
+    text-shadow:0 1px 2px rgba(255,250,235,.75);}
+  .sig{text-shadow:0 1px 3px rgba(255,250,235,.55);}
   .totals{text-align:left;font-size:15pt;font-weight:700;line-height:1.6;color:#2C2210;white-space:nowrap;}
   .totals .fin{font-size:17.5pt;}
   .totals .tva{display:block;font-size:10pt;font-weight:600;color:#6E5526;margin-top:1mm;}
@@ -1185,7 +1203,63 @@
     </div>
   </div>
 </div>
-<script>window.onload = function(){ setTimeout(function(){ window.print(); }, 450); };<\/script>
+<script>
+/* Le tableau ne doit JAMAIS entrer dans le bloc du bas.
+   ---------------------------------------------------------------------------
+   Les paliers de densité ci-dessus avaient été mesurés à la main sur une
+   feuille A4. La feuille suit maintenant les proportions du parchemin et fait
+   45 mm de moins : dès six lignes, le tableau recouvrait les totaux. Plutôt
+   que de re-régler des seuils qui redeviendront faux au prochain visuel, la
+   page se mesure elle-même et se resserre jusqu'à tenir.
+
+   On attend les polices : mesurer avant leur chargement donne des hauteurs
+   fausses, et la correction serait calculée sur une page qui n'existe pas
+   encore. */
+function mvAjusterTable(){
+  var t = document.querySelector('table');
+  var b = document.querySelector('.bottom');
+  if (!t || !b) return;
+  var limite = b.getBoundingClientRect().top - 10;   /* 10 px de respiration */
+  var st = document.createElement('style');
+  document.head.appendChild(st);
+
+  var fs = parseFloat(getComputedStyle(t).fontSize) * 0.75;  /* px -> pt */
+  var py = 2.9, px = 3;
+  var tours = 0;
+  while (t.getBoundingClientRect().bottom > limite && tours < 80) {
+    fs = Math.max(4.5, fs - 0.35);
+    py = Math.max(0.25, py * 0.88);
+    px = Math.max(1.2, px * 0.96);
+    st.textContent =
+      'table{font-size:' + fs.toFixed(2) + 'pt !important;line-height:1.15 !important;}' +
+      'table tbody td{padding:' + py.toFixed(2) + 'mm ' + px.toFixed(2) + 'mm !important;}' +
+      'table thead th{padding:' + (py + 0.4).toFixed(2) + 'mm ' + px.toFixed(2) + 'mm !important;' +
+        'font-size:' + Math.max(4.5, fs - 0.5).toFixed(2) + 'pt !important;}' +
+      'tbody tr:first-child td{padding-top:' + (py + 0.5).toFixed(2) + 'mm !important;}' +
+      '.spacer td{height:' + Math.max(0, 5 - tours * 0.2).toFixed(1) + 'mm !important;}';
+    tours++;
+    if (fs <= 5 && py <= 0.25) break;   /* en dessous, plus personne ne lit */
+  }
+
+  /* Il reste des factures qu'aucun resserrement ne fait tenir — quarante
+     lignes et plus. Trois issues possibles : rendre le texte illisible, en
+     couper la fin, ou allonger la feuille. Sur une FACTURE, cacher des lignes
+     est la seule qui soit vraiment grave : on allonge. Le parchemin s'étire un
+     peu sur ces cas-là, mais rien n'est perdu ni illisible. */
+  var manque = t.getBoundingClientRect().bottom - limite;
+  if (manque > 0) {
+    var f = document.querySelector('.sheet');
+    f.style.height = (f.offsetHeight + manque + 14) + 'px';
+  }
+}
+window.onload = function(){
+  var pret = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
+  pret.then(function(){
+    mvAjusterTable();
+    setTimeout(function(){ window.print(); }, 450);
+  });
+};
+<\/script>
 </body></html>`);
     w.document.close();
   }
