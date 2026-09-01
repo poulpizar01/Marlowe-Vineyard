@@ -450,7 +450,14 @@
         tier: TIER_BY_POSTE[canon] || 'clay',
         dept: DEPT_BY_POSTE[canon] || 'terrain',
         rec: '—', date, status: 'actif',
+        /* Ce lecteur-là ne rapporte NI téléphone, NI RIB, NI Discord, NI
+           recruteur : le registre du jeu ne les porte pas. Les laisser vides
+           est juste — mais c'est exactement ce qui vidait les fiches quand
+           l'import écrasait au lieu de fusionner. */
         phone: '', rib: '', discord: '',
+        /* « — » veut dire « pas de date dans le collage » : la fusion ne doit
+           pas s'en servir pour remplacer une date d'arrivée déjà connue. */
+        dateFournie: date !== '—',
       });
     });
 
@@ -526,6 +533,11 @@
         dept: DEPT_BY_POSTE[canon] || 'terrain',
         rec: (rec || '—').trim(),
         date: /^\d{2}\/\d{2}\/\d{4}$/.test(String(date || '').trim()) ? date.trim() : todayFR(),
+        /* Une date absente est remplacée par celle du jour — acceptable pour
+           une NOUVELLE fiche, désastreux sur une fiche existante : toutes les
+           dates d'arrivée se retrouvaient au jour de l'import. La fusion a
+           besoin de savoir si la date vient vraiment du collage. */
+        dateFournie: /^\d{2}\/\d{2}\/\d{4}$/.test(String(date || '').trim()),
         status: 'actif',
         phone: (tel || '').trim(),
         rib: (rib || '').trim(),
@@ -622,6 +634,42 @@
     if (b) modifierEmploye(b.dataset.empEdit);
   });
 
+  /* Fusionner une fiche importée dans une fiche existante.
+     -------------------------------------------------------------------------
+     Le mode « Remplacer » vidait le registre et reposait les fiches lues : tout
+     ce qui avait été saisi à la main — identifiant Discord, téléphone, RIB,
+     recruteur, permis, statut — partait avec. Ce n'était pas un effet de bord
+     mais le comportement écrit, et il coûtait une soirée de ressaisie à chaque
+     mise à jour de la liste.
+
+     La règle tient en une phrase : le collage ENRICHIT, il n'efface jamais.
+     Une valeur vide dans le collage laisse en place celle du registre ; une
+     valeur pleine la remplace. On part de la fiche existante, donc tout ce que
+     l'import ne connaît pas — le permis, une note, un champ ajouté plus tard —
+     survit sans qu'on ait à le lister ici. */
+  function fusionnerFiche(ancienne, neuve) {
+    const plein = v => String(v == null ? '' : v).trim() !== ''
+                    && String(v).trim() !== '—';
+    const f = Object.assign({}, ancienne);
+
+    ['name', 'poste', 'phone', 'rib', 'discord', 'rec'].forEach(k => {
+      if (plein(neuve[k])) f[k] = neuve[k];
+    });
+    /* La date d'arrivée ne bouge que si le collage en portait vraiment une. */
+    if (neuve.dateFournie && plein(neuve.date)) f.date = neuve.date;
+
+    /* Le sceau et le pôle découlent du poste : si le poste a changé, ils
+       doivent suivre, sinon la fiche afficherait l'ancien rang. */
+    if (f.poste !== ancienne.poste) {
+      const canon = posteCanonique(f.poste) || f.poste;
+      f.tier = TIER_BY_POSTE[canon] || ancienne.tier || 'clay';
+      f.dept = DEPT_BY_POSTE[canon] || ancienne.dept || 'terrain';
+    }
+    if (plein(f.name)) f.init = initialsOf(String(f.name).trim());
+    delete f.dateFournie;
+    return f;
+  }
+
   async function importerListeRH() {
     ensureDialog();
     const d = dlg.querySelector('.mv-dlg');
@@ -695,10 +743,15 @@
         </table>
         ${fiches.length > 6 ? `<div class="mv-imp-reste">…et ${fiches.length - 6} autre(s)</div>` : ''}
       </div>
-      <label class="mv-reset-l"><input type="radio" name="mvImpMode" value="remplacer" checked>
-        <span>Remplacer le registre (${rhRosterData.length} fiche(s) actuelle(s) effacée(s))</span></label>
+      <label class="mv-reset-l"><input type="radio" name="mvImpMode" value="fusionner" checked>
+        <span><b>Mettre à jour le registre</b> — ${dejaLa} fiche(s) déjà connue(s) sont enrichies,
+          ${fiches.length - dejaLa} ajoutée(s). Ce que le collage ne porte pas — identifiant Discord,
+          téléphone, RIB, permis, statut — <b>reste en place</b>.</span></label>
       <label class="mv-reset-l"><input type="radio" name="mvImpMode" value="ajouter">
-        <span>Ajouter au registre, en sautant les n° civils déjà connus</span></label>
+        <span>Ajouter seulement les nouveaux, sans toucher aux fiches connues</span></label>
+      <label class="mv-reset-l"><input type="radio" name="mvImpMode" value="remplacer">
+        <span>Remplacer entièrement — les ${rhRosterData.length} fiche(s) actuelle(s) sont effacées,
+          <b>y compris tout ce qui a été saisi à la main</b>. À ne choisir que pour repartir de zéro.</span></label>
       <div class="mv-dlg-btns">
         <button data-no>Annuler</button>
         <button data-yes class="go">Enregistrer</button>
@@ -715,18 +768,30 @@
     d2.style.maxWidth = '';
     if (!mode) return;
 
-    let ajoutees = 0;
+    let ajoutees = 0, majs = 0;
+    const propre = f => { const x = Object.assign({}, f); delete x.dateFournie; return x; };
+
     if (mode === 'remplacer') {
       rhRosterData.length = 0;
-      fiches.forEach(f => rhRosterData.push(f));
+      fiches.forEach(f => rhRosterData.push(propre(f)));
       ajoutees = fiches.length;
-    } else {
+    } else if (mode === 'ajouter') {
       const connus = new Set(rhRosterData.map(e => String(e.id)));
       fiches.forEach(f => {
         if (connus.has(String(f.id))) return;
-        rhRosterData.push(f);
+        rhRosterData.push(propre(f));
         connus.add(String(f.id));
         ajoutees++;
+      });
+    } else {
+      /* Mise à jour : on enrichit ce qui existe, on ajoute ce qui manque, et
+         on ne SUPPRIME personne. Quelqu'un absent du collage reste au
+         registre — un employé s'en va par « Déclarer un départ », pas parce
+         qu'on a oublié sa ligne dans un copier-coller. */
+      fiches.forEach(f => {
+        const i = rhRosterData.findIndex(e => String(e.id) === String(f.id));
+        if (i >= 0) { rhRosterData[i] = fusionnerFiche(rhRosterData[i], f); majs++; }
+        else { rhRosterData.push(propre(f)); ajoutees++; }
       });
     }
 
@@ -739,12 +804,14 @@
 
     recomputeRecruiters();
     refreshEffectifCount();
-    D().note(`a importé ${ajoutees} fiche(s) employé`);
+    D().note(`a importé ${ajoutees} fiche(s) employé`
+           + (majs ? ` et mis à jour ${majs} fiche(s)` : ''));
     D().saveMany(['rhRoster', 'rhRecruiters']);
 
     /* Le registre vient de changer : l'effectif de production en découle. */
     const sync = syncEffectifEtEnregistrer(true);
-    toast(`${ajoutees} fiche(s) enregistrée(s)`
+    toast(`${ajoutees} fiche(s) ajoutée(s)`
+        + (majs ? ` · ${majs} mise(s) à jour sans rien perdre` : '')
         + (sync.crees ? ` · ${sync.crees} fiche(s) de production créée(s)` : ''));
   }
 
