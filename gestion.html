@@ -2491,7 +2491,7 @@ const rhDeparts = [];
 function renderDeparts(){
 /* Une entrée sans .rows — vieille donnée écrite à plat — cassait toute la
    page. On la rattrape au lieu de la laisser tout emporter. */
-document.getElementById('departCard').innerHTML = rhDeparts
+const corps = rhDeparts
   .map(w => (w && Array.isArray(w.rows)) ? w : {week: (w && w.date) || '—', rows: [w]})
   .map(w => `
   <div class="week-label">${w.week}</div>
@@ -2502,6 +2502,11 @@ document.getElementById('departCard').innerHTML = rhDeparts
     </div>
   `).join('')}
 `).join('');
+/* La règle est écrite sous la liste : sans ça, un départ disparu passerait
+   pour une perte de données. */
+document.getElementById('departCard').innerHTML = (corps
+  || `<p class="empty-note" style="text-align:center;padding:18px 0 6px;">Aucun départ sur les deux dernières semaines.</p>`)
+  + `<p class="empty-note" style="margin-top:14px;font-size:11px;opacity:.65;">Le registre ne garde que la semaine en cours et la précédente. Les départs plus anciens sont effacés automatiquement.</p>`;
 }
 renderDeparts();
 

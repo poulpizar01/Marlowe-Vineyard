@@ -179,6 +179,43 @@
     if (el) el.textContent = rhRosterData.filter(e => e.status === 'actif').length;
   }
 
+  /* Le registre des départs ne garde que DEUX semaines.
+     -------------------------------------------------------------------------
+     Celle en cours et la précédente — assez pour la clôture du lundi, qui ne
+     regarde jamais plus loin. Au-delà, la liste s'allongeait indéfiniment
+     sans que personne ne la relise, et chaque ligne restait stockée pour
+     toujours.
+
+     L'élagage se fait sur le LIBELLÉ de semaine, celui-là même qui groupe les
+     lignes à l'écran, plutôt que sur les dates des lignes : c'est le seul
+     repère que porte le groupe. Ce libellé n'a pas d'année (« Semaine du
+     24/08 ») ; un groupe vieux d'un an exactement pourrait donc survivre une
+     semaine de plus avant de disparaître. Ça reste vrai une fois par an au
+     pire, et le contenu tombe de toute façon la semaine suivante.
+
+     Une entrée sans libellé de semaine — vieille donnée écrite à plat, que
+     renderDeparts rattrape encore pour ne pas casser la page — est par
+     construction plus vieille que ça : elle part aussi. */
+  const DEPARTS_SEMAINES_GARDEES = 2;
+
+  function elaguerDeparts() {
+    if (typeof rhDeparts === 'undefined' || !Array.isArray(rhDeparts)) return false;
+
+    const gardes = [];
+    for (let i = 0; i < DEPARTS_SEMAINES_GARDEES; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() - 7 * i);
+      gardes.push(weekLabel(d));
+    }
+
+    const restant = rhDeparts.filter(g => g && gardes.includes(g.week));
+    if (restant.length === rhDeparts.length) return false;
+
+    rhDeparts.length = 0;
+    restant.forEach(g => rhDeparts.push(g));
+    return true;
+  }
+
   /* Déclarer un départ : l'employé quitte le registre et rejoint
      l'historique des départs, groupé par semaine. */
   async function declareDeparture(id) {
@@ -208,6 +245,7 @@
     else rhDeparts.unshift({ week: label, rows: [row] });
 
     rhRosterData.splice(i, 1);
+    elaguerDeparts();
     refreshEffectifCount();
     D().note(`a déclaré le départ de ${emp.name} (${res.reason})`);
     D().saveMany(['rhRoster', 'rhDeparts']);
@@ -4899,6 +4937,10 @@ window.onload = function(){
        on remplace la version du fichier d'origine. */
     window.renderEligibilite = renderEligibilite;
 
+    /* Les semaines passées s'en vont au démarrage, avant le premier
+       affichage : la liste ne montre jamais ce qu'elle ne garde plus. */
+    if (elaguerDeparts()) { D().save('rhDeparts'); D().redraw('rhDeparts'); }
+
     recomputeRecruiters();
     refreshEffectifCount();
     refreshClientCounts();
@@ -9222,7 +9264,7 @@ window.onload = function(){
   window.MarloweActions = {
     recomputeRecruiters, refreshEffectifCount, reprintInvoice,
     refreshWeekDays, refreshWeekHeaders, renderEligibilite, closeWeek, undoClose,
-    renderBilan, renderWeekHistory, copyDetailGDoc, copyDepensesGDoc,
+    renderBilan, renderWeekHistory, copyDetailGDoc, copyDepensesGDoc, elaguerDeparts,
     renderHistorique, renderPrimesExc, addPrimeExceptionnelle,
     renderCloture, renderEffectifHead, refreshEffectifFilters, applyEffectifFilter,
     verifierVersion, battementPresence, renderPresence, setZoom, toggleFullscreen,
