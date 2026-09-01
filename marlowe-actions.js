@@ -2628,7 +2628,14 @@ window.onload = function(){
        Dépenses          = salaires + primes + factures reçues
      ======================================================================== */
 
-  const DIR_RANKS = () => (typeof bcDirectionRanks !== 'undefined' ? bcDirectionRanks : ['Patron', 'Co-Patron']);
+  /* La colonne « dir. » du barème est celle du PATRON, et de lui seul.
+     -------------------------------------------------------------------------
+     Elle s'appelle « direction » dans le barème du serveur, ce qui a fait
+     croire — à moi comme au fichier d'origine — qu'elle couvrait toute la
+     direction. Elle ne couvre que le Patron : ni le Co-Patron ni le
+     Responsable Commercial n'y ont droit, ils sont plafonnés comme les
+     employés. Salaire ET prime, la même règle pour les deux colonnes. */
+  const RANGS_PATRON = () => (typeof bcRangsPatron !== 'undefined' ? bcRangsPatron : ['Patron']);
 
   /* ------------------------------------------------------------------------
      LA formule de prime — une seule, partagée.
@@ -2684,8 +2691,8 @@ window.onload = function(){
     let prime = barils * mult;
     /* Le plafond du palier : « sans dépasser le max » du bilan comptable. */
     if (palier) {
-      const dir = DIR_RANKS().includes(rang);
-      prime = Math.min(prime, dir ? palier.primeDir : palier.primeEmp);
+      const patron = RANGS_PATRON().includes(rang);
+      prime = Math.min(prime, patron ? palier.primeDir : palier.primeEmp);
     }
     return Math.round(prime);
   };
@@ -2838,17 +2845,17 @@ window.onload = function(){
 
     /* Les salaires sont plafonnés par le palier, et entrent dans le calcul
        qui détermine ce même palier. Deux passes suffisent à se stabiliser. */
-    const isDir = r => DIR_RANKS().includes(r);
+    const estPatron = r => RANGS_PATRON().includes(r);
     let idx = pickPalier(caTotal - rows.reduce((s, e) => s + (e.salaire || 0), 0) - autres);
     for (let pass = 0; pass < 2; pass++) {
       const p = bareme[idx] || { salEmp: 0, salDir: 0 };
-      const sal = rows.reduce((s, e) => s + Math.min(e.salaire || 0, isDir(e.rank) ? p.salDir : p.salEmp), 0);
+      const sal = rows.reduce((s, e) => s + Math.min(e.salaire || 0, estPatron(e.rank) ? p.salDir : p.salEmp), 0);
       idx = pickPalier(caTotal - sal - autres);
     }
     const palier = bareme[idx] || { taux: 0, salEmp: 0, salDir: 0, primeEmp: 0, primeDir: 0 };
 
     const detail = rows.map(e => {
-      const dir = isDir(e.rank);
+      const patron = estPatron(e.rank);
       const exc = e.exEmploye ? 0
         : primesExc.filter(x => x.nom === e.name).reduce((s, x) => s + x.montant, 0);
       /* Un ancien employé apporte sa production et rien d'autre : plus de
@@ -2859,8 +2866,8 @@ window.onload = function(){
         prime: Math.round(prime),
         primeExc: exc,
         salairePlafonne: e.exEmploye ? 0
-          : Math.round(Math.min(e.salaire || 0, dir ? palier.salDir : palier.salEmp)),
-        isDir: dir,
+          : Math.round(Math.min(e.salaire || 0, patron ? palier.salDir : palier.salEmp)),
+        isDir: patron,
       });
     });
 

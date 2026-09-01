@@ -1131,8 +1131,8 @@
         </div>
         <div class="bilan-chips">
           <div class="bilan-chip">Taux : <b id="bcTaux">—</b></div>
-          <div class="bilan-chip">Plafond salaire : <b id="bcSalCap">—</b> emp/dir</div>
-          <div class="bilan-chip">Plafond prime : <b id="bcPrimeCap">—</b> emp/dir</div>
+          <div class="bilan-chip">Plafond salaire : <b id="bcSalCap">—</b> emp/patron</div>
+          <div class="bilan-chip">Plafond prime : <b id="bcPrimeCap">—</b> emp/patron</div>
           <div class="bilan-chip accent" style="padding:0;">
             <!-- Le fond et le chevron sont laissés à marlowe-liste.js : un style
                  « background » écrit ici l'emporterait sur lui, et la liste
@@ -1150,7 +1150,7 @@
       <div class="panel" id="baremePanel" style="display:none;">
         <h3>Barème progressif — palier actuel : <span id="palierActuel">—</span>/13</h3>
         <table class="bareme-table">
-          <thead><tr><th></th><th>Bénéfice min</th><th>Bénéfice max</th><th>Taux</th><th>Sal. max emp.</th><th>Sal. max dir.</th><th>Prime max emp.</th><th>Prime max dir.</th><th></th></tr></thead>
+          <thead><tr><th></th><th>Bénéfice min</th><th>Bénéfice max</th><th>Taux</th><th>Sal. max emp.</th><th>Sal. max patron</th><th>Prime max emp.</th><th>Prime max patron</th><th></th></tr></thead>
           <tbody id="baremeBody"></tbody>
         </table>
         <p class="empty-note" style="margin-top:12px;">Palier déterminé par le bénéfice imposable (avant primes) — règle officielle. Le barème de référence s'édite dans Paramètres.</p>
@@ -1184,7 +1184,7 @@
       </div>
 
       <div class="panel" style="margin-bottom:16px;background:rgba(214,167,92,.07);border-color:rgba(214,167,92,.3);">
-        <p style="margin:0;font-size:12px;color:var(--amber);">⚠ Plafonds appliqués : employés <span id="bcPlafondEmp">—</span> · direction <span id="bcPlafondDir">—</span> — modifiables en haut de page. Ajoute les dépenses et retraits dans Factures reçues.</p>
+        <p style="margin:0;font-size:12px;color:var(--amber);">⚠ Plafonds appliqués : employés <span id="bcPlafondEmp">—</span> · patron <span id="bcPlafondDir">—</span> — modifiables en haut de page. Ajoute les dépenses et retraits dans Factures reçues.</p>
       </div>
 
       <div class="grid2">
@@ -3050,7 +3050,11 @@ document.getElementById('bcEffectif').textContent = rhRosterData.filter(e => e.s
    deux tables en dur qui ne disaient pas la même chose, c'était deux masses
    salariales différentes selon la page qu'on regardait. */
 const bcSalaireDe = r => (window.mvSalaireGrade ? window.mvSalaireGrade(r) : 0);
-const bcDirectionRanks = ['Patron', 'Co-Patron', 'Responsable Commercial'];
+/* La colonne « dir. » du barème est celle du PATRON seul : ni le Co-Patron
+   ni le Responsable Commercial n'y ont droit, ils sont plafonnés comme les
+   employés — salaire comme prime. Le nom « direction » du barème du serveur
+   laissait croire le contraire, et cette liste en comptait trois. */
+const bcRangsPatron = ['Patron'];
 let bcRows = dash.map(e => ({
   name: e.name, rank: e.rank,
   runs: e.runs, factures: e.factures, ventes: e.ventes,
@@ -3061,7 +3065,7 @@ let bcRows = dash.map(e => ({
 function bcRenderDetail(){
   document.getElementById('bcDetailCount').textContent = bcRows.length;
   document.getElementById('bcDetailBody').innerHTML = bcRows.map(e => {
-    const isDir = bcDirectionRanks.includes(e.rank);
+    const isDir = bcRangsPatron.includes(e.rank);
     const primeCap = isDir ? palier.primeDir : palier.primeEmp;
     const barils = Math.round(e.runs / 5);
     const mult = multDe(e.rank);
