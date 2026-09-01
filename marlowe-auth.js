@@ -566,8 +566,19 @@
   .mv-logout:hover{border-color:var(--bordeaux-soft,#8A3540);color:#E08A7A;}
 
   /* ---------- page Paramètres ---------- */
-  /* Pas de hauteur limitée : c'est la page qui défile, pas un cadre interne. */
-  .mv-matrix-wrap{overflow-x:auto;border:1px solid var(--band,#3D372C);
+  /* La ligne des rôles est en position:sticky depuis toujours, et elle ne
+     collait à rien : « overflow-x:auto » suffit à faire de ce cadre un
+     conteneur de défilement, et un en-tête collant se colle au HAUT DE SON
+     CONTENEUR, pas à celui de la page. Le cadre ne défilant pas
+     verticalement, l'en-tête n'avait nulle part où tenir — il partait avec le
+     reste dès qu'on descendait dans la page.
+
+     Le cadre défile donc lui-même, dans les deux sens, borné à la hauteur de
+     l'écran. La ligne des rôles tient en haut, la colonne « Page » tient à
+     gauche, et la molette continue d'entraîner la page une fois le tableau
+     parcouru. */
+  .mv-matrix-wrap{overflow:auto;max-height:calc(100vh - 200px);
+    border:1px solid var(--band,#3D372C);
     border-radius:12px;background:#221F1A;}
 
   .mv-rolepick{border:1px solid var(--band,#3D372C);border-radius:12px;background:#221F1A;
@@ -585,12 +596,16 @@
   table.mv-matrix th,table.mv-matrix td{padding:9px 12px;border-bottom:1px solid rgba(61,55,44,.6);}
   table.mv-matrix thead th{position:sticky;top:0;z-index:3;background:#26231E;
     font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--or-soft,#8E7C4E);
-    font-weight:600;text-align:center;white-space:nowrap;vertical-align:bottom;}
+    font-weight:600;text-align:center;white-space:nowrap;vertical-align:bottom;
+    /* Un trait sous l'en-tête : sans lui, une ligne collée par-dessus les
+       autres se lit comme une ligne du tableau. */
+    box-shadow:0 1px 0 rgba(201,169,97,.3);}
   table.mv-matrix thead th:first-child{left:0;z-index:4;text-align:left;}
   table.mv-matrix tbody th{position:sticky;left:0;z-index:2;background:#221F1A;
     text-align:left;font-weight:500;color:var(--parchment,#EDE3CF);white-space:nowrap;}
   table.mv-matrix tr.mv-group-row th{background:#2C2822;color:var(--or,#C9A961);
     font-family:'Fraunces',serif;font-size:12.5px;font-weight:600;z-index:2;}
+  .mv-group-lab{position:sticky;left:12px;display:inline-block;}
   table.mv-matrix td{text-align:center;}
   table.mv-matrix tbody td{background:#221F1A;}
   table.mv-matrix tbody tr:hover td{background:#2B2721;}
@@ -1140,7 +1155,12 @@
 
     let rows = '';
     groups.forEach(g => {
-      rows += `<tr class="mv-group-row"><th colspan="${otherRoles.length + 2}">${esc(g)}</th></tr>`;
+      /* Le titre de groupe est dans un <span> et non posé à même la cellule :
+         une cellule qui occupe toute la largeur de la ligne n'a aucun jeu pour
+         glisser, donc position:sticky ne peut rien pour elle et le titre
+         partait à gauche dès qu'on faisait défiler le tableau. Le span, lui,
+         a toute la cellule pour se déplacer. */
+      rows += `<tr class="mv-group-row"><th colspan="${otherRoles.length + 2}"><span class="mv-group-lab">${esc(g)}</span></th></tr>`;
       PAGES.filter(p => p.group === g).forEach(p => {
         rows += `<tr data-page="${esc(p.id)}">
           <th>${esc(p.label)}<button class="mv-rowbtn" data-toggle-row="${esc(p.id)}">tout</button></th>
