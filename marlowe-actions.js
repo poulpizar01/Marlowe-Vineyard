@@ -293,16 +293,41 @@
 
      La fenêtre est la semaine du domaine : lundi 00 h 00 au dimanche 23 h 59,
      via mondayOf(). Une arrivée de la semaine dernière ne compte plus. */
-  function recruesSemaine(roster) {
+  /* Les noms se comparent par clefNom, jamais caractère par caractère : la
+     tablette écrit « Julio Cortes » là où le registre porte « Julio cortes »,
+     et une majuscule ne doit pas faire perdre une prime de recrutement. Le
+     nom AFFICHÉ reste celui du registre, tel qu'il y est écrit. */
+  function recruesSemaineDetail(roster) {
+    const liste = roster || [];
     const now = new Date();
-    const out = {};
-    (roster || []).forEach(e => {
+    const par = new Map();
+    liste.forEach(e => {
       const d = parseFR(e && e.date);
       if (!d || !sameWeek(d, now)) return;
-      const rec = String((e.rec || '').trim());
-      if (!rec || rec === '—') return;
-      out[rec] = (out[rec] || 0) + 1;
+      const brut = String((e.rec || '').trim());
+      if (!brut || brut === '—') return;
+      const k = clefNom(brut);
+      if (!k) return;
+      if (par.has(k)) par.get(k).n++;
+      else par.set(k, { nom: brut, n: 1 });
     });
+
+    /* Le nom affiché est celui de la FICHE du recruteur quand elle existe :
+       un « julio cortes » saisi à la va-vite sur une recrue s'affiche comme
+       le registre l'écrit, et la carte des recruteurs cesse de mélanger deux
+       orthographes de la même personne. */
+    par.forEach((v, k) => {
+      const f = liste.find(x => x && clefNom(x.name) === k);
+      if (f && f.name) v.nom = String(f.name).trim();
+    });
+
+    return [...par.values()];
+  }
+
+  /* La forme dont la page Primes a besoin : clef normalisée → nombre. */
+  function recruesSemaine(roster) {
+    const out = {};
+    recruesSemaineDetail(roster).forEach(r => { out[clefNom(r.nom)] = r.n; });
     return out;
   }
 
@@ -350,19 +375,11 @@
   }
 
   function recomputeRecruiters() {
-    const now = new Date();
-    const tally = new Map();
-
-    rhRosterData.forEach(e => {
-      const d = parseFR(e.date);
-      if (!d || !sameWeek(d, now)) return;
-      const rec = (e.rec || '—').trim();
-      tally.set(rec, (tally.get(rec) || 0) + 1);
-    });
-
-    const rows = [...tally.entries()]
-      .map(([name, n]) => ({ name, n }))
-      .sort((a, b) => b.n - a.n);
+    /* Le même calcul que la page Primes, et non plus une copie qui comptait
+       « Julio Cortes » et « Julio cortes » comme deux personnes. */
+    const rows = recruesSemaineDetail(rhRosterData)
+      .map(r => ({ name: r.nom, n: r.n }))
+      .sort((a, b) => b.n - a.n || parNom(a.name, b.name));
 
     rhRecruiters.length = 0;
     rows.forEach(r => rhRecruiters.push(r));
@@ -9408,7 +9425,8 @@ window.onload = function(){
     railConstruire, railSynchroniser, allerA,
     totalPrimeRecrutement,
     agendaVisible, AGENDA_NIVEAUX,
-    basculerPermis, rappelerPermis, estIdDiscord, recruesSemaine,
+    basculerPermis, rappelerPermis, estIdDiscord, recruesSemaine, recruesSemaineDetail,
+    clefNom,
     enregistrerAvertissement, niveauSuivant, notifierAvertissement,
     retrograderEmploye, actionSousQuota,
     renderQuotaDirect,

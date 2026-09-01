@@ -2332,11 +2332,26 @@ const multDe = r => (window.mvMultGrade ? window.mvMultGrade(r) : (multiplierFor
    départ. Le registre porte déjà la réponse — chaque fiche a son recruteur et
    sa date d'arrivée — et la fenêtre est celle du lundi au dimanche, comme
    partout ailleurs dans le panel. */
-function recruesDe(nom){
-  const roster = (typeof rhRosterData !== 'undefined') ? rhRosterData : [];
+/* La table des recrues de la semaine, construite une seule fois par rendu :
+   la demander ligne par ligne relisait tout le registre à chaque employé.
+   Et la comparaison passe par clefNom — la tablette et le registre n'écrivent
+   pas toujours un nom avec les mêmes majuscules. */
+function recruesTable(){
   const A = window.MarloweActions;
-  if (!A || !A.recruesSemaine) return 0;
-  return A.recruesSemaine(roster)[String(nom || '').trim()] || 0;
+  if (!A || !A.recruesSemaine) return {};
+  /* Au tout premier rendu, ce script n'a pas ENCORE declare rhRosterData :
+     renderPrimes() s'execute quelques lignes plus haut. Un const pas encore
+     initialise fait tomber tout le script — y compris interroge par typeof,
+     qui leve lui aussi dans ce cas. D'ou le try. Le registre arrive juste
+     apres, et le rendu suivant a le bon compte. */
+  let roster;
+  try { roster = rhRosterData; } catch (e) { return {}; }
+  return A.recruesSemaine(roster || []);
+}
+function recruesDe(nom, table){
+  const A = window.MarloweActions;
+  if (!A || !A.clefNom) return 0;
+  return (table || recruesTable())[A.clefNom(nom)] || 0;
 }
 /* Le salaire vient du barème par grade réglé dans Administration ▸ Règles.
    Avant, deux personnes étaient nommées en dur ici et tout le monde touchait
@@ -2347,6 +2362,7 @@ function primesRows(){
   /* Le palier une seule fois pour toute la page : le demander ligne par ligne
      recalculerait le bilan entier à chaque employé. */
   const pal = window.mvPalierCourant ? window.mvPalierCourant() : null;
+  const recrues1 = recruesTable();
   return dash.map(e => {
     const barils = Math.round(e.runs / 5);
     /* Le quota vient de la fiche d'effectif de la personne, pas du barème de
@@ -2363,7 +2379,7 @@ function primesRows(){
       ? (window.mvCalculPrime(e.runs, e.rank,
            window.mvPalierCourant ? window.mvPalierCourant() : null, e.name) || null)
       : (atteint ? barils * mult : null);
-    const recrues = recruesDe(e.name);
+    const recrues = recruesDe(e.name, recrues1);
     /* Le salaire est plafonné par le palier, exactement comme dans le bilan.
        Cette page affichait le salaire BRUT du grade : elle annonçait donc une
        paie que le bilan écrêtait ensuite, et les deux totaux ne tombaient pas
