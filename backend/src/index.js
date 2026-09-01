@@ -2194,6 +2194,12 @@ async function handleLogout(request, env) {
    · un événement créé moins de trois heures avant son début ne déclenche
      rien. Il est déjà passé sous la fenêtre au moment où on l'écrit, et
      inventer un rappel « tout de suite » n'aiderait personne.
+
+   Le message part par le BOT, pas par un webhook. Le bot sait déjà écrire
+   dans un salon — c'est ainsi que partent les rappels de permis — et un
+   identifiant de salon n'est pas un secret : il se lit dans wrangler.toml,
+   au vu de tous, là où une adresse de webhook aurait dû être posée à part et
+   protégée. Une autorisation de moins à faire circuler.
    ========================================================================== */
 
 const RAPPEL_AVANT_MS = 3 * 3600 * 1000;
@@ -2219,6 +2225,14 @@ function instantParis(dateFR, heure) {
      décalage À CET INSTANT-LÀ. */
   const approx = mur - decalageParis(mur);
   return mur - decalageParis(approx);
+}
+
+/* Les rôles à réveiller, séparés par des virgules dans wrangler.toml. On ne
+   garde que ce qui ressemble à un identifiant Discord : une virgule en trop
+   ou un nom de rôle glissé par erreur ne doit pas partir dans le message. */
+function rolesAgenda(env) {
+  return String(env.DISCORD_AGENDA_ROLES || '')
+    .split(',').map(r => r.trim()).filter(r => /^\d{17,20}$/.test(r));
 }
 
 function messageRappel(e, mention) {
@@ -2247,18 +2261,17 @@ function cleRappel(e) {
 }
 
 async function rappelsAgenda(env) {
-  const url = String(env.DISCORD_AGENDA_WEBHOOK || '').trim();
-  /* Pas de webhook, pas de rappel — et surtout pas d'erreur : le domaine peut
-     très bien ne pas vouloir de cette annonce. */
-  if (!/^https:\/\/discord(app)?\.com\/api\/webhooks\//.test(url)) return { envoyes: 0, raison: 'pas_de_webhook' };
+  const salon = String(env.DISCORD_AGENDA_CHANNEL || '').trim();
+  /* Pas de salon déclaré, pas de rappel — et surtout pas d'erreur : le domaine
+     peut très bien ne pas vouloir de cette annonce. */
+  if (!/^\d{17,20}$/.test(salon)) return { envoyes: 0, raison: 'pas_de_salon' };
 
   const d = await base(env).get('data', 'json');
   const cibles = evenementsARappeler(d && d.agenda, Date.now());
   if (!cibles.length) return { envoyes: 0 };
 
-  const role = String(env.DISCORD_AGENDA_ROLE || '').trim();
-  const roleOk = /^\d{17,20}$/.test(role);
-  const mention = roleOk ? `<@&${role}> ` : '';
+  const roles = rolesAgenda(env);
+  const mention = roles.length ? roles.map(r => `<@&${r}>`).join(' ') + ' ' : '';
 
   let envoyes = 0;
   for (const e of cibles) {
@@ -2268,14 +2281,13 @@ async function rappelsAgenda(env) {
 
     let ok = false;
     try {
-      const r = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          content: messageRappel(e, mention),
-          username: 'Marlowe Vineyard',
-          allowed_mentions: roleOk ? { parse: [], roles: [role] } : { parse: [] },
-        }),
+      const r = await botPost(env, `/channels/${salon}/messages`, {
+        content: messageRappel(e, mention),
+        /* Sans cette liste, Discord accepte le message et ne réveille
+           personne — en silence, avec un code 200. Et « parse: [] » interdit
+           @everyone : un rappel d'agenda n'a pas à sonner chez tout le
+           serveur, même si quelqu'un écrit « @everyone » dans un titre. */
+        allowed_mentions: { parse: [], roles },
       });
       ok = !!(r && r.ok);
     } catch (err) { ok = false; }
@@ -2358,10 +2370,9 @@ export default {
           salonLogs: /^\d{17,20}$/.test(String(env.DISCORD_LOGS_CHANNEL || '')),
           roleDispo: /^\d{17,20}$/.test(String(env.DISCORD_DISPO_ROLE || '')),
           /* De quoi vérifier d'un coup d'œil que le rappel d'agenda est en
-             place : le webhook posé, et le rôle à réveiller déclaré. */
-          webhookAgenda: /^https:\/\/discord(app)?\.com\/api\/webhooks\//
-            .test(String(env.DISCORD_AGENDA_WEBHOOK || '').trim()),
-          roleAgenda: /^\d{17,20}$/.test(String(env.DISCORD_AGENDA_ROLE || '')),
+             place : le salon déclaré, et le nombre de rôles réveillés. */
+          salonAgenda: /^\d{17,20}$/.test(String(env.DISCORD_AGENDA_CHANNEL || '').trim()),
+          rolesAgenda: rolesAgenda(env).length,
         });
         case '/api/login':       return await handleLogin(request, env, url);
         case '/api/callback':    return await handleCallback(request, env, url);

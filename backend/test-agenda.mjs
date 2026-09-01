@@ -1,8 +1,12 @@
 /* Banc d'essai du rappel d'agenda — trois heures avant l'événement.
    ---------------------------------------------------------------------------
-   Le webhook n'est jamais appelé pour de vrai : un essai qui poste écrirait
-   dans un salon que toute l'équipe lit. Il est remplacé par un faux qui note
+   Discord n'est jamais appelé pour de vrai : un essai qui poste écrirait dans
+   un salon que toute l'équipe lit. L'appel est remplacé par un faux qui note
    ce qu'on lui a demandé d'envoyer.
+
+   Le message part par le BOT, pas par un webhook : un identifiant de salon
+   n'est pas un secret, et le jeton du bot est déjà posé. Une autorisation de
+   moins à faire circuler.
 
    Ce qui est vérifié, et pourquoi chaque point est là :
 
@@ -24,12 +28,13 @@
      retente. Sans ça, une panne Discord de trente secondes perdrait le
      rappel définitivement ;
 
-   · le rôle est mentionné avec l'autorisation « allowed_mentions » qui va
-     avec : sans elle, Discord accepte le message et ne réveille personne, en
-     silence, avec un code 200 — le défaut exact déjà rencontré sur le rappel
-     de permis ;
+   · les QUATRE rôles sont mentionnés, avec l'autorisation « allowed_mentions »
+     qui va avec : sans elle, Discord accepte le message et ne réveille
+     personne, en silence, avec un code 200 — le défaut exact déjà rencontré
+     sur le rappel de permis. Et @everyone reste interdit, même écrit dans le
+     titre d'un événement ;
 
-   · sans webhook déclaré, la fonction se tait au lieu de lever une erreur :
+   · sans salon déclaré, la fonction se tait au lieu de lever une erreur :
      le domaine a le droit de ne pas vouloir cette annonce.
 
    Lancement :  node test-agenda.mjs
@@ -40,7 +45,7 @@ const SRC = readFileSync(new URL('./src/index.js', import.meta.url), 'utf8');
 const TMP = new URL('./.essai-agenda.mjs', import.meta.url);
 writeFileSync(TMP, SRC
   + '\nexport { rappelsAgenda, evenementsARappeler, instantParis, messageRappel, cleRappel,'
-  + ' RAPPEL_AVANT_MS, RAPPEL_FENETRE_MS };\n');
+  + ' rolesAgenda, RAPPEL_AVANT_MS, RAPPEL_FENETRE_MS };\n');
 const W = await import(TMP.href);
 
 let ok = 0, ko = 0;
@@ -49,29 +54,18 @@ const dit = (nom, vrai, detail) => {
   else { ko++; console.log('  ✗', nom, detail === undefined ? '' : '→ ' + JSON.stringify(detail)); }
 };
 
-const WEBHOOK = 'https://discord.com/api/webhooks/1234567890/abcdef';
-const ROLE = '1112658686431723520';
+const SALON = '1509337025663471676';
+const ROLES = ['943582598641381484', '943583588581003365',
+               '1360832465211490317', '1496532772326604881'];
 
-/* Une base en mémoire, avec les quatre méthodes que le Worker utilise. */
-function faireBase() {
-  const m = new Map();
-  return {
-    m,
-    DB: {
-      prepare() { throw new Error('la vraie base ne doit pas être touchée'); },
-    },
-  };
-}
-
-/* On remplace base() en fournissant un env dont DB est un faux minimal.
-   Plus simple : on intercepte via un env porteur d'une base factice, et on
-   rejoue rappelsAgenda avec un fetch espion. */
+/* Un env porteur d'une base en mémoire : la vraie n'est jamais touchée. */
 function faireEnv(agenda, opts = {}) {
   const kv = new Map();
   const envois = [];
   const env = {
-    DISCORD_AGENDA_WEBHOOK: opts.webhook === undefined ? WEBHOOK : opts.webhook,
-    DISCORD_AGENDA_ROLE: opts.role === undefined ? ROLE : opts.role,
+    DISCORD_BOT_TOKEN: 'jeton-de-test',
+    DISCORD_AGENDA_CHANNEL: opts.salon === undefined ? SALON : opts.salon,
+    DISCORD_AGENDA_ROLES: opts.roles === undefined ? ROLES.join(',') : opts.roles,
     DB: {
       prepare(sql) {
         return {
@@ -183,16 +177,30 @@ console.log('\n— Le message —');
 {
   const e = { title: 'Dégustation `@everyone`', date: '03/09/2026', heure: '18:00',
               heure_fin: '20:00', desc: 'Villa privatisée @here', vis: 'commercial' };
-  const m = W.messageRappel(e, `<@&${ROLE}> `);
-  dit('le rôle est mentionné en tête', m.startsWith(`<@&${ROLE}> `), m.slice(0, 40));
+  const tete = ROLES.map(r => `<@&${r}>`).join(' ') + ' ';
+  const m = W.messageRappel(e, tete);
+  dit('les quatre rôles sont mentionnés en tête', m.startsWith(tete), m.slice(0, 90));
   dit('le titre y est', m.includes('Dégustation'), m);
   dit('les heures y sont', m.includes('18:00 – 20:00'), m);
   dit('la date y est', m.includes('03/09/2026'), m);
   dit('« @ » et « ` » sont neutralisés — pas d\'everyone par la bande',
-      !m.slice(ROLE.length + 5).includes('@') && !m.includes('`'), m);
+      !m.slice(tete.length).includes('@') && !m.includes('`'), m);
   const sansDesc = W.messageRappel({ title: 'X', date: '03/09/2026', heure: '18:00' }, '');
   dit('sans description, le message tient debout quand même',
       sansDesc.includes('pas de description'), sansDesc);
+}
+
+console.log('\n— La liste des rôles —');
+{
+  dit('les quatre identifiants sont lus',
+      W.rolesAgenda({ DISCORD_AGENDA_ROLES: ROLES.join(',') }).join(',') === ROLES.join(','));
+  dit('les espaces et virgules en trop sont absorbés',
+      W.rolesAgenda({ DISCORD_AGENDA_ROLES: ` ${ROLES[0]} , ,${ROLES[1]}, ` }).length === 2);
+  dit('un nom de rôle glissé par erreur est écarté',
+      W.rolesAgenda({ DISCORD_AGENDA_ROLES: `Responsable Commercial,${ROLES[0]}` }).length === 1);
+  dit('un réglage vide ne donne aucun rôle',
+      W.rolesAgenda({ DISCORD_AGENDA_ROLES: '' }).length === 0);
+  dit('un réglage absent ne casse rien', W.rolesAgenda({}).length === 0);
 }
 
 console.log('\n— L\'envoi —');
@@ -201,18 +209,21 @@ console.log('\n— L\'envoi —');
 
   /* 1. envoi nominal */
   let appels = [];
-  globalThis.fetch = async (url, init) => {
-    appels.push({ url, body: JSON.parse(init.body) });
-    return { ok: true, status: 204 };
+  const espion = (reponse) => async (url, init) => {
+    appels.push({ url, init, body: JSON.parse(init.body) });
+    return Object.assign({ async json() { return {}; } }, reponse);
   };
+  globalThis.fetch = espion({ ok: true, status: 204 });
   let { env, kv } = faireEnv([ev(3, 'commercial', 'Dégustation Ansaldi')]);
   let r = await W.rappelsAgenda(env);
   dit('un rappel part', r.envoyes === 1 && appels.length === 1, r);
-  dit('il part sur le webhook déclaré', appels[0] && appels[0].url === WEBHOOK);
-  dit('l\'autorisation de mention accompagne le rôle',
+  dit('il part dans le salon déclaré',
+      appels[0] && appels[0].url.endsWith(`/channels/${SALON}/messages`), appels[0] && appels[0].url);
+  dit('il part avec le jeton du bot',
+      appels[0] && appels[0].init.headers.Authorization === 'Bot jeton-de-test');
+  dit('l\'autorisation de mention porte les quatre rôles',
       appels[0] && appels[0].body.allowed_mentions
-      && Array.isArray(appels[0].body.allowed_mentions.roles)
-      && appels[0].body.allowed_mentions.roles[0] === ROLE,
+      && appels[0].body.allowed_mentions.roles.join(',') === ROLES.join(','),
       appels[0] && appels[0].body.allowed_mentions);
   dit('rien ne peut mentionner @everyone',
       appels[0] && appels[0].body.allowed_mentions.parse.length === 0);
@@ -224,7 +235,7 @@ console.log('\n— L\'envoi —');
 
   /* 3. envoi qui échoue : la marque est retirée, le passage suivant retente */
   appels = [];
-  globalThis.fetch = async () => ({ ok: false, status: 500 });
+  globalThis.fetch = espion({ ok: false, status: 500 });
   const e2 = faireEnv([ev(3, 'commercial', 'Location mariage')]);
   r = await W.rappelsAgenda(e2.env);
   dit('un envoi refusé ne compte pas comme envoyé', r.envoyes === 0, r);
@@ -232,7 +243,8 @@ console.log('\n— L\'envoi —');
       !e2.kv.has(W.cleRappel(ev(3, 'commercial', 'Location mariage'))),
       [...e2.kv.keys()]);
 
-  globalThis.fetch = async (url, init) => { appels.push({ url, body: JSON.parse(init.body) }); return { ok: true }; };
+  appels = [];
+  globalThis.fetch = espion({ ok: true, status: 200 });
   r = await W.rappelsAgenda(e2.env);
   dit('le passage suivant retente et réussit', r.envoyes === 1 && appels.length === 1, r);
 
@@ -243,26 +255,27 @@ console.log('\n— L\'envoi —');
   try { r = await W.rappelsAgenda(e3.env); } catch (err) { leve = true; }
   dit('un réseau coupé ne fait pas tomber le passage périodique', !leve && r.envoyes === 0, r);
 
-  /* 5. pas de webhook déclaré */
+  /* 5. pas de salon déclaré */
   globalThis.fetch = async () => { throw new Error('ne devrait pas être appelé'); };
-  const e4 = faireEnv([ev(3, 'commercial', 'Sans webhook')], { webhook: '' });
+  const e4 = faireEnv([ev(3, 'commercial', 'Sans salon')], { salon: '' });
   r = await W.rappelsAgenda(e4.env);
-  dit('sans webhook, la fonction se tait au lieu d\'échouer',
-      r.envoyes === 0 && r.raison === 'pas_de_webhook', r);
+  dit('sans salon, la fonction se tait au lieu d\'échouer',
+      r.envoyes === 0 && r.raison === 'pas_de_salon', r);
 
-  const e5 = faireEnv([ev(3, 'commercial', 'Webhook mal collé')], { webhook: 'https://example.com/hook' });
+  const e5 = faireEnv([ev(3, 'commercial', 'Salon mal collé')], { salon: 'le-salon-commercial' });
   r = await W.rappelsAgenda(e5.env);
-  dit('une adresse qui n\'est pas un webhook Discord est refusée',
-      r.envoyes === 0 && r.raison === 'pas_de_webhook', r);
+  dit('un nom de salon au lieu d\'un identifiant est refusé',
+      r.envoyes === 0 && r.raison === 'pas_de_salon', r);
 
   /* 6. sans rôle déclaré, l'annonce part quand même mais sans mention */
   appels = [];
-  globalThis.fetch = async (url, init) => { appels.push({ url, body: JSON.parse(init.body) }); return { ok: true }; };
-  const e6 = faireEnv([ev(3, 'commercial', 'Sans rôle')], { role: '' });
+  globalThis.fetch = espion({ ok: true, status: 200 });
+  const e6 = faireEnv([ev(3, 'commercial', 'Sans rôle')], { roles: '' });
   r = await W.rappelsAgenda(e6.env);
   dit('sans rôle, le rappel part quand même', r.envoyes === 1, r);
   dit('… et il ne mentionne personne',
       appels[0] && !appels[0].body.content.startsWith('<@&')
+      && appels[0].body.allowed_mentions.roles.length === 0
       && appels[0].body.allowed_mentions.parse.length === 0,
       appels[0] && appels[0].body.content.slice(0, 30));
 

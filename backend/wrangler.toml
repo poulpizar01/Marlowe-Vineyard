@@ -53,11 +53,18 @@ DISCORD_RUNNER_ROLE = "1112654936749125632"
 # tout le monde a été prévenu.
 DISCORD_DISPO_ROLE = "1112658686431723520"
 
-# Le rôle prévenu trois heures avant un événement de l'agenda commercial.
+# Le salon où arrivent les rappels d'agenda, trois heures avant chaque
+# événement commercial. C'est le BOT qui écrit — celui qui poste déjà les
+# rappels de permis — et non un webhook : un identifiant de salon n'est pas
+# un secret, il peut rester ici. Il faut en revanche que le bot ait le droit
+# d'écrire dans ce salon.
+# Laisser vide = aucun rappel n'est envoyé, et rien ne casse.
+DISCORD_AGENDA_CHANNEL = "1509337025663471676"
+
+# Les rôles réveillés par ce rappel, séparés par des virgules.
 # Laisser vide : le rappel part quand même, mais sans mention — personne
-# n'est réveillé, et /api/version le dit (roleAgenda: false).
-# L'adresse du salon, elle, est un SECRET : voir plus bas.
-DISCORD_AGENDA_ROLE = ""
+# n'est prévenu, et /api/version le dit (rolesAgenda: 0).
+DISCORD_AGENDA_ROLES = "943582598641381484,943583588581003365,1360832465211490317,1496532772326604881"
 
 # ---------------------------------------------------------------------------
 # Stockage principal : D1 (base SQLite).
@@ -102,12 +109,9 @@ id = "96dc213dcafc411d8417448b46fc9274"
 #   npx wrangler secret put DISCORD_BOT_TOKEN
 #   npx wrangler secret put DISCORD_CLIENT_ID
 #   npx wrangler secret put DISCORD_WEBHOOK
-#   npx wrangler secret put DISCORD_AGENDA_WEBHOOK
 #
-# DISCORD_AGENDA_WEBHOOK = l'adresse du webhook du salon où arrivent les
-#   rappels d'agenda, trois heures avant chaque événement commercial. C'est
-#   un AUTRE salon que celui des runners : les deux webhooks coexistent.
-#   Sans ce secret, aucun rappel ne part et rien ne casse.
+# Le rappel d'agenda n'a besoin d'AUCUN secret : il passe par le bot, dont le
+# jeton est déjà posé, et le salon se déclare en clair plus haut.
 #
 # DISCORD_WEBHOOK = l'adresse du webhook du salon des runners.
 #   Discord ▸ le salon ▸ Modifier le salon ▸ Intégrations ▸ Webhooks ▸
