@@ -306,6 +306,49 @@
     return out;
   }
 
+  /* Qui peut recruter au domaine.
+     -------------------------------------------------------------------------
+     Deux listes différentes proposaient le recruteur, et aucune des deux ne
+     regardait le registre. Sur la fiche d'un employé, on ne proposait que les
+     noms DÉJÀ inscrits comme recruteurs quelque part — au premier recrutement
+     il n'y avait donc personne à choisir, et le seul nom déjà utilisé se
+     retrouvait seul dans la liste. Sur la page Recrutement, cinq noms étaient
+     écrits en dur dans le fichier : ils ne bougeaient pas quand l'équipe
+     changeait, et ils restaient proposés longtemps après le départ des
+     intéressés.
+
+     La liste se lit maintenant dans le registre, et ne retient que les postes
+     qui recrutent : RH, DRH, Co-Patron, Patron. Responsable Général n'y est
+     pas — il n'a pas été demandé, et se l'ajouter tout seul reviendrait à
+     décider à la place du domaine qui a le droit d'embaucher. */
+  const POSTES_RECRUTEUR = [
+    'Patron', 'Co-Patron', 'Co Patron',
+    'DRH', 'Resp. RH', 'Responsable RH',
+    'RH', 'Ressource Humaine', 'Ressources Humaines', 'Ressource humaines',
+  ];
+
+  function recruteursPossibles() {
+    const cles = POSTES_RECRUTEUR.map(clefPoste);
+    return (typeof rhRosterData !== 'undefined' ? rhRosterData : [])
+      .filter(e => e && (!e.status || e.status === 'actif')
+                && cles.includes(clefPoste(e.poste)))
+      .map(e => String(e.name || '').trim())
+      .filter(Boolean)
+      .sort(parNom);
+  }
+
+  /* La liste déroulante de la page Recrutement. Elle garde la sélection en
+     cours quand c'est encore possible : refaire son choix parce qu'un import
+     a rafraîchi le registre serait une perte de temps. */
+  function remplirRecruteurs() {
+    const sel = $('newEmpRec');
+    if (!sel) return;
+    const garde = sel.value;
+    const noms = ['—', ...recruteursPossibles()];
+    sel.innerHTML = noms.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+    if (garde && noms.includes(garde)) sel.value = garde;
+  }
+
   function recomputeRecruiters() {
     const now = new Date();
     const tally = new Map();
@@ -323,6 +366,11 @@
 
     rhRecruiters.length = 0;
     rows.forEach(r => rhRecruiters.push(r));
+
+    /* Le registre vient peut-être de changer : la liste des recruteurs
+       possibles en découle. Tous les chemins qui touchent au registre —
+       embauche, fiche, import, réinitialisation, démarrage — passent ici. */
+    remplirRecruteurs();
 
     /* Sans recrutement cette semaine, le graphique n'aurait rien à dessiner. */
     if (!rhRecruiters.length) rhRecruiters.push({ name: 'Aucun recrutement cette semaine', n: 0 });
@@ -617,7 +665,15 @@
     const e = rhRosterData.find(x => String(x.id) === String(id));
     if (!e) { toast('Fiche introuvable.'); return; }
 
-    const recruteurs = [...new Set(rhRosterData.map(x => x.rec).filter(r => r && r !== '—'))].sort();
+    /* Le recruteur déjà inscrit reste proposé même s'il a quitté le domaine ou
+       changé de poste : sinon, ouvrir une fiche pour corriger un téléphone
+       effacerait au passage le nom de celui qui l'a recrutée. */
+    const actuel = String(e.rec || '—').trim();
+    const recruteurs = recruteursPossibles();
+    if (actuel && actuel !== '—' && !recruteurs.includes(actuel)) {
+      recruteurs.push(actuel);
+      recruteurs.sort(parNom);
+    }
 
     const r = await askForm(`Fiche de ${e.name}`, [
       { key: 'name',    label: 'Prénom Nom', value: e.name || '' },
@@ -627,8 +683,8 @@
       { key: 'phone',   label: 'N° téléphone', value: e.phone || '' },
       { key: 'rib',     label: 'RIB', value: e.rib || '' },
       { key: 'discord', label: 'Identifiant Discord', value: e.discord || '' },
-      { key: 'rec',     label: 'Recruteur', value: e.rec || '—',
-        options: recruteurs.length ? ['—', ...recruteurs] : undefined },
+      { key: 'rec',     label: 'Recruteur', value: actuel || '—',
+        options: ['—', ...recruteurs] },
     ], 'Laissez un champ vide s\'il est encore inconnu — il restera à compléter. '
      + 'L\'identifiant Discord est un nombre à 18 chiffres (clic droit sur la personne ▸ '
      + 'Copier l\'identifiant), pas un pseudo.');
