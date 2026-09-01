@@ -5188,9 +5188,11 @@
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
     .replace(/[^a-z0-9]+/g, ' ').trim();
 
+  /* Le sélecteur de « Ma semaine » n'était ouvert qu'au patron. La direction
+     et les ressources humaines en ont l'usage tout autant : c'est à elles
+     qu'on demande où en est un employé. */
   function maSemainePatron() {
-    const s = window.MarloweSession;
-    return !s || s.isPatron || s.isOwner;
+    return peutVoirAutrui();
   }
 
   function maSemaineFiches() {
@@ -5390,6 +5392,57 @@
     .replace(/[^a-z0-9]+/g, ' ').trim();
 
   const SERVICE_OK = POSTES_SERVICE.map(clefPoste);
+
+  /* ==========================================================================
+     Consulter la fiche de quelqu'un d'autre
+     --------------------------------------------------------------------------
+     Deux questions distinctes, et les confondre serait une erreur :
+
+       QUI peut se servir du sélecteur — la direction et les ressources
+       humaines. Regarder les chiffres d'un collègue n'est pas un droit de
+       curiosité, c'est un droit d'encadrement.
+
+       QUI peut être regardé — l'équipe concernée, plus tout ce qui est au-dessus
+       du Vendeur. Sans ce second point, un DRH pouvait ouvrir le menu et n'y
+       trouver que des vendeurs : les responsables eux-mêmes en étaient absents.
+
+     Les noms sont écrits dans les deux orthographes du domaine, celle des
+     rôles Discord (« Ressource Humaine ») et celle des postes du registre
+     (« RH ») : clefPoste rapproche les variantes de casse et de ponctuation,
+     pas deux mots différents.
+     ========================================================================== */
+  const POSTES_VOIR_AUTRUI = [
+    'Patron', 'Co-Patron', 'Co Patron',
+    'Responsable Général', 'Resp. Général',
+    'DRH', 'Resp. RH', 'Responsable RH',
+    'RH', 'Ressource Humaine', 'Ressources Humaines', 'Ressource humaines',
+  ].map(clefPoste);
+
+  /* « Au-dessus du Vendeur » : la direction et les responsables. */
+  const POSTES_ENCADREMENT = [
+    'Patron', 'Co-Patron', 'Co Patron',
+    'Responsable Général', 'Resp. Général',
+    'DRH', 'Resp. RH', 'Responsable RH',
+    'Resp. Commercial', 'Responsable Commercial',
+    'Resp. Magasin', 'Responsable Magasin',
+    'Resp. Runner', 'Responsable Runner',
+  ].map(clefPoste);
+
+  const estEncadrement = poste => POSTES_ENCADREMENT.includes(clefPoste(poste));
+
+  /* Le droit est cherché à deux endroits, et il suffit qu'un des deux réponde :
+     le rôle Discord de la session, et le poste inscrit au registre RH. Quelqu'un
+     dont le rôle Discord n'a pas encore été posé mais qui est DRH au registre
+     ne doit pas se retrouver enfermé pour autant. */
+  function peutVoirAutrui(postesEnPlus) {
+    const s = window.MarloweSession;
+    if (!s) return true;                        /* hors connexion : on n'entrave rien */
+    if (s.isPatron || s.isOwner) return true;
+    const admis = POSTES_VOIR_AUTRUI.concat(postesEnPlus || []);
+    if ((s.roles || []).some(r => admis.includes(clefPoste(r)))) return true;
+    const f = ficheDeSession();
+    return !!(f && admis.includes(clefPoste(f.poste)));
+  }
 
   function peutPointer() {
     const s = window.MarloweSession;
@@ -6656,11 +6709,14 @@
 
   function estPosteVente(poste) { return VENTE_OK.includes(clefPoste(poste)); }
 
-  /* L'équipe de vente, telle que le registre RH la décrit. */
+  /* Qui peut être consulté : l'équipe de vente, plus tout ce qui est au-dessus
+     du Vendeur. Un DRH qui ouvrait ce menu n'y trouvait que des vendeurs — les
+     responsables, dont il a précisément la charge, n'y figuraient pas. */
   function equipeMagasin() {
     const roster = (typeof rhRosterData !== 'undefined') ? rhRosterData : [];
     return roster
-      .filter(e => (!e.status || e.status === 'actif') && estPosteVente(e.poste))
+      .filter(e => (!e.status || e.status === 'actif')
+                && (estPosteVente(e.poste) || estEncadrement(e.poste)))
       .map(e => ({ nom: e.name, poste: e.poste }));
   }
 
@@ -6673,13 +6729,10 @@
       .find(e => clefNom(e.name) === moi) || null;
   }
 
+  /* Le magasin garde ses deux chefs — ils avaient déjà cette vue et la leur
+     retirer serait une régression — et y ajoute la direction et les RH. */
   function magPrivilegie() {
-    const s = window.MarloweSession;
-    if (!s) return true;                        /* hors connexion : on n'entrave rien */
-    if (s.isPatron || s.isOwner) return true;
-    if ((s.roles || []).some(r => POSTES_MAG_CHEF.includes(clefPoste(r)))) return true;
-    const f = ficheDeSession();
-    return !!(f && POSTES_MAG_CHEF.includes(clefPoste(f.poste)));
+    return peutVoirAutrui(POSTES_MAG_CHEF);
   }
 
   /* Le nom sous lequel la personne connectée apparaît dans les bons. */
