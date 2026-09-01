@@ -2689,6 +2689,45 @@ window.onload = function(){
      disparaissaient au rechargement. */
   const bcManuels = [];
 
+  /* Les anciens employés — ceux qui ont démissionné.
+     -------------------------------------------------------------------------
+     Un départ RETIRE la fiche du registre : plus rien ne rattache leurs
+     ventes, et le Worker les range parmi les lignes « non rattachées » de
+     Quota en direct. Leur production de la semaine appartient pourtant au
+     domaine et doit être déclarée. Elle entre donc d'office dans le bilan,
+     sans qu'il y ait rien à cliquer — mais avec la production SEULE : ni
+     salaire, ni prime, puisqu'ils ne sont plus là pour en toucher.
+
+     Le risque, assumé : une faute de frappe dans un nom produit elle aussi
+     une ligne non rattachée, qui entrera dans le bilan comme les autres.
+     C'est pour ça que ces lignes portent la mention « hors registre » dans
+     le détail : le total ne bouge jamais en silence. */
+  let bcOrphelins = [];
+
+  const bcClefNom = n => String(n == null ? '' : n).trim().toLowerCase();
+
+  /* La période du bilan est la semaine du domaine — lundi 00 h 00 heure de
+     Paris → maintenant. On ne lit PAS le sélecteur de Quota en direct : le
+     bilan ne doit pas changer de période parce que quelqu'un a regardé les
+     30 derniers jours sur une autre page. */
+  async function chargerOrphelinsBilan() {
+    if (typeof bcRows === 'undefined') return;
+    /* En démo il n'y a pas de Worker : on prend la même ligne non rattachée
+       que la page Quota, pour que la mention « hors registre » se voie. */
+    if (estDemo()) {
+      bcOrphelins = qdDemo().orphelines || [];
+      try { renderBilan(); } catch (e) {}
+      return;
+    }
+    const A = window.MarloweAuth;
+    if (!A || !A.apiBrut) return;
+    const r = await A.apiBrut(`/api/quota?du=${qdLundi(0)}&au=${Date.now()}`);
+    /* Un Worker muet ne doit pas vider le bilan : on garde ce qu'on avait. */
+    if (!r || !r.ok || !r.data || !Array.isArray(r.data.orphelines)) return;
+    bcOrphelins = r.data.orphelines;
+    try { renderBilan(); } catch (e) {}
+  }
+
   function rebuildBcRows() {
     if (typeof bcRows === 'undefined') return;
     const manuels = bcManuels.map(m => Object.assign({ manuel: true }, m));
@@ -2701,7 +2740,25 @@ window.onload = function(){
          un salaire à des gens qui n'en avaient pas. */
       salaire: salaireDuGrade(e.rank),
     }));
-    bcRows = auto.concat(manuels);
+
+    /* Une ligne non rattachée dont le nom figure déjà dans la tablette ou
+       dans une ligne manuelle serait la même production comptée deux fois. */
+    const deja = new Set(auto.concat(manuels).map(e => bcClefNom(e.name)));
+    const anciens = bcOrphelins
+      .filter(o => o && o.nom && !deja.has(bcClefNom(o.nom)))
+      .map(o => {
+        /* Le log dit « 54x Vin … 270$ pour la société » : la part du domaine
+           vaut cinq fois le nombre de vins, exactement comme la colonne RUN
+           de la tablette dont on tire déjà les barils (runs / 5). */
+        const runs = Math.max(0, Math.round(o.vins || 0)) * 5;
+        return {
+          name: o.nom, rank: 'Ancien employé',
+          runs, factures: 0, ventes: o.ventes || 0,
+          ca: runs, salaire: 0, exEmploye: true,
+        };
+      });
+
+    bcRows = auto.concat(manuels, anciens);
   }
 
   /* Ajout d'une ligne manuelle : un vrai formulaire, tous les champs d'un
@@ -2786,18 +2843,26 @@ window.onload = function(){
 
     const detail = rows.map(e => {
       const dir = isDir(e.rank);
-      const exc = primesExc.filter(x => x.nom === e.name).reduce((s, x) => s + x.montant, 0);
-      const prime = window.mvCalculPrime(e.runs, e.rank, palier, e.name) + exc;
+      const exc = e.exEmploye ? 0
+        : primesExc.filter(x => x.nom === e.name).reduce((s, x) => s + x.montant, 0);
+      /* Un ancien employé apporte sa production et rien d'autre : plus de
+         salaire à lui verser, et pas de prime à lui calculer. */
+      const prime = e.exEmploye ? 0
+        : window.mvCalculPrime(e.runs, e.rank, palier, e.name) + exc;
       return Object.assign({}, e, {
         prime: Math.round(prime),
         primeExc: exc,
-        salairePlafonne: Math.round(Math.min(e.salaire || 0, dir ? palier.salDir : palier.salEmp)),
+        salairePlafonne: e.exEmploye ? 0
+          : Math.round(Math.min(e.salaire || 0, dir ? palier.salDir : palier.salEmp)),
         isDir: dir,
       });
     });
 
-    /* Primes accordées à quelqu'un qui n'est pas dans le tableau de bord */
-    const nomsDetail = new Set(detail.map(e => e.name));
+    /* Primes accordées à quelqu'un qui n'est pas dans le tableau de bord.
+       Les lignes « hors registre » ne comptent pas comme une présence : une
+       prime exceptionnelle à ce nom-là doit rester au total, pas disparaître
+       derrière une ligne qui, elle, ne porte aucune prime. */
+    const nomsDetail = new Set(detail.filter(e => !e.exEmploye).map(e => e.name));
     const excHorsTableau = primesExc.filter(p => !nomsDetail.has(p.nom))
       .reduce((s, p) => s + p.montant, 0);
 
@@ -2869,7 +2934,9 @@ window.onload = function(){
     /* Détail par employé */
     $('bcDetailBody').innerHTML = b.detail.map(e => `
       <tr>
-        <td>${esc(e.name)}</td>
+        <td>${esc(e.name)}${e.exEmploye
+          ? ' <span class="mv-horsreg" title="Personne partie du domaine : sa production est d\u00e9clar\u00e9e, mais elle ne re\u00e7oit ni salaire ni prime.">hors registre</span>'
+          : ''}</td>
         <td class="rank-pill">${esc(e.rank)}</td>
         <td class="num dim">${(e.runs || 0).toLocaleString('fr-FR')} $</td>
         <td class="num dim">${(e.factures || 0).toLocaleString('fr-FR')} $</td>
@@ -4470,6 +4537,16 @@ window.onload = function(){
       #page-statsgrades .pagehead{max-width:1080px;margin-left:auto;margin-right:auto;}
       @media(max-width:1000px){#page-statsgrades .grade-grid{grid-template-columns:1fr;}}
 
+      /* Bilan : les lignes qui viennent des logs et non du registre. */
+      /* Sur sa propre ligne : posée à côté du nom, la mention poussait le nom
+         hors de la colonne, qui le coupait — on ne lisait plus ni l'un ni
+         l'autre. */
+      .mv-horsreg{display:block;width:fit-content;margin:3px 0 0;padding:1px 6px;
+        border:1px solid rgba(201,169,97,.42);border-radius:5px;
+        font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;
+        color:var(--or,#c9a961);opacity:.85;
+        white-space:nowrap;font-weight:600;}
+
       /* Effectif : la légende explicative passe au second plan. */
       #page-statseffectif .legend{opacity:.55;font-size:11px;margin-top:26px;
         transition:opacity .18s;}
@@ -4819,6 +4896,9 @@ window.onload = function(){
     refreshWeekHeaders();
     renderEligibilite();
     renderBilan();
+    /* Les ventes des partants arrivent du Worker, donc après coup : le bilan
+       se redessine tout seul quand elles tombent. */
+    chargerOrphelinsBilan();
     renderWeekHistory();
     renderHistorique();
     renderCloture();
@@ -9101,6 +9181,9 @@ window.onload = function(){
       if (!r.ok) { toast(phraseRefus(r)); return; }
       toast('Rattaché — les ventes suivantes suivront toutes seules.');
       renderQuotaDirect();
+      /* La ligne quitte les non rattachées : elle doit aussi quitter le
+         bilan, où elle figurait en « hors registre ». */
+      chargerOrphelinsBilan();
     }
   });
 
