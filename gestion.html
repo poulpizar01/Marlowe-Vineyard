@@ -1936,12 +1936,58 @@ document.getElementById('eligibiliteBody').innerHTML = eligibleList.map(e => `
 }
 renderEligibilite();
 
+/* Une feuille de calcul apporte deux lignes qui ne sont pas des employés :
+   son EN-TÊTE (« Nom · Rang · … ») et sa ligne de TOTAUX. Collées telles
+   quelles, elles devenaient deux fiches — l'une nommée « Nom », l'autre
+   « TOTAL » — et la seconde pesait plusieurs millions dans toutes les
+   additions du panel : production, bilan, primes, classements. Un employé
+   fantôme qui fausse une comptabilité entière.
+
+   On les reconnaît au premier champ, et à lui seul : c'est le seul repère
+   stable d'une feuille à l'autre. La comparaison ignore la casse, les accents
+   et la ponctuation, pour que « TOTAL », « Total : » et « totaux » tombent
+   ensemble. */
+const DASH_PAS_UN_EMPLOYE = new Set([
+  'nom', 'noms', 'employe', 'employes', 'membre', 'membres', 'name', 'joueur',
+  'total', 'totaux', 'total general', 'totaux generaux', 'somme', 'cumul',
+]);
+
+function dashClef(x){
+  return String(x == null ? '' : x).toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z ]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 /* ---------- Stats & Quotas (Vue d'ensemble / Tableau de bord / Grades / Effectif / Primes) ---------- */
 const dash = [];
 
 function fmt(n){ return n.toLocaleString('fr-FR') + '$'; }
 
+/* Les collages d'avant ont laissé des lignes « Nom » et « TOTAL » dans la
+   feuille enregistrée : elles y sont encore, et elles continuent de fausser
+   toutes les additions. On les retire à l'affichage, une fois, et on
+   enregistre le nettoyage — sans quoi il faudrait les supprimer à la main
+   ligne par ligne. */
+function dashNettoyer(){
+  if (typeof dash === 'undefined' || !Array.isArray(dash)) return 0;
+  const propre = dash.filter(e => e && e.name && !DASH_PAS_UN_EMPLOYE.has(dashClef(e.name)));
+  const retirees = dash.length - propre.length;
+  if (!retirees) return 0;
+  dash.length = 0;
+  propre.forEach(e => dash.push(e));
+  const D = window.MarloweData;
+  if (D) { D.note(`a retiré ${retirees} ligne(s) d'en-tête ou de total de la tablette`); D.save('dash'); }
+  return retirees;
+}
+
 function renderDash(list){
+  const retirees = dashNettoyer();
+  if (retirees) {
+    dashDire(`${retirees} ligne(s) d'en-tête ou de total retirée(s) de la tablette : `
+           + 'elles comptaient dans les totaux.');
+    if (list === dash) list = dash;
+  }
+
   /* Le compteur était écrit en dur dans la maquette d'origine et n'avait
      jamais bougé depuis. */
   const cpt = document.getElementById('dashCount');
@@ -1990,8 +2036,12 @@ function dashParseFRNumber(str){
   return parseFloat(s) || 0;
 }
 
+/* Rend les lignes retenues ET le nombre de lignes écartées : le panel le dit
+   après coup, pour qu'un collage silencieusement amputé ne passe pas
+   inaperçu. */
 function dashParsePastedRows(text){
-  return text.split('\n').map(l => l.trim()).filter(Boolean).map(line => {
+  let ignorees = 0;
+  const lignes = text.split('\n').map(l => l.trim()).filter(Boolean).map(line => {
     let cols = line.split('\t');
     if(cols.length < 2) cols = line.split(/\s{2,}/);
     cols = cols.map(c => c.trim());
@@ -2005,12 +2055,30 @@ function dashParsePastedRows(text){
       part: dashParseFRNumber(part),
       heures: (heures || '0h00min').trim(),
     };
-  }).filter(r => r.name);
+  }).filter(r => {
+    if(!r.name) return false;
+    if(DASH_PAS_UN_EMPLOYE.has(dashClef(r.name))){ ignorees++; return false; }
+    return true;
+  });
+  return { lignes, ignorees };
+}
+
+/* Un mot dans le bandeau du panel plutôt qu'une fenêtre du navigateur. */
+function dashDire(message){
+  const A = window.MarloweActions;
+  if (A && A.toast) A.toast(message); else console.warn('[Marlowe]', message);
+}
+
+function dashMentionIgnorees(n){
+  return n ? ` (${n} ligne${n > 1 ? 's' : ''} d'en-tête ou de total écartée${n > 1 ? 's' : ''})` : '';
 }
 
 document.getElementById('mdFusionner').addEventListener('click', () => {
-  const rows = dashParsePastedRows(document.getElementById('dashPasteArea').value);
-  if(!rows.length){ alert('Aucune ligne détectée dans le collage.'); return; }
+  const { lignes: rows, ignorees } = dashParsePastedRows(document.getElementById('dashPasteArea').value);
+  if(!rows.length){
+    dashDire('Aucune ligne exploitable dans le collage' + dashMentionIgnorees(ignorees) + '.');
+    return;
+  }
   rows.forEach(row => {
     const existing = dash.find(d => d.name.toLowerCase() === row.name.toLowerCase());
     if(existing){
@@ -2022,18 +2090,30 @@ document.getElementById('mdFusionner').addEventListener('click', () => {
   });
   renderDash(dash);
   enregistrerTablette(`a fusionné ${rows.length} ligne(s) de la tablette`);
+  dashDire(`${rows.length} ligne(s) fusionnée(s)` + dashMentionIgnorees(ignorees) + '.');
   document.getElementById('dashPasteArea').value = '';
   dashManualForm.style.display = 'none';
 });
 
 document.getElementById('mdRemplacer').addEventListener('click', () => {
-  const rows = dashParsePastedRows(document.getElementById('dashPasteArea').value);
-  if(!rows.length){ alert('Aucune ligne détectée dans le collage.'); return; }
-  if(!confirm(`Remplacer entièrement la feuille par ${rows.length} ligne(s) ? Les employés absents du collage disparaîtront du tableau.`)) return;
+  const { lignes: rows, ignorees } = dashParsePastedRows(document.getElementById('dashPasteArea').value);
+  if(!rows.length){
+    dashDire('Aucune ligne exploitable dans le collage' + dashMentionIgnorees(ignorees) + '.');
+    return;
+  }
+  /* Plus de fenêtre de confirmation : le geste est volontaire et se répète
+     chaque semaine. On dit APRÈS coup ce qui s'est passé — combien de lignes
+     sont entrées, et combien de personnes ont quitté le tableau — plutôt que
+     de faire cliquer deux fois pour la même chose. */
+  const avant = dash.length;
   dash.length = 0;
   rows.forEach(row => dash.push({...row, tickets: 0}));
   renderDash(dash);
   enregistrerTablette(`a remplacé la tablette par ${rows.length} ligne(s)`);
+  const partis = Math.max(0, avant - rows.length);
+  dashDire(`Feuille remplacée : ${rows.length} ligne(s)`
+    + (partis ? `, ${partis} de moins qu'avant` : '')
+    + dashMentionIgnorees(ignorees) + '.');
   document.getElementById('dashPasteArea').value = '';
   dashManualForm.style.display = 'none';
 });

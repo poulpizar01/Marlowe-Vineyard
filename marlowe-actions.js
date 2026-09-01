@@ -474,6 +474,20 @@
      PAS le format long à neuf colonnes — dans celui-là, les RIB font autant de
      nombres à six chiffres que les n° civils, et l'équilibre entre repères et
      postes se rompt franchement. C'est ce déséquilibre qui l'écarte. */
+  /* Le même piège que sur la tablette : une feuille de calcul colle son
+     en-tête et sa ligne de totaux avec le reste. Ici l'en-tête passait le
+     contrôle « nom et poste présents » — « Nom » et « Poste » sont deux
+     chaînes — et créait une fiche d'employé nommée « Nom ». On l'écarte, et
+     on le DIT dans les rejets plutôt que de la faire disparaître en silence :
+     une ligne avalée sans un mot est un bug qu'on ne trouve jamais. */
+  const LIGNE_PAS_UN_EMPLOYE = new Set([
+    'nom', 'noms', 'employe', 'employes', 'membre', 'membres', 'name', 'joueur',
+    'total', 'totaux', 'total general', 'totaux generaux', 'somme', 'cumul',
+  ]);
+  const clefLigne = x => String(x == null ? '' : x).toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z ]+/g, ' ').replace(/\s+/g, ' ').trim();
+
   function analyserListeRH(texte) {
     if (estFormatRegistre(texte)) return analyserRegistre(texte);
 
@@ -492,6 +506,10 @@
 
       const [nom, poste, date, civil, tel, rib, discord, rec] = p;
       if (!nom || !poste) { rejets.push({ n: n + 1, brut, raison: 'nom ou poste manquant' }); return; }
+      if (LIGNE_PAS_UN_EMPLOYE.has(clefLigne(nom))) {
+        rejets.push({ n: n + 1, brut, raison: 'ligne d\'en-tête ou de total, pas un employé' });
+        return;
+      }
 
       const canon = posteCanonique(poste);
       if (!canon) postesInconnus.add(poste);
@@ -8728,6 +8746,9 @@
     enregistrerAvertissement, niveauSuivant, notifierAvertissement,
     retrograderEmploye, actionSousQuota,
     renderQuotaDirect,
+    /* Le collage de la tablette vit dans gestion.html, hors de cette portée :
+       sans cet export il n'aurait que les fenêtres du navigateur pour parler. */
+    toast,
     /* Rejoué quand le patron coche des rôles dans Administration ▸ Com Runner :
        le bouton doit apparaître ou disparaître sans recharger la page. */
     majBoutonDispo,
