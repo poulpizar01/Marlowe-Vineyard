@@ -1677,7 +1677,6 @@
           <h1 class="page-title">Bons de commande</h1>
           <p class="page-sub">Les commandes passées au magasin — en attente, validées, annulées.</p>
         </div>
-        <button class="btn primary" id="magNouvelle">+ Nouveau bon</button>
       </div>
 
       <div class="metric-grid-3" style="margin-bottom:20px;">
@@ -1685,6 +1684,10 @@
         <div class="metric-card"><div class="metric-label">Validées cette semaine</div><div class="metric-value" id="magValidees">0</div><div class="metric-sub">bons honorés</div></div>
         <div class="metric-card"><div class="metric-label">Chiffre validé</div><div class="metric-value" id="magCA">0 $</div><div class="metric-sub">sur la semaine en cours</div></div>
       </div>
+
+      <!-- Le formulaire vit ici, hors de #magListe : la liste est réécrite à
+           chaque frappe dans la recherche, ce qui effacerait une saisie. -->
+      <div id="magFormBon"></div>
 
       <div class="toolbar">
         <div class="search">

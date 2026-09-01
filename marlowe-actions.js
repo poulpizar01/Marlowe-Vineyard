@@ -4593,6 +4593,16 @@ window.onload = function(){
       #page-statsgrades .pagehead{max-width:1080px;margin-left:auto;margin-right:auto;}
       @media(max-width:1000px){#page-statsgrades .grade-grid{grid-template-columns:1fr;}}
 
+      /* Bon de commande : le formulaire vit dans la page depuis qu'il n'a
+         plus la boîte de dialogue pour l'habiller. */
+      .mv-bon-panel{margin-bottom:18px;}
+      .mv-bon-lab{display:block;font-size:11px;letter-spacing:.06em;
+        text-transform:uppercase;color:var(--muted,#9C9384);margin-bottom:7px;}
+      .mv-bon-form > select, .mv-bon-form > input{width:100%;max-width:340px;}
+      .mv-bon-table{margin-top:2px;max-width:820px;}
+      .mv-bon-total{font-size:13px;color:var(--muted,#9C9384);}
+      .mv-bon-total b{color:var(--or,#C9A961);font-size:15px;}
+
       /* Bilan : les lignes qui viennent des logs et non du registre. */
       /* Sur sa propre ligne : posée à côté du nom, la mention poussait le nom
          hors de la colonne, qui le coupait — on ne lisait plus ni l'un ni
@@ -7344,107 +7354,131 @@ window.onload = function(){
     </tr>`;
   }
 
-  async function nouveauBon() {
-    const arts = magProduits();
-    if (!arts.length) { toast("Le catalogue d'articles est vide."); return; }
+  /* Le bon se remplit DANS la page, pas dans une fenêtre.
+     -------------------------------------------------------------------------
+     Créer un bon est la raison d'être de cette page. Passer par un bouton puis
+     une boîte de dialogue ajoutait deux gestes à ce qu'on vient y faire, et la
+     boîte recouvrait la liste pendant qu'on la remplissait. Le formulaire est
+     donc posé à demeure au-dessus de la liste.
 
+     Deux contraintes ont dicté la forme :
+
+     · il vit dans son PROPRE conteneur, hors de #magListe — renderCommandes()
+       réécrit la liste à chaque frappe dans la recherche, ce qui effacerait la
+       saisie en cours ;
+
+     · il n'est reconstruit que si le catalogue, l'équipe ou le rôle ont
+       changé. Le redessiner à chaque passage sur la page reviendrait au même
+       effacement, en plus discret. */
+  let magFormSig = null;
+
+  function magPrixDe(arts, nom) {
+    return magPrix(arts.find(a => a.desc === nom));
+  }
+
+  function rafraichirBon(racine) {
+    const arts = magProduits();
+    let total = 0;
+    racine.querySelectorAll('#mvBonLignes tr').forEach(tr => {
+      const nom = tr.querySelector('.mv-bl-prod').value;
+      const qte = Math.max(1, Math.round(Number(tr.querySelector('.mv-bl-qte').value) || 0));
+      const pu = magPrixDe(arts, nom);
+      const t = pu * qte;
+      total += t;
+      tr.querySelector('.mv-bl-pu').textContent = pu.toLocaleString('fr-FR') + ' $';
+      tr.querySelector('.mv-bl-tot').textContent = t.toLocaleString('fr-FR') + ' $';
+    });
+    const el = racine.querySelector('#mvBonTotal');
+    if (el) el.textContent = total.toLocaleString('fr-FR') + ' $';
+  }
+
+  function renderFormBon(force) {
+    const box = $('magFormBon');
+    if (!box) return;
+
+    const arts = magProduits();
+    const chef = magPrivilegie();
     const equipe = equipeMagasin();
     const moi = magMoi();
-    const chef = magPrivilegie();
 
     /* Un vendeur ne choisit pas au nom de qui il commande : ce serait la porte
        ouverte aux bons attribués au voisin. Son nom est figé. */
     const noms = chef ? equipe.map(e => e.nom) : [moi];
     const choisi = noms.includes(moi) ? moi : (noms[0] || moi);
 
-    if (chef && !equipe.length) {
-      toast("Aucun poste de vente dans le registre RH : ajoutez d'abord un vendeur.");
+    /* Rien à remplir : on le dit sur place plutôt que d'afficher un formulaire
+       qui refusera au moment de valider. */
+    if (!arts.length || (chef && !equipe.length)) {
+      magFormSig = null;
+      box.innerHTML = `<div class="panel"><p class="empty-note" style="text-align:center;padding:20px;">${
+        !arts.length
+          ? "Le catalogue d'articles est vide — référencez d'abord un produit dans Commerce ▸ Catalogue."
+          : "Aucun poste de vente dans le registre RH : ajoutez d'abord un vendeur."
+      }</p></div>`;
       return;
     }
 
-    const html = `
-      <div class="mv-bon-form">
-        <label class="mv-bon-lab">Employé</label>
-        ${chef && noms.length
-          ? `<select id="mvBonEmp">${noms.map(n =>
-              `<option value="${esc(n)}"${n === choisi ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select>`
-          : `<input type="text" id="mvBonEmp" value="${esc(choisi)}" readonly
-               title="Le bon est établi à votre nom.">`}
+    const sig = JSON.stringify([chef, noms, arts.map(a => a.desc + '|' + magPrix(a))]);
+    if (!force && sig === magFormSig && box.firstElementChild) return;
+    magFormSig = sig;
 
-        <label class="mv-bon-lab" style="margin-top:16px;">Articles</label>
-        <table class="gtable mv-bon-table">
-          <thead><tr><th>Produit</th><th>Qté</th><th class="num">P.U.</th><th class="num">Total</th><th></th></tr></thead>
-          <tbody id="mvBonLignes">${ligneBonHtml(arts, 0)}</tbody>
-        </table>
+    box.innerHTML = `
+      <div class="panel mv-bon-panel">
+        <h3>Nouveau bon de commande</h3>
+        <div class="mv-bon-form">
+          <label class="mv-bon-lab">Employé</label>
+          ${chef
+            ? `<select id="mvBonEmp">${noms.map(n =>
+                `<option value="${esc(n)}"${n === choisi ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select>`
+            : `<input type="text" id="mvBonEmp" value="${esc(choisi)}" readonly
+                 title="Le bon est établi à votre nom.">`}
 
-        <div class="btn-row" style="margin-top:10px;justify-content:space-between;align-items:center;">
-          <button type="button" class="btn" id="mvBonPlus">+ Ajouter un article</button>
-          <span class="mv-bon-total">Total : <b id="mvBonTotal">0 $</b></span>
+          <label class="mv-bon-lab" style="margin-top:16px;">Articles</label>
+          <table class="gtable mv-bon-table">
+            <thead><tr><th>Produit</th><th>Qté</th><th class="num">P.U.</th><th class="num">Total</th><th></th></tr></thead>
+            <tbody id="mvBonLignes">${ligneBonHtml(arts, 0)}</tbody>
+          </table>
+
+          <div class="btn-row" style="margin-top:10px;justify-content:space-between;align-items:center;">
+            <button type="button" class="btn" id="mvBonPlus">+ Ajouter un article</button>
+            <span class="mv-bon-total">Total : <b id="mvBonTotal">0 $</b></span>
+          </div>
+
+          <div class="btn-row" style="margin-top:14px;">
+            <button type="button" class="btn primary" id="mvBonCreer">Créer le bon</button>
+          </div>
+          <p class="empty-note" style="margin-top:10px;font-size:11px;opacity:.65;">Le stock ne bougera qu'à la validation du bon.</p>
         </div>
       </div>`;
 
-    /* Le prix unitaire vit dans le catalogue, pas dans le formulaire : on le
-       relit à chaque changement plutôt que de le recopier dans le HTML, sinon
-       une modification du catalogue en cours de saisie passerait inaperçue. */
-    const prixDe = nom => magPrix(arts.find(a => a.desc === nom));
+    rafraichirBon(box);
+  }
 
-    const rafraichir = d => {
-      let total = 0;
-      d.querySelectorAll('#mvBonLignes tr').forEach(tr => {
-        const nom = tr.querySelector('.mv-bl-prod').value;
-        const qte = Math.max(1, Math.round(Number(tr.querySelector('.mv-bl-qte').value) || 0));
-        const pu = prixDe(nom);
-        const t = pu * qte;
-        total += t;
-        tr.querySelector('.mv-bl-pu').textContent = pu.toLocaleString('fr-FR') + ' $';
-        tr.querySelector('.mv-bl-tot').textContent = t.toLocaleString('fr-FR') + ' $';
-      });
-      const el = d.querySelector('#mvBonTotal');
-      if (el) el.textContent = total.toLocaleString('fr-FR') + ' $';
-    };
+  /* Remettre le formulaire à zéro après création, sans repartir du HTML
+     complet : la liste des produits et le nom choisi restent en place. */
+  function viderFormBon() {
+    const box = $('magFormBon');
+    if (!box) return;
+    const corps = box.querySelector('#mvBonLignes');
+    if (!corps) return;
+    const arts = magProduits();
+    corps.innerHTML = ligneBonHtml(arts, 0);
+    rafraichirBon(box);
+  }
 
-    const r = await askHtml('Nouveau bon de commande', html,
-      "Ajoutez autant d'articles que nécessaire. Le stock ne bougera qu'à la validation du bon.",
-      d => {
-        /* Trois colonnes de chiffres et une liste de produits ne tiennent pas
-           dans la largeur d'une boîte de dialogue ordinaire. */
-        d.style.maxWidth = '680px';
+  function creerBon() {
+    const box = $('magFormBon');
+    if (!box || !box.querySelector('#mvBonLignes')) return;
+    const arts = magProduits();
 
-        let n = 1;
-        const corps = d.querySelector('#mvBonLignes');
-
-        d.querySelector('#mvBonPlus').addEventListener('click', () => {
-          corps.insertAdjacentHTML('beforeend', ligneBonHtml(arts, n++));
-          rafraichir(d);
-        });
-
-        /* Délégation : les lignes apparaissent et disparaissent, des écouteurs
-           posés une fois pour toutes seraient perdus. */
-        d.addEventListener('input', e => {
-          if (e.target.closest('.mv-bl-qte, .mv-bl-prod')) rafraichir(d);
-        });
-        d.addEventListener('change', e => {
-          if (e.target.closest('.mv-bl-prod')) rafraichir(d);
-        });
-        d.addEventListener('click', e => {
-          if (!e.target.closest('.mv-bl-del')) return;
-          if (corps.children.length <= 1) { rafraichir(d); return; }   /* jamais zéro ligne */
-          e.target.closest('tr').remove();
-          rafraichir(d);
-        });
-
-        rafraichir(d);
-      });
-    if (!r) return;
-
-    const employe = (r.querySelector('#mvBonEmp') || {}).value || '';
+    const employe = ((box.querySelector('#mvBonEmp') || {}).value || '').trim();
     if (!employe) { toast('Il faut désigner un employé.'); return; }
 
     /* Deux fois le même produit sur un bon, c'est presque toujours une
        maladresse : on additionne les quantités plutôt que d'empiler des
        lignes qui compliqueront la préparation. */
     const parNom = new Map();
-    r.querySelectorAll('#mvBonLignes tr').forEach(tr => {
+    box.querySelectorAll('#mvBonLignes tr').forEach(tr => {
       const nom = tr.querySelector('.mv-bl-prod').value;
       const qte = Math.max(1, Math.round(Number(tr.querySelector('.mv-bl-qte').value) || 0));
       if (!nom) return;
@@ -7470,6 +7504,7 @@ window.onload = function(){
     });
     D().note(`a créé un bon de commande pour ${employe} (${lignes.length} article${lignes.length > 1 ? 's' : ''})`);
     D().save('commandes');
+    viderFormBon();
     toast(`Bon créé — ${lignes.length} article${lignes.length > 1 ? 's' : ''}.`);
   }
 
@@ -7531,6 +7566,8 @@ window.onload = function(){
     const box = $('magListe');
     if (!box) return;
 
+    renderFormBon();
+
     const q = ($('magSearch') && $('magSearch').value || '').toLowerCase().trim();
     /* Les compteurs du haut portent sur ce que la personne a le droit de voir :
        un vendeur qui lit « 14 bons en attente » dont 12 ne sont pas les siens
@@ -7560,7 +7597,7 @@ window.onload = function(){
     if (!liste.length) {
       box.innerHTML = `<div class="panel"><p class="empty-note" style="text-align:center;padding:22px;">
         ${mesBons.length ? 'Aucun bon ne correspond à ce filtre.'
-          : magPrivilegie() ? 'Aucun bon de commande — créez le premier avec « + Nouveau bon ».'
+          : magPrivilegie() ? 'Aucun bon de commande — remplissez le formulaire ci-dessus pour créer le premier.'
           : 'Aucun bon à votre nom pour le moment.'}
       </p></div>`;
       return;
@@ -7844,8 +7881,27 @@ window.onload = function(){
 
   /* --- Interactions, toutes en délégation ---------------------------------- */
   document.addEventListener('click', e => {
-    if (e.target.closest('#magNouvelle'))  { nouveauBon(); return; }
     if (e.target.closest('#magStockAdd'))  { referencerProduit(); return; }
+
+    /* Formulaire de bon, posé dans la page : tout passe par délégation, les
+       lignes apparaissant et disparaissant au fil de la saisie. */
+    const fb = e.target.closest('#magFormBon');
+    if (fb) {
+      if (e.target.closest('#mvBonCreer')) { creerBon(); return; }
+      if (e.target.closest('#mvBonPlus')) {
+        const corps = fb.querySelector('#mvBonLignes');
+        corps.insertAdjacentHTML('beforeend', ligneBonHtml(magProduits(), corps.children.length));
+        rafraichirBon(fb);
+        return;
+      }
+      if (e.target.closest('.mv-bl-del')) {
+        const corps = fb.querySelector('#mvBonLignes');
+        /* Jamais zéro ligne : un formulaire sans ligne n'a plus rien à dire. */
+        if (corps.children.length > 1) e.target.closest('tr').remove();
+        rafraichirBon(fb);
+        return;
+      }
+    }
 
     const f = e.target.closest('[data-mag-filtre]');
     if (f) {
@@ -7903,6 +7959,13 @@ window.onload = function(){
   document.addEventListener('input', e => {
     if (e.target.id === 'magSearch') renderCommandes();
     if (e.target.id === 'magStockSearch') renderStock();
+    const fb = e.target.closest('#magFormBon');
+    if (fb && e.target.closest('.mv-bl-qte, .mv-bl-prod')) rafraichirBon(fb);
+  });
+
+  document.addEventListener('change', e => {
+    const fb = e.target.closest('#magFormBon');
+    if (fb && e.target.closest('.mv-bl-prod')) rafraichirBon(fb);
   });
 
   window.MarloweCommandes = commandes;
@@ -9283,7 +9346,7 @@ window.onload = function(){
     renderMaSemaine, reinitialiserService,
     renderVitrine, renderCatalogues, appliquerAccesService, renderAvertissements, compteAvertissements,
     openInvoiceDoc, ouvrirFacturation, ouvrirFacturesRecues, prochainNumero, renderRegles, chargerDemo, importerListeRH, analyserListeRH, modifierEmploye, estFormatRegistre,
-    synchroniserEffectif, syncEffectifEtEnregistrer, renderMagasin, renderCommandes, renderStock, renderMagRecap,
+    synchroniserEffectif, syncEffectifEtEnregistrer, renderMagasin, renderCommandes, renderStock, renderMagRecap, renderFormBon,
     renderComRunner, testerDiscord, renderQuotaService, renderPrimeRecrutement,
     renderTombola, ticketsDe, renderEntretien, renderDocuments,
     railConstruire, railSynchroniser, allerA,
