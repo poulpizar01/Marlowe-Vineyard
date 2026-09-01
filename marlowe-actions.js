@@ -2802,9 +2802,14 @@ window.onload = function(){
            vaut cinq fois le nombre de vins, exactement comme la colonne RUN
            de la tablette dont on tire déjà les barils (runs / 5). */
         const runs = Math.max(0, Math.round(o.vins || 0)) * 5;
+        /* La colonne VENTES du bilan est un MONTANT. Le « ventes » que
+           renvoie /api/quota est un NOMBRE d'opérations de vente lues dans
+           les logs — deux choses différentes sous le même mot. Y recopier le
+           décompte affichait « 1 $ » pour une personne qui avait vendu une
+           fois. La part du domaine est déjà entière dans runs. */
         return {
           name: o.nom, rank: 'Ancien employé',
-          runs, factures: 0, ventes: o.ventes || 0,
+          runs, factures: 0, ventes: 0,
           ca: runs, salaire: 0, exEmploye: true,
         };
       });
@@ -5922,6 +5927,12 @@ window.onload = function(){
 
   /* La page de gestion s'en sert aussi : elle vit hors de cette portée. */
   window.mvMultGrade = multiplicateurDuGrade;
+
+  /* Qui a droit à la colonne haute du barème. La page Primes ne peut pas lire
+     bcRangsPatron directement : elle s'exécute AVANT sa déclaration dans
+     gestion.html, et un const pas encore initialisé fait tout tomber — même
+     interrogé par typeof. Elle passe donc par ici. */
+  window.mvRangPatron = rang => RANGS_PATRON().includes(rang);
 
   /* Le SALAIRE d'un grade — à ne pas confondre avec la prime.
      -------------------------------------------------------------------------

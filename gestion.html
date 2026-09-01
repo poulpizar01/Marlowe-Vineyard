@@ -1996,7 +1996,10 @@ function renderDash(list){
   if (cpt) cpt.textContent = list.length;
 
   document.getElementById('dashBody').innerHTML = list.map(e => {
-    const total = e.factures + e.runs;
+    /* VENTES est un MONTANT, au même titre que Runs et Factures : il entre
+       dans le total. Il en était exclu, et affiché sans « $ » — deux façons
+       de le faire passer pour un décompte. */
+    const total = e.factures + e.runs + (e.ventes || 0);
     const quota = Math.round(e.runs / 5);
     return `
     <tr>
@@ -2004,7 +2007,7 @@ function renderDash(list){
       <td class="rank-pill">${e.rank}</td>
       <td class="num dim">${fmt(e.factures)}</td>
       <td class="num dim">${fmt(e.runs)}</td>
-      <td class="num dim">${e.ventes}</td>
+      <td class="num dim">${fmt(e.ventes || 0)}</td>
       <td class="num">${fmt(total)}</td>
       <td class="num">${fmt(e.part)}</td>
       <td class="num quota-mono">${quota}</td>
@@ -2146,12 +2149,18 @@ function populateOverview(){
   const activeCount = dash.length;
   document.getElementById('ov-effectif').textContent = activeCount;
 
-  const totalProduction = dash.reduce((s, e) => s + e.ventes, 0);
-  const nbSaisies = dash.filter(e => e.ventes > 0).length;
+  /* La production se compte en VINS, et les vins se lisent dans la colonne
+     RUN — cinq dollars le vin, comme dans toute la formule de prime. La
+     colonne VENTES est un montant en dollars : la totaliser ici affichait de
+     l'argent sous le libellé « vins », et gonflait l'objectif d'autant. */
+  const totalProduction = dash.reduce((s, e) => s + Math.round((e.runs || 0) / 5), 0);
+  const nbSaisies = dash.filter(e => (e.runs || 0) > 0).length;
   document.getElementById('ov-production').textContent = totalProduction.toLocaleString('fr-FR');
   document.getElementById('ov-production-sub').textContent = `vins · ${nbSaisies} saisie${nbSaisies > 1 ? 's' : ''}`;
 
-  const totalCA = dash.reduce((s, e) => s + e.factures + e.runs, 0);
+  /* Les trois colonnes d'argent, pas deux : le CA d'ici doit être celui du
+     bilan comptable, qui compte les ventes depuis toujours. */
+  const totalCA = dash.reduce((s, e) => s + e.factures + e.runs + (e.ventes || 0), 0);
   document.getElementById('ov-ca').textContent = totalCA.toLocaleString('fr-FR');
 
   const objectifTarget = 50000;
@@ -2330,6 +2339,9 @@ function recruesDe(nom){
 const salaireDe = r => (window.mvSalaireGrade ? window.mvSalaireGrade(r) : 0);
 
 function primesRows(){
+  /* Le palier une seule fois pour toute la page : le demander ligne par ligne
+     recalculerait le bilan entier à chaque employé. */
+  const pal = window.mvPalierCourant ? window.mvPalierCourant() : null;
   return dash.map(e => {
     const barils = Math.round(e.runs / 5);
     /* Le quota vient de la fiche d'effectif de la personne, pas du barème de
@@ -2347,7 +2359,14 @@ function primesRows(){
            window.mvPalierCourant ? window.mvPalierCourant() : null, e.name) || null)
       : (atteint ? barils * mult : null);
     const recrues = recruesDe(e.name);
-    const salaire = salaireDe(e.rank);
+    /* Le salaire est plafonné par le palier, exactement comme dans le bilan.
+       Cette page affichait le salaire BRUT du grade : elle annonçait donc une
+       paie que le bilan écrêtait ensuite, et les deux totaux ne tombaient pas
+       juste. La colonne haute du barème est celle du patron seul. */
+    const brut = salaireDe(e.rank);
+    const salaire = pal
+      ? Math.min(brut, (window.mvRangPatron && window.mvRangPatron(e.rank)) ? pal.salDir : pal.salEmp)
+      : brut;
     /* La prime de recrutement est une PRIME, pas un salaire : elle se gagne
        en amenant quelqu'un. Elle est comptée à part pour que les deux totaux
        du haut de page veuillent dire ce qu'ils annoncent. */
@@ -3063,7 +3082,7 @@ const bcRangsPatron = ['Patron'];
 let bcRows = dash.map(e => ({
   name: e.name, rank: e.rank,
   runs: e.runs, factures: e.factures, ventes: e.ventes,
-  ca: e.factures + e.runs,
+  ca: e.factures + e.runs + (e.ventes || 0),
   salaire: bcSalaireDe(e.rank),
 }));
 
