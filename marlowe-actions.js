@@ -5967,6 +5967,120 @@
     toast('Règles enregistrées.');
   });
 
+  /* ==========================================================================
+     LA LISTE DE PAIE — prénom et montant, rien d'autre
+     --------------------------------------------------------------------------
+     Le « Copier pour le tableur » du bilan sort huit colonnes : parfait pour
+     un tableur, inutilisable pour payer les gens un par un. Ici on ne veut que
+     deux choses, prêtes à coller.
+
+     Le prénom seul a un défaut qu'il faut regarder en face : deux personnes
+     peuvent porter le même. Payer « Nella » quand il y a deux Nella, c'est se
+     tromper de personne sans jamais le savoir. Alors le prénom reste le format
+     par défaut, comme demandé, MAIS un prénom partagé reçoit son nom de
+     famille — sur cette ligne-là seulement — et le panel le dit.
+     ========================================================================== */
+  function lignesDePaie() {
+    /* On lit les lignes de la page Primes elle-même. Refaire le calcul ici
+       donnerait un deuxième chiffre pour la même paie — c'est exactement le
+       défaut qui séparait déjà cette page et le bilan. Une seule source. */
+    const rows = (typeof window.mvPrimesRows === 'function') ? window.mvPrimesRows() : [];
+
+    const gens = rows.map(r => {
+      const nom = String(r.name || '').trim();
+      return {
+        nom,
+        prenom: nom.split(/\s+/)[0] || nom,
+        total: Math.round(Number(r.total) || 0),
+      };
+    }).filter(x => x.nom);
+
+    /* Un prénom porté par deux personnes n'identifie personne. */
+    const compte = {};
+    gens.forEach(g => { const k = g.prenom.toLowerCase(); compte[k] = (compte[k] || 0) + 1; });
+    gens.forEach(g => {
+      g.partage = compte[g.prenom.toLowerCase()] > 1;
+      g.etiquette = g.partage ? g.nom : g.prenom;
+    });
+
+    gens.sort((a, b) => a.etiquette.localeCompare(b.etiquette, 'fr', { sensitivity: 'base' }));
+    return gens;
+  }
+
+  async function listeDePaie() {
+    const tous = lignesDePaie();
+    const payes = tous.filter(g => g.total > 0);
+    if (!payes.length) {
+      toast(tous.length ? 'Personne n\'a de montant à percevoir cette semaine.'
+                        : 'Le tableau de bord est vide : collez la tablette d\'abord.');
+      return;
+    }
+
+    const texte = payes.map(g => `${g.etiquette}\t${g.total}`).join('\n');
+    const partages = payes.filter(g => g.partage);
+    const zero = tous.length - payes.length;
+
+    const avert = partages.length
+      ? `<p class="mv-hint" style="margin:0 0 10px;color:var(--amber,#D6A75C);">
+           ${partages.length} prénom(s) porté(s) par plusieurs personnes : ces lignes-là
+           portent le nom complet, sinon on ne saurait pas qui payer.</p>` : '';
+    const rien = zero
+      ? `<p class="mv-hint" style="margin:0 0 10px;">${zero} personne(s) à 0 $ ne sont pas
+           dans la liste.</p>` : '';
+
+    const html = `${avert}${rien}
+      <textarea id="mvPaieTxt" class="mv-rap-txt" rows="${Math.min(16, payes.length + 1)}"
+        readonly style="width:100%;font-family:ui-monospace,Menlo,Consolas,monospace;
+        font-size:13px;white-space:pre;">${esc(texte)}</textarea>
+      <div class="btn-row" style="margin-top:10px;">
+        <button class="btn primary" id="mvPaieCopier" type="button">Copier les ${payes.length} lignes</button>
+        <button class="btn" id="mvPaieSep" type="button" data-sep="tab">Séparateur : tabulation</button>
+      </div>`;
+
+    await askHtml('Liste de paie', html,
+      `${payes.length} personne(s) à payer, ${payes.reduce((s, g) => s + g.total, 0).toLocaleString('fr-FR')} $ au total.`,
+      (d) => {
+        const ta = d.querySelector('#mvPaieTxt');
+        const bs = d.querySelector('#mvPaieSep');
+        const SEPS = [
+          ['tab', '\t', 'tabulation'],
+          ['espace', ' ', 'espace'],
+          ['pv', ' ; ', 'point-virgule'],
+        ];
+        /* Le séparateur dépend de là où on colle : un tableur veut une
+           tabulation, un champ de jeu un simple espace. On ne devine pas. */
+        bs.addEventListener('click', () => {
+          const i = SEPS.findIndex(x => x[0] === bs.dataset.sep);
+          const suiv = SEPS[(i + 1) % SEPS.length];
+          bs.dataset.sep = suiv[0];
+          bs.textContent = 'Séparateur : ' + suiv[2];
+          ta.value = payes.map(g => g.etiquette + suiv[1] + g.total).join('\n');
+        });
+        d.querySelector('#mvPaieCopier').addEventListener('click', () => {
+          ta.select();
+          copyToClipboard(ta.value, 'Liste de paie');
+        });
+        /* askHtml sert d'ordinaire à un formulaire : son pied propose
+           « Annuler » et « Enregistrer ». Ici il n'y a rien à enregistrer —
+           on lit et on copie. Un bouton qui promet une action qu'il ne fait
+           pas est pire qu'un bouton absent. */
+        /* On MASQUE « Annuler », on ne le retire pas : askHtml lui accroche son
+           gestionnaire juste après cet appel, et un bouton disparu le faisait
+           échouer — la fenêtre ne se fermait plus du tout. Vu à l'écran. */
+        const non = d.querySelector('[data-no]');
+        const oui = d.querySelector('[data-yes]');
+        if (non) non.hidden = true;
+        if (oui) { oui.textContent = 'Fermer'; oui.classList.remove('go'); }
+
+        /* Prêt à copier : le texte est déjà sélectionné à l'ouverture. */
+        setTimeout(() => { ta.focus(); ta.select(); }, 40);
+      });
+  }
+
+  document.addEventListener('click', e => {
+    if (e.target.closest('#primesPaie')) listeDePaie();
+  });
+
   function renderRegles() {
     renderReglages();
     renderQuotaService();

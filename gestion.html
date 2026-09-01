@@ -1552,6 +1552,8 @@
           <span style="color:var(--muted);font-size:14px;">⌕</span>
           <input type="text" id="primesSearch" placeholder="Rechercher un employé…">
         </div>
+        <!-- Pour la paie : prénom et montant, rien d'autre, prêts à coller. -->
+        <button class="btn" id="primesPaie">📋 Liste de paie</button>
       </div>
       <div style="overflow-x:auto;">
       <table class="primes-table">
@@ -2395,6 +2397,10 @@ renderPrimes();
 /* Le multiplicateur se règle dans Paramètres : quand il change, cette page
    doit se redessiner sans qu'on ait à recharger. */
 window.mvRenderPrimes = renderPrimes;
+/* La liste de paie lit CES lignes-là, et pas un calcul parallèle : le montant
+   collé est celui de la colonne « Total », au dollar près. Recalculer ailleurs,
+   c'est se retrouver avec deux chiffres pour la même paie. */
+window.mvPrimesRows = primesRows;
 
 document.getElementById('primesSearch').addEventListener('input', (e) => renderPrimes(e.target.value));
 
