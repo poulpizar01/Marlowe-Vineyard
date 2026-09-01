@@ -5653,10 +5653,13 @@
      dans un nom de grade supprimerait la prime de quelqu'un en silence. */
   const MULT_DEFAUT = { 'Saisonnier': 1, 'Ouvrier Viticole': 2, 'Chef de Culture': 3 };
 
-  /* Les grades concernés, tirés du barème lui-même : ajouter un grade au
-     barème le fait apparaître dans l'écran de réglage, sans double liste à
-     tenir à jour. */
-  const GRADES_PRIME = Object.keys(MULT_DEFAUT);
+  /* Tous les postes du domaine, dans le même ordre que la grille des salaires
+     juste au-dessus — direction, responsables, pôles, production. Le barème
+     d'origine ne nommait que les trois grades de production : la direction
+     n'avait donc aucun champ, et son multiplicateur restait figé à 1 sans
+     qu'on puisse y toucher. Un poste absent du barème vaut 1 par défaut, ce
+     qui ne change rien tant qu'on ne lui donne rien d'autre. */
+  const GRADES_PRIME = POSTES_CANON;
 
   function multiplicateurDuGrade(grade) {
     const g = String(grade || '').trim();
@@ -5887,9 +5890,10 @@
         <h4>Multiplicateur de prime par grade</h4>
         <p class="mv-hint" style="margin:0 0 12px;">La prime se calcule <b>vins × multiplicateur</b>, puis
           se plafonne au palier du bilan. C'est ce qui récompense la montée en grade : à production égale,
-          un chef de culture touche davantage qu'un saisonnier. Le barème du domaine est
-          1 · 2 · 3 ; changez-le ici s'il évolue. Une valeur laissée à 0 ou vide reprend ce barème —
-          pour retirer une prime, c'est le quota qu'on relève, pas le multiplicateur qu'on annule.</p>
+          un chef de culture touche davantage qu'un saisonnier. Le barème de production est
+          1 · 2 · 3 ; <b>tous les autres postes valent 1</b> tant qu'on ne leur donne rien d'autre.
+          Une valeur laissée à 0 ou vide reprend ce barème — pour retirer une prime, c'est le quota
+          qu'on relève, pas le multiplicateur qu'on annule.</p>
         <div class="mv-sal-grille">
           ${GRADES_PRIME.map(g => `
             <label class="mv-lab mv-sal-l">${esc(g)}
