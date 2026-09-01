@@ -6007,6 +6007,30 @@
     return gens;
   }
 
+  /* Copier sans rien annoncer.
+     -------------------------------------------------------------------------
+     copyToClipboard() affiche un bandeau à chaque appel : parfait pour une
+     copie unique, insupportable ici où l'on clique deux fois par personne et
+     quarante fois de suite. La confirmation se fait sur le bouton lui-même. */
+  async function copierMuet(texte) {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(texte);
+        return true;
+      }
+    } catch (e) { /* on tente la suite */ }
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = texte;
+      ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return ok;
+    } catch (e) { return false; }
+  }
+
   async function listeDePaie() {
     const tous = lignesDePaie();
     const payes = tous.filter(g => g.total > 0);
@@ -6016,64 +6040,108 @@
       return;
     }
 
-    const texte = payes.map(g => `${g.etiquette}\t${g.total}`).join('\n');
     const partages = payes.filter(g => g.partage);
     const zero = tous.length - payes.length;
 
     const avert = partages.length
-      ? `<p class="mv-hint" style="margin:0 0 10px;color:var(--amber,#D6A75C);">
+      ? `<p class="mv-hint" style="margin:0 0 8px;color:var(--amber,#D6A75C);">
            ${partages.length} prénom(s) porté(s) par plusieurs personnes : ces lignes-là
            portent le nom complet, sinon on ne saurait pas qui payer.</p>` : '';
     const rien = zero
-      ? `<p class="mv-hint" style="margin:0 0 10px;">${zero} personne(s) à 0 $ ne sont pas
+      ? `<p class="mv-hint" style="margin:0 0 8px;">${zero} personne(s) à 0 $ ne sont pas
            dans la liste.</p>` : '';
 
-    const html = `${avert}${rien}
-      <textarea id="mvPaieTxt" class="mv-rap-txt" rows="${Math.min(16, payes.length + 1)}"
-        readonly style="width:100%;font-family:ui-monospace,Menlo,Consolas,monospace;
-        font-size:13px;white-space:pre;">${esc(texte)}</textarea>
-      <div class="btn-row" style="margin-top:10px;">
-        <button class="btn primary" id="mvPaieCopier" type="button">Copier les ${payes.length} lignes</button>
-        <button class="btn" id="mvPaieSep" type="button" data-sep="tab">Séparateur : tabulation</button>
-      </div>`;
+    /* Une ligne par personne, deux boutons : le nom, le montant. On paie dans
+       un formulaire à deux champs — il faut donc pouvoir prendre l'un puis
+       l'autre, pas un bloc de texte à découper à la main. */
+    const lignes = payes.map((g, i) => `
+      <div class="mvp-l" data-i="${i}">
+        <button type="button" class="mvp-c mvp-nom" data-copie="nom" data-i="${i}"
+          title="Copier le nom">${esc(g.etiquette)}</button>
+        <button type="button" class="mvp-c mvp-sou" data-copie="montant" data-i="${i}"
+          title="Copier le montant">${g.total.toLocaleString('fr-FR')} $</button>
+        <button type="button" class="mvp-f" data-fait="${i}" title="Marquer comme versée">✓</button>
+      </div>`).join('');
+
+    const html = `
+      <style>
+        .mvp-liste{display:flex;flex-direction:column;gap:6px;}
+        .mvp-l{display:flex;gap:8px;align-items:center;}
+        .mvp-l.fait{opacity:.42;}
+        .mvp-c{flex:1 1 auto;min-width:0;text-align:left;cursor:pointer;font:inherit;
+          background:rgba(0,0,0,.25);border:1px solid var(--band,#3D372C);border-radius:9px;
+          padding:9px 12px;color:var(--parchment,#EDE3CF);font-size:13.5px;
+          overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:.12s;}
+        .mvp-c:hover{border-color:var(--or-soft,#8E7C4E);}
+        .mvp-c.ok{border-color:var(--vine,#6E8B5D);color:var(--vine,#6E8B5D);}
+        .mvp-sou{flex:0 0 34%;text-align:right;font-family:ui-monospace,Menlo,Consolas,monospace;
+          color:var(--or,#C9A961);}
+        .mvp-f{flex:0 0 auto;cursor:pointer;font:inherit;font-size:13px;
+          background:transparent;border:1px solid var(--band,#3D372C);border-radius:9px;
+          padding:9px 11px;color:var(--muted,#9C9384);}
+        .mvp-l.fait .mvp-f{color:var(--vine,#6E8B5D);border-color:var(--vine,#6E8B5D);}
+      </style>
+      ${avert}${rien}
+      <p class="mv-hint" style="margin:0 0 10px;">Cliquez le nom pour le copier, puis le montant.
+        La ligne se marque toute seule une fois les deux pris — de quoi ne pas perdre sa place
+        au bout de trente versements. Le ✓ la marque ou la démarque à la main.</p>
+      <div class="mvp-liste">${lignes}</div>
+      <p class="mv-hint" id="mvPaieCpt" style="margin:10px 0 0;"></p>`;
 
     await askHtml('Liste de paie', html,
       `${payes.length} personne(s) à payer, ${payes.reduce((s, g) => s + g.total, 0).toLocaleString('fr-FR')} $ au total.`,
       (d) => {
-        const ta = d.querySelector('#mvPaieTxt');
-        const bs = d.querySelector('#mvPaieSep');
-        const SEPS = [
-          ['tab', '\t', 'tabulation'],
-          ['espace', ' ', 'espace'],
-          ['pv', ' ; ', 'point-virgule'],
-        ];
-        /* Le séparateur dépend de là où on colle : un tableur veut une
-           tabulation, un champ de jeu un simple espace. On ne devine pas. */
-        bs.addEventListener('click', () => {
-          const i = SEPS.findIndex(x => x[0] === bs.dataset.sep);
-          const suiv = SEPS[(i + 1) % SEPS.length];
-          bs.dataset.sep = suiv[0];
-          bs.textContent = 'Séparateur : ' + suiv[2];
-          ta.value = payes.map(g => g.etiquette + suiv[1] + g.total).join('\n');
+        const pris = payes.map(() => ({ nom: false, montant: false }));
+        const cpt = d.querySelector('#mvPaieCpt');
+
+        const majCpt = () => {
+          const n = d.querySelectorAll('.mvp-l.fait').length;
+          cpt.textContent = `${n} versée(s) sur ${payes.length}.`;
+        };
+
+        const ligne = i => d.querySelector(`.mvp-l[data-i="${i}"]`);
+
+        d.querySelectorAll('.mvp-c').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            const i = Number(btn.dataset.i);
+            const quoi = btn.dataset.copie;
+            const texte = quoi === 'nom' ? payes[i].etiquette : String(payes[i].total);
+            const ok = await copierMuet(texte);
+            if (!ok) { toast('Le navigateur a refusé la copie.'); return; }
+
+            /* La confirmation vit sur le bouton, une seconde. Un bandeau à
+               chaque clic serait un clignotement permanent. */
+            const avant = btn.textContent;
+            btn.classList.add('ok');
+            btn.textContent = 'copié ✓';
+            setTimeout(() => { btn.classList.remove('ok'); btn.textContent = avant; }, 900);
+
+            pris[i][quoi] = true;
+            if (pris[i].nom && pris[i].montant) { ligne(i).classList.add('fait'); majCpt(); }
+          });
         });
-        d.querySelector('#mvPaieCopier').addEventListener('click', () => {
-          ta.select();
-          copyToClipboard(ta.value, 'Liste de paie');
+
+        d.querySelectorAll('.mvp-f').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const i = Number(btn.dataset.fait);
+            const l = ligne(i);
+            const fait = l.classList.toggle('fait');
+            pris[i].nom = pris[i].montant = fait;
+            majCpt();
+          });
         });
+
+        majCpt();
+
         /* askHtml sert d'ordinaire à un formulaire : son pied propose
-           « Annuler » et « Enregistrer ». Ici il n'y a rien à enregistrer —
-           on lit et on copie. Un bouton qui promet une action qu'il ne fait
-           pas est pire qu'un bouton absent. */
-        /* On MASQUE « Annuler », on ne le retire pas : askHtml lui accroche son
+           « Annuler » et « Enregistrer ». Ici il n'y a rien à enregistrer.
+           On MASQUE « Annuler » sans le retirer : askHtml lui accroche son
            gestionnaire juste après cet appel, et un bouton disparu le faisait
            échouer — la fenêtre ne se fermait plus du tout. Vu à l'écran. */
         const non = d.querySelector('[data-no]');
         const oui = d.querySelector('[data-yes]');
         if (non) non.hidden = true;
         if (oui) { oui.textContent = 'Fermer'; oui.classList.remove('go'); }
-
-        /* Prêt à copier : le texte est déjà sélectionné à l'ouverture. */
-        setTimeout(() => { ta.focus(); ta.select(); }, 40);
       });
   }
 
