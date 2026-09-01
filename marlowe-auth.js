@@ -133,22 +133,22 @@
        Trois choses à savoir en les lisant :
 
        · rien n'est ouvert par défaut. Une page absente de la matrice est
-         fermée à tous sauf au patron, et ces sept-là y entrent vides ;
+         fermée à tous sauf au patron, et ces six-là y entrent vides ;
        · « Accès & rôles » est la matrice elle-même. Qui l'obtient peut
          s'accorder tout le reste — il n'existe aucune demi-mesure ;
-       · « Données du panel » ne suffit pas à lui seul pour vider : chaque
-         collection effacée exige en plus le droit d'écrire dessus. C'est
-         volontaire, et le serveur le vérifie ligne par ligne. */
+       · « Données du panel » a été retirée. Elle ne portait plus que deux
+         boutons dont le domaine n'a plus l'usage : charger un jeu d'essai,
+         et vider le panel. D'anciens droits enregistrés sous ce nom peuvent
+         subsister côté serveur ; ils ne donnent plus accès à rien. */
     { id: 'parametres',     label: 'Accès & rôles',   group: 'Administration' },
     { id: 'paramagenda',    label: 'Agenda',          group: 'Administration' },
     { id: 'paramdispo',     label: 'Disponibilités',  group: 'Administration' },
     { id: 'paramvitrine',   label: 'Vitrine publique', group: 'Administration' },
     { id: 'paramregles',    label: 'Règles du domaine', group: 'Administration' },
     { id: 'paraminvites',   label: 'Accès extérieurs', group: 'Administration' },
-    { id: 'paramdonnees',   label: 'Données du panel', group: 'Administration' },
   ];
 
-  /* Les sept ci-dessus, pour ne pas les redire ailleurs. */
+  /* Les six ci-dessus, pour ne pas les redire ailleurs. */
   const PAGES_ADMIN = PAGES.filter(p => p.group === 'Administration').map(p => p.id);
 
   /* Rôles utilisés en mode démo. En mode 'discord', la vraie liste est
@@ -1335,31 +1335,6 @@
               immédiate.`,
         html: `<div class="panel" id="mvInvites"></div>`,
       },
-      {
-        id: 'paramdonnees',
-        menu: 'Données du panel',
-        titre: 'Données du panel',
-        sub: `Remplir le panel pour l'essayer, ou le vider pour démarrer proprement.
-              Ces deux boutons touchent les données de tout le monde.`,
-        html: `
-          <div class="panel">
-            <h3>Jeu de démonstration</h3>
-            <p class="mv-admin-note">Remplit RH, Commerce et Quotas de données inventées mais cohérentes —
-               les mêmes personnes d'un tableau à l'autre, des chiffres qui s'additionnent
-               juste. De quoi juger les écrans pleins plutôt que vides.
-               <b>Ces données partent sur le serveur comme les vraies : toute l'équipe les verra.</b>
-               Le bouton juste en dessous les retire.</p>
-            <button class="btn" id="mvDemo">Charger un jeu de démonstration…</button>
-          </div>
-
-          <div class="panel mv-danger">
-            <h3>Repartir de zéro</h3>
-            <p>Vide les données du panel pour démarrer proprement — employés, factures, production,
-               semaines clôturées. Vous choisissez ce qui part. Contrairement à une clôture,
-               <b>rien n'est archivé et l'opération ne s'annule pas</b>.</p>
-            <button class="btn" id="mvWipe">🗑 Vider les données…</button>
-          </div>`,
-      },
     ];
 
     /* --- entrées de menu + pages --- */
@@ -1441,7 +1416,6 @@
     if (acces) { brancherAcces(acces); brancherAccesEnregistrement(acces); }
     if (pages.paramagenda) brancherAgenda(pages.paramagenda);
     if (pages.paramdispo) brancherDispo(pages.paramdispo);
-    if (pages.paramdonnees) brancherDonnees(pages.paramdonnees);
 
     /* ------------------------------------------------------------------ */
     function brancherAcces(acces) {
@@ -1590,21 +1564,6 @@
     }
 
     /* ------------------------------------------------------------------ */
-    function brancherDonnees(pageDo) {
-    const demo = pageDo.querySelector('#mvDemo');
-    if (demo) demo.addEventListener('click', () => {
-      const a = window.MarloweActions;
-      if (a && a.chargerDemo) a.chargerDemo();
-    });
-
-    const wipe = pageDo.querySelector('#mvWipe');
-    if (wipe) wipe.addEventListener('click', () => {
-      const a = window.MarloweActions;
-      if (a && a.repartirDeZero) a.repartirDeZero();
-    });
-
-    }
-
     /* ------------------------------------------------------------------ */
     /* Les deux derniers gestionnaires appartiennent à la matrice, pas aux
        données : ils se branchent avec elle. */
