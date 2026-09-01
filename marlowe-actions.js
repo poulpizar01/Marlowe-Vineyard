@@ -94,13 +94,26 @@
   }
 
   /* Demande confirmation. Renvoie true/false. */
+  /* `danger` dit ROUGE, pas « Supprimer ».
+     -------------------------------------------------------------------------
+     Les deux étaient confondus : toute action rouge héritait du mot
+     « Supprimer », y compris celles qui ne suppriment rien. Une rétrogradation
+     demandait ainsi de cliquer sur « Supprimer » pour changer quelqu'un de
+     grade — le bouton annonçait autre chose que ce qu'il faisait.
+
+     `danger` peut donc être true (rouge, bouton « Supprimer ») ou une chaîne :
+     le bouton reste rouge et porte ce mot-là. Le rouge signale que l'action ne
+     se rattrape pas ; le libellé dit laquelle. */
   function confirmAction(title, message, danger) {
     ensureDialog();
+    const rouge = !!danger;
+    const mot = typeof danger === 'string' && danger.trim()
+      ? danger.trim() : (rouge ? 'Supprimer' : 'Confirmer');
     dlg.querySelector('.mv-dlg').innerHTML = `
       <h3>${esc(title)}</h3><p>${esc(message)}</p>
       <div class="mv-dlg-btns">
         <button data-no>Annuler</button>
-        <button data-yes class="${danger ? 'danger' : 'go'}">${danger ? 'Supprimer' : 'Confirmer'}</button>
+        <button data-yes class="${rouge ? 'danger' : 'go'}">${esc(mot)}</button>
       </div>`;
     dlg.style.display = 'flex';
     dlg.querySelector('[data-no]').onclick = () => close(false);
@@ -1083,7 +1096,7 @@
     const b = blacklistData[i];
     if (!b) return;
     if (!await confirmAction('Retirer de la blacklist',
-      `${b.name} pourra de nouveau être recruté au domaine.`, true)) return;
+      `${b.name} pourra de nouveau être recruté au domaine.`, 'Retirer')) return;
     D().note(`a retiré ${b.name} de la blacklist`);
     blacklistData.splice(i, 1);
     D().save('blacklist');
@@ -1124,7 +1137,7 @@
     if (i < 0) return;
     const h = historiqueData[i];
     if (!await confirmAction('Supprimer la facture',
-      `Facture n°${h.num} — ${h.client} — ${h.total.toLocaleString('fr-FR')} $. Cette suppression est définitive.`, true)) return;
+      `Facture n°${h.num} — ${h.client} — ${h.total.toLocaleString('fr-FR')} $. Cette suppression est définitive.`, 'Supprimer')) return;
     D().note(`a supprimé la facture n°${h.num} (${h.client}, ${h.total.toLocaleString('fr-FR')} $)`);
     historiqueData.splice(i, 1);
     const c = $('histCount'); if (c) c.textContent = historiqueData.length;
@@ -1650,7 +1663,7 @@ window.onload = function(){
 
   async function resetInvoice() {
     if (!await confirmAction('Réinitialiser la facture',
-      'Toutes les lignes saisies seront effacées.', true)) return;
+      'Toutes les lignes saisies seront effacées.', 'Réinitialiser')) return;
     resetInvoiceLines();
     if ($('invClient')) $('invClient').value = '';
     if ($('invRemise')) $('invRemise').value = '0';
@@ -1797,7 +1810,7 @@ window.onload = function(){
   async function deleteClient(name) {
     const i = clientsData.findIndex(c => c.name === name);
     if (i < 0) return;
-    if (!await confirmAction('Retirer le client', `${name} sera retiré de la base clients.`, true)) return;
+    if (!await confirmAction('Retirer le client', `${name} sera retiré de la base clients.`, 'Retirer')) return;
     D().note(`a retiré le client ${name}`);
     clientsData.splice(i, 1);
     refreshClientCounts();
@@ -1844,7 +1857,7 @@ window.onload = function(){
     const i = articlesData.findIndex(a => a.ref === ref);
     if (i < 0) return;
     if (!await confirmAction('Retirer l\'article',
-      `${articlesData[i].desc} sera retiré du catalogue.`, true)) return;
+      `${articlesData[i].desc} sera retiré du catalogue.`, 'Retirer')) return;
     D().note(`a retiré l'article ${articlesData[i].desc}`);
     articlesData.splice(i, 1);
     refreshArticleCount();
@@ -1914,7 +1927,7 @@ window.onload = function(){
     const f = frLocate(token);
     if (!f) return;
     if (!await confirmAction('Supprimer la facture reçue',
-      `${f.g.supplier} — ${f.item.montant.toLocaleString('fr-FR')} $ du ${f.item.date}.`, true)) return;
+      `${f.g.supplier} — ${f.item.montant.toLocaleString('fr-FR')} $ du ${f.item.date}.`, 'Supprimer')) return;
     D().note(`a supprimé une facture reçue de ${f.g.supplier} (${f.item.montant.toLocaleString('fr-FR')} $)`);
     f.g.items.splice(f.ii, 1);
     if (!f.g.items.length) facturesRecuesData.splice(f.gi, 1);
@@ -1957,7 +1970,7 @@ window.onload = function(){
     const s = slides[idx];
 
     if (!await confirmAction('Supprimer ce lien Canva',
-      `« ${s.title} » sera retiré du catalogue ${key === 'entreprise' ? 'entreprise' : 'citoyens'}.`, true)) return;
+      `« ${s.title} » sera retiré du catalogue ${key === 'entreprise' ? 'entreprise' : 'citoyens'}.`, 'Supprimer')) return;
 
     slides.splice(idx, 1);
     catalogueIndex[key] = Math.max(0, Math.min(idx, slides.length - 1));
@@ -1977,7 +1990,7 @@ window.onload = function(){
   async function deleteDashRow(name) {
     const i = dash.findIndex(d => d.name === name);
     if (i < 0) return;
-    if (!await confirmAction('Retirer la ligne', `${name} sera retiré du tableau de bord.`, true)) return;
+    if (!await confirmAction('Retirer la ligne', `${name} sera retiré du tableau de bord.`, 'Retirer')) return;
     D().note(`a retiré ${name} du tableau de bord`);
     dash.splice(i, 1);
     D().save('dash');
@@ -2058,7 +2071,7 @@ window.onload = function(){
   async function deleteEvent(i) {
     const ev = agendaData[i];
     if (!ev) return;
-    if (!await confirmAction('Supprimer l\'événement', `« ${ev.title} » du ${ev.date}.`, true)) return;
+    if (!await confirmAction('Supprimer l\'événement', `« ${ev.title} » du ${ev.date}.`, 'Supprimer')) return;
     agendaData.splice(i, 1);
     D().save('agenda');
     toast('Événement supprimé.');
@@ -2248,7 +2261,7 @@ window.onload = function(){
     const quotaBas = quotaDuGrade(bas.bas);
     if (!await confirmAction('Rétrograder',
       `${e.name} passe de ${e.grade} à ${bas.bas}. Son quota hebdomadaire devient `
-      + `${quotaBas.toLocaleString('fr-FR')} vins.`, true)) return;
+      + `${quotaBas.toLocaleString('fr-FR')} vins.`, 'Rétrograder')) return;
 
     e.grade = bas.bas;
     e.quota = quotaBas;
@@ -2362,7 +2375,7 @@ window.onload = function(){
     const i = effectifData.findIndex(x => x.name === name);
     if (i < 0) return;
     if (!await confirmAction('Retirer la fiche',
-      `${name} ne sera plus suivi dans les quotas ni dans l'éligibilité.`, true)) return;
+      `${name} ne sera plus suivi dans les quotas ni dans l'éligibilité.`, 'Retirer')) return;
     D().note(`a retiré la fiche de production de ${name}`);
     effectifData.splice(i, 1);
     D().save('effectif');
@@ -3645,7 +3658,7 @@ window.onload = function(){
     if (i < 0) return;
     const w = clotures.weeks[i];
     if (!await confirmAction('Supprimer de l\'historique',
-      `${w.label} (${w.du} → ${w.au}) sera définitivement retirée. Cela n'annule pas la clôture, cela efface seulement son archive.`, true)) return;
+      `${w.label} (${w.du} → ${w.au}) sera définitivement retirée. Cela n'annule pas la clôture, cela efface seulement son archive.`, 'Supprimer')) return;
     clotures.weeks.splice(i, 1);
     if (clotures.undo && clotures.undo.weekId === id) clotures.undo = null;
     D().save('clotures', false);
@@ -3693,7 +3706,7 @@ window.onload = function(){
     const p = primesExc[Number(i)];
     if (!p) return;
     if (!await confirmAction('Retirer la prime exceptionnelle',
-      `${p.nom} — ${p.montant.toLocaleString('fr-FR')} $.`, true)) return;
+      `${p.nom} — ${p.montant.toLocaleString('fr-FR')} $.`, 'Retirer')) return;
     primesExc.splice(Number(i), 1);
     D().save('primesExc', false);
     renderPrimesExc();
@@ -5637,7 +5650,7 @@ window.onload = function(){
       `${n} pointage${n > 1 ? 's' : ''} de la semaine ${n > 1 ? 'seront effacés' : 'sera effacé'}, `
       + `y compris un service en cours. Le total repart de 0h00.\n\n`
       + `La clôture du lundi fait déjà cette remise à zéro : ce bouton n'est là que `
-      + `pour corriger une semaine en cours. L'opération ne s'annule pas.`, true);
+      + `pour corriger une semaine en cours. L'opération ne s'annule pas.`, 'Remettre à zéro');
     if (!ok) return;
 
     serviceHistory.length = 0;
