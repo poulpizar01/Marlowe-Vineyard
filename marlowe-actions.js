@@ -743,57 +743,43 @@
         </table>
         ${fiches.length > 6 ? `<div class="mv-imp-reste">…et ${fiches.length - 6} autre(s)</div>` : ''}
       </div>
-      <label class="mv-reset-l"><input type="radio" name="mvImpMode" value="fusionner" checked>
-        <span><b>Mettre à jour le registre</b> — ${dejaLa} fiche(s) déjà connue(s) sont enrichies,
-          ${fiches.length - dejaLa} ajoutée(s). Ce que le collage ne porte pas — identifiant Discord,
-          téléphone, RIB, permis, statut — <b>reste en place</b>.</span></label>
-      <label class="mv-reset-l"><input type="radio" name="mvImpMode" value="ajouter">
-        <span>Ajouter seulement les nouveaux, sans toucher aux fiches connues</span></label>
-      <label class="mv-reset-l"><input type="radio" name="mvImpMode" value="remplacer">
-        <span>Remplacer entièrement — les ${rhRosterData.length} fiche(s) actuelle(s) sont effacées,
-          <b>y compris tout ce qui a été saisi à la main</b>. À ne choisir que pour repartir de zéro.</span></label>
+      <!-- Un seul comportement, donc aucun choix à faire : un import qui
+           efface n'a jamais été ce qu'on voulait, et le proposer c'était
+           laisser la porte ouverte à la mauvaise soirée. On annonce ce qui va
+           se passer, on ne demande pas de le choisir. -->
+      <div class="mv-imp-rap" style="margin-top:2px;">
+        <div><b>${dejaLa}</b> fiche(s) déjà connue(s) seront <b>enrichies</b>,
+          <b>${fiches.length - dejaLa}</b> ajoutée(s).</div>
+        <div>Ce que le collage ne porte pas — identifiant Discord, téléphone, RIB,
+          recruteur, permis, statut — <b>reste en place</b>.</div>
+        <div>Personne n'est supprimé : une fiche absente du collage reste au registre.</div>
+      </div>
       <div class="mv-dlg-btns">
         <button data-no>Annuler</button>
-        <button data-yes class="go">Enregistrer</button>
+        <button data-yes class="go">Mettre à jour le registre</button>
       </div>`;
 
-    const mode = await new Promise(r => {
+    const valide = await new Promise(r => {
       resolver = r;
       d2.querySelector('[data-no]').onclick = () => close(null);
-      d2.querySelector('[data-yes]').onclick = () => {
-        const c = d2.querySelector('input[name="mvImpMode"]:checked');
-        close(c ? c.value : 'remplacer');
-      };
+      d2.querySelector('[data-yes]').onclick = () => close(true);
     });
     d2.style.maxWidth = '';
-    if (!mode) return;
+    if (!valide) return;
 
+    /* Un seul comportement : on enrichit ce qui existe, on ajoute ce qui
+       manque, et on ne SUPPRIME personne. Les modes « Remplacer » et
+       « Ajouter seulement » ont été retirés — le premier effaçait le travail
+       de saisie, le second laissait vieillir les fiches connues. Aucun des
+       deux ne servait, et le premier a déjà coûté une ressaisie complète. */
     let ajoutees = 0, majs = 0;
     const propre = f => { const x = Object.assign({}, f); delete x.dateFournie; return x; };
 
-    if (mode === 'remplacer') {
-      rhRosterData.length = 0;
-      fiches.forEach(f => rhRosterData.push(propre(f)));
-      ajoutees = fiches.length;
-    } else if (mode === 'ajouter') {
-      const connus = new Set(rhRosterData.map(e => String(e.id)));
-      fiches.forEach(f => {
-        if (connus.has(String(f.id))) return;
-        rhRosterData.push(propre(f));
-        connus.add(String(f.id));
-        ajoutees++;
-      });
-    } else {
-      /* Mise à jour : on enrichit ce qui existe, on ajoute ce qui manque, et
-         on ne SUPPRIME personne. Quelqu'un absent du collage reste au
-         registre — un employé s'en va par « Déclarer un départ », pas parce
-         qu'on a oublié sa ligne dans un copier-coller. */
-      fiches.forEach(f => {
-        const i = rhRosterData.findIndex(e => String(e.id) === String(f.id));
-        if (i >= 0) { rhRosterData[i] = fusionnerFiche(rhRosterData[i], f); majs++; }
-        else { rhRosterData.push(propre(f)); ajoutees++; }
-      });
-    }
+    fiches.forEach(f => {
+      const i = rhRosterData.findIndex(e => String(e.id) === String(f.id));
+      if (i >= 0) { rhRosterData[i] = fusionnerFiche(rhRosterData[i], f); majs++; }
+      else { rhRosterData.push(propre(f)); ajoutees++; }
+    });
 
     /* Le registre arrive dans l'ordre du tableur ; on le range par date
        d'arrivée, du plus récent au plus ancien, comme le reste du panel. */
