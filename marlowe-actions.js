@@ -956,36 +956,13 @@
   const MV_TEL = '923';            /* téléphone du domaine, sur la facture */
   const PAYMENT_DAYS = 14;         /* délai de paiement accordé aux clients   */
 
-  /* Blason circulaire du domaine */
-  const SVG_CREST = `
-<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <radialGradient id="cg" cx="50%" cy="38%" r="65%">
-      <stop offset="0%" stop-color="#2C5C46"/><stop offset="100%" stop-color="#14392C"/>
-    </radialGradient>
-    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#E8CE85"/><stop offset="45%" stop-color="#C9A227"/>
-      <stop offset="100%" stop-color="#8E6C15"/>
-    </linearGradient>
-  </defs>
-  <circle cx="100" cy="100" r="96" fill="url(#gold)"/>
-  <circle cx="100" cy="100" r="88" fill="url(#cg)"/>
-  <circle cx="100" cy="100" r="82" fill="none" stroke="url(#gold)" stroke-width="1.6"/>
-  <g fill="url(#gold)">
-    <path d="M100 34c-11 15-11 28 0 40 11-12 11-25 0-40Z"/>
-    <circle cx="78" cy="86" r="8"/><circle cx="100" cy="80" r="8"/><circle cx="122" cy="86" r="8"/>
-    <circle cx="88" cy="102" r="8"/><circle cx="112" cy="102" r="8"/>
-    <circle cx="100" cy="118" r="8"/>
-  </g>
-  <path d="M52 92c10 10 22 12 32 6M148 92c-10 10-22 12-32 6" stroke="url(#gold)"
-        stroke-width="2.4" fill="none" stroke-linecap="round"/>
-  <path d="M28 138h144l-14 20H42Z" fill="#14392C" stroke="url(#gold)" stroke-width="1.6"/>
-  <text x="100" y="152" text-anchor="middle" font-family="Cinzel, Georgia, serif"
-        font-size="15" font-weight="700" letter-spacing="1.4" fill="#E8CE85">MARLOWE</text>
-  <text x="100" y="172" text-anchor="middle" font-family="Cinzel, Georgia, serif"
-        font-size="10" letter-spacing="4" fill="#C9A227">VINEYARD</text>
-</svg>`;
-
+  /* Le vrai blason du domaine, et non plus une approximation.
+     -------------------------------------------------------------------------
+     La facture portait un blason redessiné en SVG : un cercle vert, un anneau
+     doré et une grappe stylisée. Il ressemblait au logo sans en être un — pas
+     les mêmes feuilles, pas le même cartouche, pas la même typographie. Sur un
+     document qui sort du domaine et circule, c'est le vrai logo qui doit
+     figurer, celui de la vitrine et du panel. */
   /* La grappe, le paysage et les écoinçons étaient dessinés en SVG à l'époque
      où le parchemin l'était aussi. Le visuel fourni les porte lui-même. */
 
@@ -1005,6 +982,7 @@
        ouverte vide, donc son adresse de base est « about:blank » : un chemin
        relatif n'y résoudrait rien. On calcule l'adresse absolue ici. */
     const PARCHEMIN = new URL('img/parchemin-v2.jpg', location.href).href;
+    const LOGO = new URL('logo-full.png', location.href).href;
 
     const w = window.open('', '_blank');
     if (!w) { toast('Le navigateur a bloqué la fenêtre. Autorisez les pop-ups.'); return; }
@@ -1087,8 +1065,11 @@
      visuel : les redessiner par-dessus ferait doublon. */
   .inner{position:relative;z-index:2;padding:22mm 24mm 0;}
 
-  .crest{width:23mm;margin:0 auto 2mm;}
-  .crest svg{width:100%;height:auto;display:block;
+  /* Le fichier du logo est carré mais son dessin est plus large que haut :
+     une bonne partie de la hauteur est du vide. On le pose donc un peu plus
+     grand que l'ancien blason pour que le cartouche pèse autant à l'œil. */
+  .crest{width:34mm;margin:0 auto -1mm;}
+  .crest img{width:100%;height:auto;display:block;
     filter:drop-shadow(0 4px 10px rgba(80,60,20,.35));}
 
   h1{font-family:'Cinzel',Georgia,serif;font-size:23pt;font-weight:600;letter-spacing:.09em;
@@ -1166,7 +1147,7 @@
   <img class="parch" src="${PARCHEMIN}" alt="">
 
   <div class="inner">
-    <div class="crest">${SVG_CREST}</div>
+    <div class="crest"><img src="${LOGO}" alt="Marlowe Vineyard"></div>
     <h1>MARLOWE VINEYARD</h1>
     <h2>Facture</h2>
     <div class="rule"></div>
