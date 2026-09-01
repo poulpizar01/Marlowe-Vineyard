@@ -2069,13 +2069,14 @@ window.onload = function(){
      se devine pas.
      ========================================================================== */
 
-  /* Les trois grades du parcours de production, avec leur quota hebdomadaire
-     et le palier qui ouvre la promotion suivante. Indexés par clé normalisée :
-     le registre écrit « Ouvrier viticole », les primes « Ouvrier Viticole ». */
+  /* Les trois grades du parcours de production et leur enchaînement. Indexés
+     par clé normalisée : le registre écrit « Ouvrier viticole », les primes
+     « Ouvrier Viticole ». Les quotas n'y figurent plus — ils se règlent dans
+     Administration ▸ Règles du domaine et se lisent par quotaDuGrade(). */
   const GRADE_PROD = {
-    'saisonnier':       { grade: 'Saisonnier',       quota: 3000, next: 'Ouvrier Viticole', promoTarget: 5000, final: false },
-    'ouvrier viticole': { grade: 'Ouvrier Viticole', quota: 5000, next: 'Chef de Culture',  promoTarget: 8000, final: false },
-    'chef de culture':  { grade: 'Chef de Culture',  quota: 8000, next: null,               promoTarget: null, final: true  },
+    'saisonnier':       { grade: 'Saisonnier',       next: 'Ouvrier Viticole', final: false },
+    'ouvrier viticole': { grade: 'Ouvrier Viticole', next: 'Chef de Culture',  final: false },
+    'chef de culture':  { grade: 'Chef de Culture',  next: null,               final: true  },
   };
 
   function synchroniserEffectif() {
@@ -2100,8 +2101,14 @@ window.onload = function(){
       if (!e) {
         e = {
           name: emp.name, grade: g.grade, active: true,
-          barils: 0, quota: g.quota,
-          nextGrade: g.next, promoTarget: g.promoTarget, isFinal: g.final,
+          /* Le quota du grade et le palier de promotion se lisent dans les
+             réglages : la table ci-dessus ne porte plus que l'enchaînement
+             des grades. Le palier de promotion EST le quota du grade
+             suivant — une seule valeur à régler, pas deux à accorder. */
+          barils: 0, quota: quotaDuGrade(g.grade),
+          nextGrade: g.next,
+          promoTarget: g.next ? quotaDuGrade(g.next) : null,
+          isFinal: g.final,
           distributed: false,
         };
         effectifData.push(e);
@@ -2143,8 +2150,8 @@ window.onload = function(){
      EFFECTIF — promouvoir, modifier, retirer
      ======================================================================== */
   const NEXT_GRADE = {
-    'Saisonnier':       { next: 'Ouvrier Viticole', quota: 5000, promoTarget: 8000, nextNext: 'Chef de Culture', final: false },
-    'Ouvrier Viticole': { next: 'Chef de Culture',  quota: 8000, promoTarget: null, nextNext: null,              final: true },
+    'Saisonnier':       { next: 'Ouvrier Viticole', nextNext: 'Chef de Culture', final: false },
+    'Ouvrier Viticole': { next: 'Chef de Culture',  nextNext: null,              final: true },
   };
 
   async function promoteEmployee(name) {
@@ -2153,12 +2160,13 @@ window.onload = function(){
     const step = NEXT_GRADE[e.grade];
     if (!step) { toast('Ce grade est déjà le dernier du parcours.'); return; }
 
+    const nouveauQuota = quotaDuGrade(step.next);
     if (!await confirmAction('Promouvoir',
-      `${e.name} passe de ${e.grade} à ${step.next}. Son quota hebdomadaire devient ${step.quota.toLocaleString('fr-FR')} vins.`)) return;
+      `${e.name} passe de ${e.grade} à ${step.next}. Son quota hebdomadaire devient ${nouveauQuota.toLocaleString('fr-FR')} vins.`)) return;
 
     e.grade = step.next;
-    e.quota = step.quota;
-    e.promoTarget = step.promoTarget;
+    e.quota = nouveauQuota;
+    e.promoTarget = step.nextNext ? quotaDuGrade(step.nextNext) : null;
     e.nextGrade = step.nextNext;
     e.isFinal = step.final;
 
@@ -2171,8 +2179,8 @@ window.onload = function(){
      déduit de NEXT_GRADE : un jour on ajoutera un grade, et une table qu'on
      lit à l'envers est une table qu'on oublie de mettre à jour. */
   const GRADE_INFERIEUR = {
-    'Chef de Culture':  { bas: 'Ouvrier Viticole', quota: 5000, promoTarget: 8000, nextNext: 'Chef de Culture', final: false },
-    'Ouvrier Viticole': { bas: 'Saisonnier',       quota: 3000, promoTarget: 5000, nextNext: 'Ouvrier Viticole', final: false },
+    'Chef de Culture':  { bas: 'Ouvrier Viticole', nextNext: 'Chef de Culture', final: false },
+    'Ouvrier Viticole': { bas: 'Saisonnier',       nextNext: 'Ouvrier Viticole', final: false },
     /* Saisonnier n'y figure pas : c'est le bas de l'échelle. On ne rétrograde
        pas quelqu'un qui est déjà au premier grade — on l'avertit. */
   };
@@ -2210,13 +2218,14 @@ window.onload = function(){
       return avertirSousQuota(e);
     }
 
+    const quotaBas = quotaDuGrade(bas.bas);
     if (!await confirmAction('Rétrograder',
       `${e.name} passe de ${e.grade} à ${bas.bas}. Son quota hebdomadaire devient `
-      + `${bas.quota.toLocaleString('fr-FR')} vins.`, true)) return;
+      + `${quotaBas.toLocaleString('fr-FR')} vins.`, true)) return;
 
     e.grade = bas.bas;
-    e.quota = bas.quota;
-    e.promoTarget = bas.promoTarget;
+    e.quota = quotaBas;
+    e.promoTarget = bas.nextNext ? quotaDuGrade(bas.nextNext) : null;
     e.nextGrade = bas.nextNext;
     e.isFinal = bas.final;
 
@@ -2776,14 +2785,38 @@ window.onload = function(){
      n'a pas de fiche de production, perdrait sa prime. */
   const QUOTA_DEFAUT_GRADE = { 'Saisonnier': 3000, 'Ouvrier Viticole': 5000, 'Chef de Culture': 8000 };
 
+  /* Le quota MINIMUM d'un grade.
+     -------------------------------------------------------------------------
+     3 000 / 5 000 / 8 000 vivaient en dur à cinq endroits du panel. Ce sont
+     des règles de domaine, pas du code : elles se règlent maintenant dans
+     Administration ▸ Règles du domaine, et tout le reste les lit ici.
+
+     Contrairement au multiplicateur, ZÉRO est une valeur qui veut dire quelque
+     chose : « ce grade n'a pas de quota ». Le réglage stocke donc aussi les
+     zéros, et le barème d'origine ne sert que tant que personne n'a rien
+     enregistré. Un grade inconnu vaut 0 — jamais 3 000 : inventer un seuil à
+     quelqu'un lui coûterait sa prime en silence. */
+  function quotaDuGrade(grade) {
+    const g = String(grade || '').trim();
+    if (!g) return 0;
+    const lire = t => {
+      if (t[g] !== undefined) return Math.max(0, Math.round(Number(t[g]) || 0));
+      const k = Object.keys(t).find(x => x.toLowerCase() === g.toLowerCase());
+      return k === undefined ? undefined : Math.max(0, Math.round(Number(t[k]) || 0));
+    };
+    const v = lire((reglages && reglages.quotas) || {});
+    if (v !== undefined) return v;
+    const d = lire(QUOTA_DEFAUT_GRADE);
+    return d === undefined ? 0 : d;
+  }
+  window.mvQuotaGrade = quotaDuGrade;
+
   function quotaDeLaFiche(nom, grade) {
     const lignes = (typeof effectifData !== 'undefined' && Array.isArray(effectifData)) ? effectifData : [];
     const f = nom ? lignes.find(e => clefNom(e.name) === clefNom(nom)) : null;
     const q = f ? Number(f.quota) || 0 : 0;
     if (q > 0) return q;
-    const g = String(grade || '').trim();
-    const k = Object.keys(QUOTA_DEFAUT_GRADE).find(x => x.toLowerCase() === g.toLowerCase());
-    return k ? QUOTA_DEFAUT_GRADE[k] : 0;
+    return quotaDuGrade(grade);
   }
   window.mvQuotaFiche = quotaDeLaFiche;
 
@@ -5047,6 +5080,7 @@ window.onload = function(){
     renderCloture();
     refreshEffectifFilters();
     renderQuotas3();
+    remplirCartesGrades();
     renderMagasin();
     renderComRunner();
     renderRegles();
@@ -5968,6 +6002,7 @@ window.onload = function(){
     primeRecrutMontant: 0,  /* prime versée à une recrue de fin de semaine */
     primeRecrutQuota: 0,    /* vins minimum pour y avoir droit */
     rappelPermis: '',       /* texte par défaut du rappel de permis, vide = celui du serveur */
+    quotas: {},             /* quota MINIMUM de vins par grade ; 0 = aucun quota exigé */
     salaires: {},           /* salaire fixe par grade, en dollars ; absent ou 0 = pas de salaire */
     multiplicateurs: {},    /* multiplicateur de prime par grade ; vide = le barème d'origine */
   };
@@ -6224,6 +6259,26 @@ window.onload = function(){
       </div>
 
       <div class="mv-vit-sec">
+        <h4>Quota minimum par grade</h4>
+        <p class="mv-hint" style="margin:0 0 12px;">Le nombre de vins à produire dans la semaine pour
+          avoir droit à une prime. En dessous, la prime vaut <b>zéro</b> ; au-delà, toute la production
+          compte. C'est un <b>minimum exigé</b>, pas un maximum servi. Le barème d'origine est
+          3 000 · 5 000 · 8 000 pour les trois grades de production ; un grade à <b>0</b> n'a
+          simplement aucun quota — c'est le cas de la direction et des responsables, qui ne sont
+          pas jugés sur les vins.</p>
+        <p class="mv-hint" style="margin:0 0 12px;">Le palier de <b>promotion</b> suit : on passe
+          au grade supérieur en dépassant le quota de ce grade-là. Un quota saisi à la main sur une
+          fiche d'effectif l'emporte toujours et n'est pas touché par ce réglage.</p>
+        <div class="mv-sal-grille">
+          ${GRADES_PRIME.map(g => `
+            <label class="mv-lab mv-sal-l">${esc(g)}
+              <input type="number" min="0" step="500" data-quota="${esc(g)}"
+                value="${quotaDuGrade(g)}">
+            </label>`).join('')}
+        </div>
+      </div>
+
+      <div class="mv-vit-sec">
         <h4>Multiplicateur de prime par grade</h4>
         <p class="mv-hint" style="margin:0 0 12px;">La prime se calcule <b>vins × multiplicateur</b>, puis
           se plafonne au palier du bilan. C'est ce qui récompense la montée en grade : à production égale,
@@ -6282,6 +6337,41 @@ window.onload = function(){
       if (v) sal[el.dataset.salaire] = v;      /* on ne stocke pas les zéros */
     });
     reglages.salaires = sal;
+
+    /* Les quotas, et la mise à jour des fiches qui suivaient l'ancien barème.
+       -------------------------------------------------------------------------
+       Une fiche d'effectif porte SA propre valeur de quota — c'est elle qui
+       fait foi, et elle peut avoir été saisie à la main pour quelqu'un en
+       particulier. On ne remplace donc QUE les fiches dont le quota vaut
+       encore, au vin près, l'ancien quota de leur grade : celles-là suivaient
+       le barème sans le savoir. Une valeur saisie à la main reste en place. */
+    const avant = {};
+    GRADES_PRIME.forEach(g => { avant[g] = quotaDuGrade(g); });
+
+    const quotas = {};
+    document.querySelectorAll('[data-quota]').forEach(el => {
+      /* Ici le zéro EST une valeur : « ce grade n'a pas de quota ». On stocke
+         donc tout, y compris les zéros, sinon un grade ne pourrait jamais
+         être libéré de son quota d'origine. */
+      quotas[el.dataset.quota] = Math.max(0, Math.round(Number(el.value) || 0));
+    });
+    reglages.quotas = quotas;
+
+    let fichesTouchees = 0;
+    if (typeof effectifData !== 'undefined' && Array.isArray(effectifData)) {
+      effectifData.forEach(f => {
+        const ancien = avant[f.grade];
+        const nouveau = quotaDuGrade(f.grade);
+        if (ancien !== undefined && Number(f.quota) === ancien && nouveau !== ancien) {
+          f.quota = nouveau;
+          fichesTouchees++;
+        }
+        /* Le palier de promotion est le quota du grade suivant : il suit sans
+           qu'on ait à le régler, et sans condition — il n'est jamais saisi à
+           la main. */
+        if (f.nextGrade) f.promoTarget = quotaDuGrade(f.nextGrade);
+      });
+    }
     const mults = {};
     document.querySelectorAll('[data-mult]').forEach(el => {
       const v = Math.max(0, Math.round(Number(el.value) || 0));
@@ -6293,15 +6383,20 @@ window.onload = function(){
     reglages.multiplicateurs = mults;
     D().note('a modifié les règles du domaine');
     D().save('reglages');
+    if (fichesTouchees) D().save('effectif');
     /* Le multiplicateur et les salaires entrent dans des chiffres déjà
        affichés ailleurs. Sans ce rafraîchissement, la page Primes et le bilan
        montreraient l'ancien barème jusqu'au prochain rechargement — et on
        croirait que le réglage n'a pas pris. */
     if (typeof window.mvRenderPrimes === 'function') window.mvRenderPrimes();
     if (typeof renderBilan === 'function') renderBilan();
+    remplirCartesGrades();
+    if (typeof renderQuotaDirect === 'function' && $('qdBody')) renderQuotaDirect();
     const ok = $('mvRegSaved');
     if (ok) { ok.classList.add('on'); setTimeout(() => ok.classList.remove('on'), 1800); }
-    toast('Règles enregistrées.');
+    toast(fichesTouchees
+      ? `Règles enregistrées · ${fichesTouchees} fiche(s) d'effectif alignée(s) sur le nouveau quota.`
+      : 'Règles enregistrées.');
   });
 
   /* ==========================================================================
@@ -6486,7 +6581,21 @@ window.onload = function(){
     if (e.target.closest('#primesPaie')) listeDePaie();
   });
 
+  /* Les trois cartes de « Grades & quotas » annonçaient 3 000 / 5 000 / 8 000
+     en texte figé dans la page. Un quota qu'on règle et une carte qui n'en
+     sait rien, c'est une des deux qui ment. */
+  function remplirCartesGrades() {
+    const vins = n => Number(n || 0).toLocaleString('fr-FR') + ' vins';
+    const met = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+    met('gq-saisonnier', vins(quotaDuGrade('Saisonnier')));
+    met('gq-ouvrier',    vins(quotaDuGrade('Ouvrier Viticole')));
+    met('gq-chef',       vins(quotaDuGrade('Chef de Culture')));
+    met('gp-saisonnier', Number(quotaDuGrade('Ouvrier Viticole')).toLocaleString('fr-FR'));
+    met('gp-ouvrier',    Number(quotaDuGrade('Chef de Culture')).toLocaleString('fr-FR'));
+  }
+
   function renderRegles() {
+    remplirCartesGrades();
     renderReglages();
     renderQuotaService();
     renderPrimeRecrutement();
@@ -9099,14 +9208,14 @@ window.onload = function(){
    · une erreur de lecture s'affiche telle que Discord l'a formulée.
    ========================================================================== */
 
-  const QD_QUOTA = { 'Saisonnier': 3000, 'Ouvrier Viticole': 5000, 'Chef de Culture': 8000 };
   const QD_MUET_MIN = 45;              /* minutes sans log avant de s'inquiéter */
   let qdDonnees = null, qdFiltre = '', qdEnCours = false;
 
+  /* Le même quota que partout ailleurs — celui des Règles du domaine. Cette
+     page avait sa propre table en dur : régler le quota n'aurait rien changé
+     ici, et les deux pages se seraient contredites. */
   function qdQuotaDe(poste) {
-    const p = String(poste || '').trim();
-    const k = Object.keys(QD_QUOTA).find(x => x.toLowerCase() === p.toLowerCase());
-    return k ? QD_QUOTA[k] : 0;
+    return quotaDuGrade(poste);
   }
 
   /* Les bornes de la semaine — à l'heure de PARIS.
