@@ -2041,14 +2041,15 @@ window.onload = function(){
     return true;
   }
 
-  async function addEvent() {
+  async function addEvent(visDepart) {
     const S = window.MarloweSession || {};
-    const r = await askForm('Nouvel événement', [
+    const depart = AGENDA_NIVEAUX.includes(visDepart) ? visDepart : 'public';
+    const r = await askForm(depart === 'commercial' ? 'Nouvel événement commercial' : 'Nouvel événement', [
       { key: 'title', label: 'Titre', value: '' },
       { key: 'date', label: 'Date (jj/mm/aaaa)', value: todayFR() },
       { key: 'heure', label: 'Heure de début', value: '18:00' },
       { key: 'heure_fin', label: 'Heure de fin', value: '19:00' },
-      { key: 'vis', label: 'Visibilité', value: 'public', options: AGENDA_NIVEAUX.slice() },
+      { key: 'vis', label: 'Visibilité', value: depart, options: AGENDA_NIVEAUX.slice() },
       { key: 'desc', label: 'Description', value: '' },
     ]);
     if (!r) return;
@@ -2077,15 +2078,22 @@ window.onload = function(){
     toast('Événement supprimé.');
   }
 
-  /* Le bouton d'ajout n'existe pas dans la page : on l'insère. */
+  /* Le bouton d'ajout n'existe pas dans la page : on l'insère. Un par agenda,
+     et celui de l'agenda commercial ouvre le formulaire déjà réglé sur
+     « commercial » — sinon on créerait par mégarde un événement qui
+     disparaîtrait de la page où on vient de l'ajouter. */
   function injectAgendaButton() {
-    const list = $('agendaList');
-    if (!list || $('mvAddEvent')) return;
-    const bar = document.createElement('div');
-    bar.className = 'btn-row';
-    bar.style.margin = '0 0 16px';
-    bar.innerHTML = '<button class="btn primary" id="mvAddEvent">+ Ajouter un événement</button>';
-    list.parentNode.insertBefore(bar, list);
+    const poser = (listeId, boutonId, libelle) => {
+      const list = $(listeId);
+      if (!list || $(boutonId)) return;
+      const bar = document.createElement('div');
+      bar.className = 'btn-row';
+      bar.style.margin = '0 0 16px';
+      bar.innerHTML = `<button class="btn primary" id="${boutonId}">${libelle}</button>`;
+      list.parentNode.insertBefore(bar, list);
+    };
+    poser('agendaList', 'mvAddEvent', '+ Ajouter un événement');
+    poser('agendaComList', 'mvAddEventCom', '+ Ajouter un événement commercial');
   }
 
   /* ==========================================================================
@@ -2622,6 +2630,11 @@ window.onload = function(){
     </div></td></tr>`;
   }
 
+  /* Le filtre de la page Éligibilité. Il vit hors de la fonction de rendu :
+     celle-ci est rappelée à chaque synchronisation, et une variable interne
+     repartirait de zéro à chaque fois. */
+  let elFiltre = '';
+
   function renderEligibilite() {
     const body = $('eligibiliteBody');
     if (!body) return;
@@ -2629,12 +2642,23 @@ window.onload = function(){
     /* Semaine -1 uniquement : la dernière semaine clôturée. Tant qu'aucune ne
        l'est, la page reste vide et l'explique — voir videEligibilite. */
     const w = lastClosedWeek();
-    const rows = w ? w.eligibles : [];
+    const toutes = w ? w.eligibles : [];
 
+    /* Les trois compteurs du haut portent sur la SEMAINE, pas sur la
+       recherche : ils répondent à « combien reste-t-il à distribuer », et
+       taper un nom ne doit pas changer cette réponse. */
     const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
-    set('el-count', rows.length);
-    set('el-distrib', rows.filter(r => r.distributed).length);
-    set('el-pending', rows.filter(r => !r.distributed).length);
+    set('el-count', toutes.length);
+    set('el-distrib', toutes.filter(r => r.distributed).length);
+    set('el-pending', toutes.filter(r => !r.distributed).length);
+
+    const q = elFiltre.trim().toLowerCase();
+    const rows = q
+      ? toutes.filter(r => `${r.name} ${r.grade} ${r.reward}`.toLowerCase().includes(q))
+      : toutes;
+
+    const champ = $('elSearch');
+    if (champ && champ.value !== elFiltre) champ.value = elFiltre;
 
     const sub = document.querySelector('#page-eligibilite .page-sub');
     if (sub) {
@@ -2658,8 +2682,16 @@ window.onload = function(){
           ? `<button class="btn" data-undistribute="${esc(r.name)}" style="padding:7px 12px;font-size:11.5px;" title="Revenir sur cette distribution">↺ Annuler</button>`
           : `<button class="btn" data-distribute="${esc(r.name)}" style="padding:7px 12px;font-size:11.5px;">Marquer distribuée</button>`}</td>
       </tr>`).join('')
-      : videEligibilite(w);
+      : (toutes.length
+          ? `<tr><td colspan="6"><div class="mv-vide"><div class="mv-vide-t">Aucun éligible ne correspond à « ${esc(elFiltre.trim())} ».</div></div></td></tr>`
+          : videEligibilite(w));
   }
+
+  document.addEventListener('input', e => {
+    if (!e.target || e.target.id !== 'elSearch') return;
+    elFiltre = e.target.value || '';
+    renderEligibilite();
+  });
 
   /* Met à jour les en-têtes qui affichaient une semaine figée dans le fichier. */
   function refreshWeekHeaders() {
@@ -4492,16 +4524,30 @@ window.onload = function(){
 
 
       /* Barres de défilement discrètes, au lieu des grises par défaut. */
-      .sidebar nav, .mv-matrix-wrap, .table-wrap, .content{scrollbar-width:thin;
+      .sidebar nav, .table-wrap, .content{scrollbar-width:thin;
         scrollbar-color:#4A4336 transparent;}
-      .sidebar nav::-webkit-scrollbar, .mv-matrix-wrap::-webkit-scrollbar,
+      .sidebar nav::-webkit-scrollbar,
       .table-wrap::-webkit-scrollbar{width:8px;height:8px;}
-      .sidebar nav::-webkit-scrollbar-track, .mv-matrix-wrap::-webkit-scrollbar-track,
+      .sidebar nav::-webkit-scrollbar-track,
       .table-wrap::-webkit-scrollbar-track{background:transparent;}
-      .sidebar nav::-webkit-scrollbar-thumb, .mv-matrix-wrap::-webkit-scrollbar-thumb,
+      .sidebar nav::-webkit-scrollbar-thumb,
       .table-wrap::-webkit-scrollbar-thumb{background:#4A4336;border-radius:99px;}
-      .sidebar nav::-webkit-scrollbar-thumb:hover, .mv-matrix-wrap::-webkit-scrollbar-thumb:hover,
+      .sidebar nav::-webkit-scrollbar-thumb:hover,
       .table-wrap::-webkit-scrollbar-thumb:hover{background:var(--or-soft,#8E7C4E);}
+
+      /* Le tableau des accès, lui, se défile À LA MAIN et dans les deux sens :
+         sa barre est le seul moyen d'atteindre les colonnes de droite. Une
+         barre de 8 px se vise mal — celle-ci est deux fois plus épaisse, avec
+         un fond de rail visible pour qu'on sache où cliquer. */
+      .mv-matrix-wrap{scrollbar-width:auto;scrollbar-color:#6B6250 rgba(0,0,0,.25);}
+      .mv-matrix-wrap::-webkit-scrollbar{width:16px;height:16px;}
+      .mv-matrix-wrap::-webkit-scrollbar-track{background:rgba(0,0,0,.25);
+        border-radius:99px;margin:4px;}
+      .mv-matrix-wrap::-webkit-scrollbar-thumb{background:#6B6250;border-radius:99px;
+        border:4px solid transparent;background-clip:padding-box;}
+      .mv-matrix-wrap::-webkit-scrollbar-thumb:hover{background:var(--or,#C9A961);
+        border:3px solid transparent;background-clip:padding-box;}
+      .mv-matrix-wrap::-webkit-scrollbar-corner{background:transparent;}
 
       .mv-synth{margin-top:18px;padding-top:16px;border-top:1px solid var(--band,#3D372C);
         max-width:520px;margin-left:auto;}
@@ -4781,7 +4827,8 @@ window.onload = function(){
     on('blAddBtn', addBlacklist);
     on('addClientBtn', addClient);
     on('addArticleBtn', addArticle);
-    on('mvAddEvent', addEvent);
+    on('mvAddEvent', () => addEvent('public'));
+    on('mvAddEventCom', () => addEvent('commercial'));
     on('primesExcBtn', addPrimeExceptionnelle);
     on('bcCopyBtn', copyDetailGDoc);
     on('depCopyBtn', copyDepensesGDoc);

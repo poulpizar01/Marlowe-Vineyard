@@ -763,6 +763,7 @@
       <div class="nav-item" data-page="facturation">Facturation</div>
       <div class="nav-item" data-page="facturation" data-subtab="clients">Clients</div>
       <div class="nav-item" data-page="catalogue">Catalogue</div>
+      <div class="nav-item" data-page="agendacom">Agenda commercial</div>
       <div class="nav-section">Comptabilité</div>
       <div class="nav-item" data-page="bilan">Bilan comptable</div>
       <div class="nav-item" data-page="facturesrecues">Factures reçues</div>
@@ -804,6 +805,13 @@
         <div class="metric-card"><div class="metric-label">Éligibles · semaine clôturée</div><div class="metric-value" id="el-count">0</div><div class="metric-sub">quota validé sur la semaine précédente</div></div>
         <div class="metric-card"><div class="metric-label">Récompenses distribuées</div><div class="metric-value" id="el-distrib">0</div><div class="metric-sub">sur le total éligible</div></div>
         <div class="metric-card"><div class="metric-label">En attente</div><div class="metric-value" id="el-pending">0</div><div class="metric-sub">à traiter avant lundi</div></div>
+      </div>
+
+      <div class="toolbar">
+        <div class="search">
+          <span style="color:var(--muted);font-size:14px;">⌕</span>
+          <input type="text" id="elSearch" placeholder="Rechercher un employé, un grade, une récompense…">
+        </div>
       </div>
 
       <div class="panel">
@@ -1783,6 +1791,30 @@
       <div class="panel">
         <h3>Événements à venir</h3>
         <div id="agendaList"></div>
+      </div>
+    </div>
+
+    <!-- ================= AGENDA COMMERCIAL =================
+         Les mêmes événements que l'agenda du domaine, mais ceux marqués
+         « commercial » et eux seuls — et ils ne figurent plus dans l'autre.
+         Deux plannings distincts, pas deux vues du même. -->
+    <div class="page-content" id="page-agendacom">
+      <h1 class="page-title">Agenda <span class="accent">commercial</span></h1>
+      <p class="page-sub">Les événements marqués <b>commercial</b> — dégustations, locations, rendez-vous
+        clients. Ils n'apparaissent que pour les rôles désignés dans Administration ▸ Agenda,
+        et plus dans l'agenda du domaine.</p>
+
+      <div class="panel">
+        <h3>La semaine <span id="comWeekRange" class="wv-range"></span></h3>
+        <div class="weekview-wrap">
+          <div class="weekview-head" id="comWeekHead"></div>
+          <div class="weekview-body" id="comWeekBody"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Événements à venir</h3>
+        <div id="agendaComList"></div>
       </div>
     </div>
 
@@ -3173,8 +3205,16 @@ function agendaVisibles(){
   return agendaData.map((a, i) => ({a, i})).filter(x => A.agendaVisible(x.a));
 }
 
-function renderAgendaList(){
-document.getElementById('agendaList').innerHTML = agendaVisibles().map(({a, i}) => `
+/* Les deux agendas se partagent les mêmes données et le même code de rendu :
+   seul le tri change. « commercial » d'un côté, tout le reste de l'autre —
+   un événement n'apparaît jamais dans les deux. */
+const estCommercial = a => a && a.vis === 'commercial';
+
+function peindreListe(hostId, garde){
+  const host = document.getElementById(hostId);
+  if(!host) return;
+  const vus = agendaVisibles().filter(({a}) => garde(a));
+  host.innerHTML = vus.length ? vus.map(({a, i}) => `
   <div class="event-card">
     <div class="event-top">
       <div>
@@ -3185,7 +3225,13 @@ document.getElementById('agendaList').innerHTML = agendaVisibles().map(({a, i}) 
       <button class="icon-btn danger" data-agenda-del="${i}" title="Supprimer l'événement" style="margin-left:8px;">×</button>
     </div>
     <div class="event-desc">${a.desc}</div>
-  </div>`).join('');
+  </div>`).join('')
+    : `<p class="empty-note" style="text-align:center;padding:22px;">Aucun événement à venir.</p>`;
+}
+
+function renderAgendaList(){
+  peindreListe('agendaList',    a => !estCommercial(a));
+  peindreListe('agendaComList', a =>  estCommercial(a));
 }
 renderAgendaList();
 
@@ -3210,9 +3256,9 @@ function timeToMinutes(t){
 
 /* La semaine entière d'un coup plutôt qu'un jour à la fois : c'est ce qu'on
    vient chercher dans un planning — voir où sont les trous. */
-function renderWeekGrid(){
-  const head = document.getElementById('weekHead');
-  const body = document.getElementById('weekBody');
+function peindreGrille(headId, bodyId, rangeId, garde){
+  const head = document.getElementById(headId);
+  const body = document.getElementById(bodyId);
   if(!head || !body) return;
 
   const auj = (() => { const d = new Date();
@@ -3223,7 +3269,7 @@ function renderWeekGrid(){
   for(let h = DAY_START_HOUR; h <= DAY_END_HOUR; h++) hours.push(h);
   const H = hours.length * HOUR_H;
 
-  const bornes = document.getElementById('weekRange');
+  const bornes = document.getElementById(rangeId);
   if(bornes && weekDays.length) {
     bornes.textContent = `du ${weekDays[0].date} au ${weekDays[weekDays.length-1].date}`;
   }
@@ -3239,7 +3285,7 @@ function renderWeekGrid(){
     /* Deux événements qui se chevauchent se partagent la largeur au lieu de
        se recouvrir : sinon celui de dessous devient invisible. */
     const evs = agendaVisibles().map(x => x.a)
-      .filter(a => a.date === d.date)
+      .filter(a => a.date === d.date && garde(a))
       .map(a => ({ a, deb: timeToMinutes(a.heure), fin: Math.max(timeToMinutes(a.heure_fin), timeToMinutes(a.heure) + 30) }))
       .sort((x, y) => x.deb - y.deb);
 
@@ -3269,6 +3315,11 @@ function renderWeekGrid(){
   }).join('');
 
   body.innerHTML = colonneHeures + jours;
+}
+
+function renderWeekGrid(){
+  peindreGrille('weekHead',    'weekBody',    'weekRange',    a => !estCommercial(a));
+  peindreGrille('comWeekHead', 'comWeekBody', 'comWeekRange', a =>  estCommercial(a));
 }
 renderWeekGrid();
 

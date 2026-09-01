@@ -101,6 +101,7 @@
 
     { id: 'facturation',    label: 'Facturation',     group: 'Commerce' },
     { id: 'catalogue',      label: 'Catalogue',       group: 'Commerce' },
+    { id: 'agendacom',      label: 'Agenda commercial', group: 'Commerce' },
 
     { id: 'bilan',          label: 'Bilan comptable', group: 'Comptabilité' },
     { id: 'facturesrecues', label: 'Factures reçues', group: 'Comptabilité' },

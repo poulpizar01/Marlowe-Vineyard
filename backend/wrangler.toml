@@ -53,6 +53,12 @@ DISCORD_RUNNER_ROLE = "1112654936749125632"
 # tout le monde a été prévenu.
 DISCORD_DISPO_ROLE = "1112658686431723520"
 
+# Le rôle prévenu trois heures avant un événement de l'agenda commercial.
+# Laisser vide : le rappel part quand même, mais sans mention — personne
+# n'est réveillé, et /api/version le dit (roleAgenda: false).
+# L'adresse du salon, elle, est un SECRET : voir plus bas.
+DISCORD_AGENDA_ROLE = ""
+
 # ---------------------------------------------------------------------------
 # Stockage principal : D1 (base SQLite).
 #
@@ -96,6 +102,12 @@ id = "96dc213dcafc411d8417448b46fc9274"
 #   npx wrangler secret put DISCORD_BOT_TOKEN
 #   npx wrangler secret put DISCORD_CLIENT_ID
 #   npx wrangler secret put DISCORD_WEBHOOK
+#   npx wrangler secret put DISCORD_AGENDA_WEBHOOK
+#
+# DISCORD_AGENDA_WEBHOOK = l'adresse du webhook du salon où arrivent les
+#   rappels d'agenda, trois heures avant chaque événement commercial. C'est
+#   un AUTRE salon que celui des runners : les deux webhooks coexistent.
+#   Sans ce secret, aucun rappel ne part et rien ne casse.
 #
 # DISCORD_WEBHOOK = l'adresse du webhook du salon des runners.
 #   Discord ▸ le salon ▸ Modifier le salon ▸ Intégrations ▸ Webhooks ▸

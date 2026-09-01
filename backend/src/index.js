@@ -27,7 +27,7 @@ const DISCORD = 'https://discord.com/api/v10';
    correction serveur n'a rien changé, on la lit.
 
    À tenir en phase avec version.json à chaque déploiement. */
-const VERSION = '1.43.0';
+const VERSION = '1.44.0';
 const SESSION_TTL = 60 * 60 * 24 * 7;   // 7 jours
 const STATE_TTL   = 600;                // 10 minutes
 
@@ -602,7 +602,9 @@ const COLLECTION_PAGES = {
   clotures:        ['statsprimes', 'cloture'],
   clotureSteps:    ['cloture'],
   primesExc:       ['statsprimes'],
-  agenda:          ['agenda'],
+  /* Les deux pages écrivent dans la même collection : l'agenda commercial
+     n'est pas une autre donnée, c'est le même agenda trié autrement. */
+  agenda:          ['agenda', 'agendacom'],
   serviceHistory:  ['masemaine'],
   tombola:         ['tombola'],
   commandes:       ['magcommandes', 'magrecap'],
@@ -2166,6 +2168,126 @@ async function handleLogout(request, env) {
    Point d'entrée
    --------------------------------------------------------------------------- */
 
+/* ==========================================================================
+   RAPPEL D'AGENDA — trois heures avant l'événement
+   --------------------------------------------------------------------------
+   Le passage périodique qui lit déjà les ventes sert aussi à ça : il regarde
+   l'agenda et prévient le salon quand un événement commercial approche.
+
+   Quatre décisions qui méritent d'être écrites :
+
+   · l'heure de l'agenda est celle de PARIS, pas celle du Worker. Un événement
+     saisi « 18:00 » se joue à 18 h au domaine, quel que soit le fuseau de la
+     machine qui lit. Le décalage se relit à l'instant visé et non à l'instant
+     courant : une semaine qui enjambe le changement d'heure décalerait le
+     rappel d'une heure entière ;
+
+   · la fenêtre fait dix minutes, alors que le passage revient toutes les deux.
+     Un cron qui saute un tour — Cloudflare n'en garantit aucun — ne doit pas
+     faire perdre le rappel ;
+
+   · la clé anti-doublon est posée AVANT l'envoi. Un salon qui reçoit le même
+     rappel toutes les deux minutes est pire qu'un rappel manqué. Si l'envoi
+     échoue, la clé est retirée pour que le passage suivant réessaie — dans la
+     limite de la fenêtre ;
+
+   · un événement créé moins de trois heures avant son début ne déclenche
+     rien. Il est déjà passé sous la fenêtre au moment où on l'écrit, et
+     inventer un rappel « tout de suite » n'aiderait personne.
+   ========================================================================== */
+
+const RAPPEL_AVANT_MS = 3 * 3600 * 1000;
+const RAPPEL_FENETRE_MS = 10 * 60 * 1000;
+
+/* Le décalage de Paris à un instant donné : on lit l'heure murale parisienne
+   dans un format ISO, on la relit comme si elle était en UTC, et l'écart avec
+   l'instant réel EST le décalage. Vaut +1 h l'hiver, +2 h l'été. */
+function decalageParis(t) {
+  const sec = Math.floor(t / 1000) * 1000;
+  const mur = new Date(sec).toLocaleString('sv-SE', { timeZone: 'Europe/Paris' });
+  return Date.parse(mur.replace(' ', 'T') + 'Z') - sec;
+}
+
+/* « 03/09/2026 » + « 18:00 », lus comme heure de Paris → instant epoch. */
+function instantParis(dateFR, heure) {
+  const d = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(dateFR || '').trim());
+  const h = /^(\d{1,2}):(\d{2})$/.exec(String(heure || '').trim());
+  if (!d || !h) return null;
+  const mur = Date.UTC(+d[3], +d[2] - 1, +d[1], +h[1], +h[2], 0, 0);
+  if (!Number.isFinite(mur)) return null;
+  /* Deux passes : la première donne un instant approché, la seconde relit le
+     décalage À CET INSTANT-LÀ. */
+  const approx = mur - decalageParis(mur);
+  return mur - decalageParis(approx);
+}
+
+function messageRappel(e, mention) {
+  const propre = v => String(v == null ? '' : v).replace(/[`@]/g, '');
+  const titre = propre(e.title || 'Événement').slice(0, 120);
+  const desc = propre(e.desc || '').slice(0, 300);
+  const fin = e.heure_fin ? ` – ${propre(e.heure_fin)}` : '';
+  return `${mention}**Dans 3 heures — ${titre}**\n`
+       + `> ${propre(e.date)} · ${propre(e.heure)}${fin}\n`
+       + (desc ? `> ${desc}` : '> _pas de description_');
+}
+
+/* Les événements de l'agenda qui doivent être annoncés maintenant. */
+function evenementsARappeler(agenda, maintenant) {
+  return (Array.isArray(agenda) ? agenda : []).filter(e => {
+    if (!e || e.vis !== 'commercial') return false;
+    const debut = instantParis(e.date, e.heure);
+    if (debut === null) return false;
+    const reste = debut - maintenant;
+    return reste <= RAPPEL_AVANT_MS && reste > RAPPEL_AVANT_MS - RAPPEL_FENETRE_MS;
+  });
+}
+
+function cleRappel(e) {
+  return 'agenda:rappel:' + [e.date, e.heure, String(e.title || '')].join('|').slice(0, 200);
+}
+
+async function rappelsAgenda(env) {
+  const url = String(env.DISCORD_AGENDA_WEBHOOK || '').trim();
+  /* Pas de webhook, pas de rappel — et surtout pas d'erreur : le domaine peut
+     très bien ne pas vouloir de cette annonce. */
+  if (!/^https:\/\/discord(app)?\.com\/api\/webhooks\//.test(url)) return { envoyes: 0, raison: 'pas_de_webhook' };
+
+  const d = await base(env).get('data', 'json');
+  const cibles = evenementsARappeler(d && d.agenda, Date.now());
+  if (!cibles.length) return { envoyes: 0 };
+
+  const role = String(env.DISCORD_AGENDA_ROLE || '').trim();
+  const roleOk = /^\d{17,20}$/.test(role);
+  const mention = roleOk ? `<@&${role}> ` : '';
+
+  let envoyes = 0;
+  for (const e of cibles) {
+    const cle = cleRappel(e);
+    if (await base(env).get(cle)) continue;
+    await base(env).put(cle, '1', { expirationTtl: 7 * 24 * 3600 });
+
+    let ok = false;
+    try {
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: messageRappel(e, mention),
+          username: 'Marlowe Vineyard',
+          allowed_mentions: roleOk ? { parse: [], roles: [role] } : { parse: [] },
+        }),
+      });
+      ok = !!(r && r.ok);
+    } catch (err) { ok = false; }
+
+    /* Envoi manqué : on retire la marque pour que le passage suivant retente,
+       tant que la fenêtre de dix minutes n'est pas refermée. */
+    if (ok) envoyes++;
+    else { try { await base(env).delete(cle); } catch (err2) { /* sans effet */ } }
+  }
+  return { envoyes };
+}
+
 export default {
   /* Le passage périodique : le Worker va lire le salon des logs tout seul.
      Aucune ligne à écrire sur le VPS, et le bot peut être éteint. Une erreur
@@ -2183,6 +2305,13 @@ export default {
           }));
         } catch (e2) { /* si même ça échoue, le prochain passage réessaiera */ }
       }
+
+      /* Les rappels d'agenda vivent dans LEUR propre try : une lecture de logs
+         qui échoue ne doit pas emporter l'annonce d'un événement, et
+         réciproquement. */
+      try {
+        await rappelsAgenda(env);
+      } catch (e) { /* le passage suivant réessaiera, la fenêtre le permet */ }
     })());
   },
 
@@ -2228,6 +2357,11 @@ export default {
           categoriesTickets: categoriesTickets(env).length,
           salonLogs: /^\d{17,20}$/.test(String(env.DISCORD_LOGS_CHANNEL || '')),
           roleDispo: /^\d{17,20}$/.test(String(env.DISCORD_DISPO_ROLE || '')),
+          /* De quoi vérifier d'un coup d'œil que le rappel d'agenda est en
+             place : le webhook posé, et le rôle à réveiller déclaré. */
+          webhookAgenda: /^https:\/\/discord(app)?\.com\/api\/webhooks\//
+            .test(String(env.DISCORD_AGENDA_WEBHOOK || '').trim()),
+          roleAgenda: /^\d{17,20}$/.test(String(env.DISCORD_AGENDA_ROLE || '')),
         });
         case '/api/login':       return await handleLogin(request, env, url);
         case '/api/callback':    return await handleCallback(request, env, url);
