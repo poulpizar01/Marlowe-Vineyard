@@ -7851,7 +7851,10 @@
   }
 
   async function chargerInvites() {
-    if (!(window.MarloweSession && window.MarloweSession.isPatron)) return;
+    /* La page des accès extérieurs se délègue maintenant : la bonne question
+       n'est plus « est-ce le patron ? » mais « la page a-t-elle été
+       construite ? ». Elle ne l'est que pour qui y a droit. */
+    if (!document.getElementById('mvInvites')) return;
     if (cfgAuth().MODE !== 'discord') { renderInvites(); return; }
     try {
       const d = await apiInvites('GET');

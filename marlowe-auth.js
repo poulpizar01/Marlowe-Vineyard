@@ -125,7 +125,31 @@
     { id: 'masemaine',      label: 'Ma semaine',      group: 'Personnel' },
     { id: 'agenda',         label: 'Agenda',          group: 'Personnel' },
     { id: 'tombola',        label: 'Tombola',         group: 'Personnel' },
+
+    /* Les écrans d'Administration. Ils étaient réservés au patron sans qu'on
+       puisse rien y faire ; ils sont désormais dans la matrice comme les
+       autres, donc délégables un par un.
+
+       Trois choses à savoir en les lisant :
+
+       · rien n'est ouvert par défaut. Une page absente de la matrice est
+         fermée à tous sauf au patron, et ces sept-là y entrent vides ;
+       · « Accès & rôles » est la matrice elle-même. Qui l'obtient peut
+         s'accorder tout le reste — il n'existe aucune demi-mesure ;
+       · « Données du panel » ne suffit pas à lui seul pour vider : chaque
+         collection effacée exige en plus le droit d'écrire dessus. C'est
+         volontaire, et le serveur le vérifie ligne par ligne. */
+    { id: 'parametres',     label: 'Accès & rôles',   group: 'Administration' },
+    { id: 'paramagenda',    label: 'Agenda',          group: 'Administration' },
+    { id: 'paramdispo',     label: 'Disponibilités',  group: 'Administration' },
+    { id: 'paramvitrine',   label: 'Vitrine publique', group: 'Administration' },
+    { id: 'paramregles',    label: 'Règles du domaine', group: 'Administration' },
+    { id: 'paraminvites',   label: 'Accès extérieurs', group: 'Administration' },
+    { id: 'paramdonnees',   label: 'Données du panel', group: 'Administration' },
   ];
+
+  /* Les sept ci-dessus, pour ne pas les redire ailleurs. */
+  const PAGES_ADMIN = PAGES.filter(p => p.group === 'Administration').map(p => p.id);
 
   /* Rôles utilisés en mode démo. En mode 'discord', la vraie liste est
      récupérée depuis le serveur via /api/roles.                              */
@@ -1086,7 +1110,22 @@
   /* ==========================================================================
      10. PAGE PARAMÈTRES (patron uniquement)
      ========================================================================== */
-  function buildSettings(roles, perms, settings) {
+  /* Ce que cette session a le droit de faire sur une page d'Administration.
+     Trois états, comme partout ailleurs dans le panel : rien, lecture seule,
+     écriture. Le patron a toujours les trois. */
+  function droitAdmin(session, perms, settings, page) {
+    if (!session) return 'non';
+    if (session.isPatron || session.isOwner) return 'ecriture';
+    /* Un accès extérieur n'entre jamais dans l'Administration : ses droits
+       sont une liste de pages de travail, pas les clés du panel. */
+    if (session.invite) return 'non';
+    const autorise = ((perms || {})[page] || []).some(r => session.roles.includes(r));
+    if (!autorise) return 'non';
+    const ro = (((settings || {}).permsRO || {})[page] || []).some(r => session.roles.includes(r));
+    return ro ? 'lecture' : 'ecriture';
+  }
+
+  function buildSettings(roles, perms, settings, session) {
     /* réassigné après un enregistrement des listes d'agenda */
     /* Rôles retenus : ceux choisis par le patron, sinon une présélection
        automatique des rôles qui ressemblent à des rôles du domaine. */
@@ -1335,8 +1374,10 @@
        la fin se retrouverait SOUS la citation du domaine. On insère avant. */
     const pied = contenu.querySelector('.domain-footer');
     const pages = {};
+    const droits = {};
+    RUBRIQUES.forEach(r => { droits[r.id] = droitAdmin(session, perms, settings, r.id); });
 
-    RUBRIQUES.forEach(r => {
+    RUBRIQUES.filter(r => droits[r.id] !== 'non').forEach(r => {
       const item = document.createElement('div');
       item.className = 'nav-item';
       item.dataset.page = r.id;
@@ -1352,6 +1393,26 @@
         ${r.html}`;
       if (pied) contenu.insertBefore(page, pied); else contenu.appendChild(page);
       pages[r.id] = page;
+
+      /* Lecture seule : la page s'affiche, rien n'y répond. On coupe à la
+         racine — tous les champs et tous les boutons — plutôt que de compter
+         sur le serveur pour refuser après coup. Le serveur refuse quand même,
+         c'est lui qui décide ; ceci n'est que la politesse de ne pas laisser
+         quelqu'un remplir un formulaire qui sera rejeté. */
+      if (droits[r.id] === 'lecture') {
+        page.classList.add('mv-ro');
+        const note = document.createElement('p');
+        note.className = 'mv-hint';
+        note.style.cssText = 'max-width:760px;color:var(--or-soft,#8E7C4E);';
+        note.textContent = 'Lecture seule : vous voyez ce réglage, vous ne pouvez pas le modifier.';
+        page.insertBefore(note, page.children[2] || null);
+        setTimeout(() => {
+          page.querySelectorAll('button, input, select, textarea')
+              .forEach(el => { el.disabled = true; });
+          page.querySelectorAll('.mv-pick, .mv-perm-cell')
+              .forEach(el => { el.style.pointerEvents = 'none'; el.style.opacity = '.7'; });
+        }, 0);
+      }
 
       /* Le gestionnaire de pages du panel a été posé avant que ces entrées
          n'existent : chacune ouvre donc la sienne elle-même. */
@@ -1374,6 +1435,16 @@
        au serveur d'images. On le prévient que ses points d'accroche existent. */
     document.dispatchEvent(new CustomEvent('mv:parametres-pret', { detail: { page: acces, pages } }));
 
+    /* Chaque bloc ci-dessous n'existe que si sa page a été construite : une
+       rubrique refusée n'est pas dans le document, et chercher dedans
+       ferait tomber tout le reste de l'Administration avec elle. */
+    if (acces) { brancherAcces(acces); brancherAccesEnregistrement(acces); }
+    if (pages.paramagenda) brancherAgenda(pages.paramagenda);
+    if (pages.paramdispo) brancherDispo(pages.paramdispo);
+    if (pages.paramdonnees) brancherDonnees(pages.paramdonnees);
+
+    /* ------------------------------------------------------------------ */
+    function brancherAcces(acces) {
     /* --- choix des rôles retenus --- */
     const pick = acces.querySelector('#mvPick');
     pick.addEventListener('click', e => {
@@ -1393,7 +1464,10 @@
         return;
       }
       try {
-        await Store.setSettings(Object.assign({}, settings, { visibleRoles: chosen }));
+        /* Chaque écran n'envoie QUE la clé qu'il modifie : le serveur
+           contrôle les réglages clé par clé, et un envoi qui traînerait
+           les autres serait refusé en bloc. */
+        await Store.setSettings({ visibleRoles: chosen });
         location.reload();
       } catch (e) {
         alert("Impossible d'enregistrer : " + e.message);
@@ -1426,8 +1500,11 @@
       });
     });
 
+    }
+
+    /* ------------------------------------------------------------------ */
     /* --- visibilité de l'agenda --- */
-    const pageAg = pages.paramagenda;
+    function brancherAgenda(pageAg) {
     AGENDA_NIVEAUX.forEach(niv => {
       const box = pageAg.querySelector('#mvAg-' + niv.id);
       const cpt = pageAg.querySelector('#mvAgCpt-' + niv.id);
@@ -1460,7 +1537,7 @@
       });
       try {
         const next = Object.assign({}, settings, { agendaVis });
-        await Store.setSettings(next);
+        await Store.setSettings({ agendaVis });
         settings = next;
         /* Appliqué tout de suite, sans rechargement : l'agenda de cet écran
            doit refléter la règle que l'on vient d'écrire. */
@@ -1476,8 +1553,11 @@
       }
     });
 
+    }
+
+    /* ------------------------------------------------------------------ */
     /* --- Com Runner : qui peut annoncer une disponibilité --- */
-    const pageDi = pages.paramdispo;
+    function brancherDispo(pageDi) {
     const boxDi = pageDi.querySelector('#mvDispo');
     const cptDi = pageDi.querySelector('#mvDispoCpt');
     boxDi.addEventListener('click', e => {
@@ -1491,7 +1571,7 @@
       const dispoRoles = [...boxDi.querySelectorAll('[data-role].on')].map(c => c.dataset.role);
       try {
         const next = Object.assign({}, settings, { dispoRoles });
-        await Store.setSettings(next);
+        await Store.setSettings({ dispoRoles });
         settings = next;
         /* Appliqué tout de suite : si le patron vient de se retirer un droit,
            le bouton doit disparaître sans qu'il ait à recharger la page. */
@@ -1507,18 +1587,28 @@
       }
     });
 
-    const demo = pages.paramdonnees.querySelector('#mvDemo');
+    }
+
+    /* ------------------------------------------------------------------ */
+    function brancherDonnees(pageDo) {
+    const demo = pageDo.querySelector('#mvDemo');
     if (demo) demo.addEventListener('click', () => {
       const a = window.MarloweActions;
       if (a && a.chargerDemo) a.chargerDemo();
     });
 
-    const wipe = pages.paramdonnees.querySelector('#mvWipe');
+    const wipe = pageDo.querySelector('#mvWipe');
     if (wipe) wipe.addEventListener('click', () => {
       const a = window.MarloweActions;
       if (a && a.repartirDeZero) a.repartirDeZero();
     });
 
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Les deux derniers gestionnaires appartiennent à la matrice, pas aux
+       données : ils se branchent avec elle. */
+    function brancherAccesEnregistrement(acces) {
     /* --- enregistrer --- */
     acces.querySelector('#mvSave').addEventListener('click', async () => {
       const next = {}, nextRO = {};
@@ -1532,7 +1622,7 @@
       });
 
       try {
-        await Store.setSettings(Object.assign({}, settings, { permsRO: nextRO }));
+        await Store.setSettings({ permsRO: nextRO });
         await Store.setPermissions(next);
         const tag = acces.querySelector('#mvSaved');
         tag.classList.add('on');
@@ -1552,9 +1642,10 @@
         c.className = 'mv-cell mv-' + c.dataset.etat;
         c.textContent = on ? '✓' : '·';
       });
-      await Store.setSettings(Object.assign({}, settings, { permsRO: {} }));
+      await Store.setSettings({ permsRO: {} });
       await Store.setPermissions(def);
     });
+    }
   }
 
   /* ==========================================================================
@@ -1609,7 +1700,13 @@
 
     applyNavFilter(allowedPages(session, perms));
     addUserBadge(session);
-    if (session.isPatron) buildSettings(roles, perms, settings0);
+    /* L'Administration n'est plus réservée au patron : chaque écran s'ouvre
+       aux rôles cochés dans la matrice. On la construit dès qu'au moins un
+       de ses écrans est permis — buildSettings ne créera que ceux-là. */
+    if (session.isPatron
+        || PAGES_ADMIN.some(id => droitAdmin(session, perms, settings0, id) !== 'non')) {
+      buildSettings(roles, perms, settings0, session);
+    }
     document.documentElement.classList.add('mv-ready');
 
     /* La session est établie : le panel peut aller chercher ses données. */

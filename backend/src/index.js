@@ -27,7 +27,7 @@ const DISCORD = 'https://discord.com/api/v10';
    correction serveur n'a rien changé, on la lit.
 
    À tenir en phase avec version.json à chaque déploiement. */
-const VERSION = '1.42.1';
+const VERSION = '1.43.0';
 const SESSION_TTL = 60 * 60 * 24 * 7;   // 7 jours
 const STATE_TTL   = 600;                // 10 minutes
 
@@ -537,7 +537,15 @@ async function handlePermissions(request, env) {
   if (request.method === 'PUT') {
     const s = await currentSession(request, env);
     if (!s) return json(env, { error: 'unauthorized' }, 401);
-    if (!s.isPatron) return json(env, { error: 'forbidden' }, 403);
+
+    /* Écrire la matrice, c'est décider de tous les droits — y compris les
+       siens. Le droit de le faire se coche dans la matrice elle-même, page
+       « Accès & rôles ». Le patron l'a toujours. */
+    const reg0 = await base(env).get('settings', 'json') || {};
+    const perms0 = await base(env).get('permissions', 'json') || {};
+    if (!canWrite(s, 'acces', perms0, reg0.permsRO || {})) {
+      return json(env, { error: 'forbidden' }, 403);
+    }
 
     let body;
     try { body = await request.json(); }
@@ -600,11 +608,29 @@ const COLLECTION_PAGES = {
   commandes:       ['magcommandes', 'magrecap'],
   comRunner:       ['comrunner'],
   stock:           ['magstock', 'magcommandes'],
-  /* La vitrine ne se règle que depuis Paramètres, donc réservée au patron. */
-  vitrine:         [],
-  /* Règles du domaine : réservées au patron, comme la vitrine. */
-  reglages:        [],
+  /* Les écrans d'Administration. Ils étaient fermés en dur (liste vide =
+     patron seulement) ; ils sont maintenant délégables comme le reste, et
+     c'est la matrice qui décide. Rien n'y est ouvert par défaut : une page
+     absente de la matrice reste fermée à tous sauf au patron. */
+  vitrine:         ['paramvitrine'],
+  reglages:        ['paramregles'],
+  /* Collections sans données propres : elles nomment un droit, pour que
+     canWrite() puisse répondre sur ces routes-là aussi. */
+  acces:           ['parametres'],
+  invitesGestion:  ['paraminvites'],
+  agendaVis:       ['paramagenda'],
+  dispoRoles:      ['paramdispo'],
 };
+
+/* Les écrans d'Administration. Ils se délèguent à des RÔLES DISCORD, jamais à
+   un accès extérieur : un code d'accès donné à un comptable ne doit pas
+   pouvoir devenir, d'une case mal cochée, le droit de réécrire la matrice et
+   de s'ouvrir le panel entier. La liste est en dur ici pour que la règle ne
+   dépende d'aucun réglage. */
+const PAGES_ADMIN = new Set([
+  'parametres', 'paramagenda', 'paramdispo', 'paramvitrine',
+  'paramregles', 'paraminvites', 'paramdonnees',
+]);
 
 function canWrite(session, collection, perms, ro) {
   if (session.isPatron) return true;
@@ -614,7 +640,8 @@ function canWrite(session, collection, perms, ro) {
   if (session.invite) {
     const pages = COLLECTION_PAGES[collection];
     if (!pages) return false;
-    return pages.some(page => session.invite.pages.includes(page)
+    return pages.some(page => !PAGES_ADMIN.has(page)
+                           && session.invite.pages.includes(page)
                            && !session.invite.ro.includes(page));
   }
 
@@ -1118,10 +1145,28 @@ async function lireInvites(env) {
 
 /* GET | PUT /api/invites  —  patron uniquement
    La liste renvoyée ne contient JAMAIS les empreintes ni les sels. */
+/* Les pages qu'un accès extérieur peut recevoir : jamais celles
+   d'Administration, quelle que soit la case cochée dans le navigateur. Le
+   filtre est ici, à l'écriture, pour qu'une liste fautive ne soit même pas
+   stockée — et canWrite refuse de toute façon à la lecture. Deux verrous. */
+function pagesInvite(x) {
+  return (Array.isArray(x) ? x : [])
+    .filter(p => typeof p === 'string' && !PAGES_ADMIN.has(p))
+    .slice(0, 60);
+}
+
 async function handleInvites(request, env) {
   const s = await currentSession(request, env);
   if (!s) return json(env, { error: 'unauthorized' }, 401);
-  if (!s.isPatron) return json(env, { error: 'forbidden' }, 403);
+  {
+    /* Créer un accès extérieur, c'est ouvrir une porte d'entrée au panel :
+       le droit se coche dans la matrice, page « Accès extérieurs ». */
+    const reg = await base(env).get('settings', 'json') || {};
+    const perms = await base(env).get('permissions', 'json') || {};
+    if (!canWrite(s, 'invitesGestion', perms, reg.permsRO || {})) {
+      return json(env, { error: 'forbidden' }, 403);
+    }
+  }
 
   const invites = await lireInvites(env);
 
@@ -1159,8 +1204,8 @@ async function handleInvites(request, env) {
     const sel = b64(crypto.getRandomValues(new Uint8Array(16)));
     invites.push({
       code, nom, sel, hash: await empreinte(mdp, sel),
-      pages: Array.isArray(body.pages) ? body.pages.filter(p => typeof p === 'string').slice(0, 60) : [],
-      ro: Array.isArray(body.ro) ? body.ro.filter(p => typeof p === 'string').slice(0, 60) : [],
+      pages: pagesInvite(body.pages),
+      ro: pagesInvite(body.ro),
       cree: new Date().toISOString().slice(0, 10),
       actif: true,
     });
@@ -1185,8 +1230,8 @@ async function handleInvites(request, env) {
   }
 
   if (action === 'pages') {
-    invites[i].pages = Array.isArray(body.pages) ? body.pages.filter(p => typeof p === 'string').slice(0, 60) : [];
-    invites[i].ro    = Array.isArray(body.ro)    ? body.ro.filter(p => typeof p === 'string').slice(0, 60)    : [];
+    invites[i].pages = pagesInvite(body.pages);
+    invites[i].ro    = pagesInvite(body.ro);
     await base(env).put('invites', JSON.stringify(invites));
     return json(env, { ok: true });
   }
@@ -1262,7 +1307,6 @@ async function handleSettings(request, env) {
   if (request.method === 'PUT') {
     const s = await currentSession(request, env);
     if (!s) return json(env, { error: 'unauthorized' }, 401);
-    if (!s.isPatron) return json(env, { error: 'forbidden' }, 403);
 
     let body;
     try { body = await request.json(); }
@@ -1313,8 +1357,35 @@ async function handleSettings(request, env) {
        en dehors du patron. */
     if (Array.isArray(body.dispoRoles)) clean.dispoRoles = listeDeRoles(body.dispoRoles);
 
-    await base(env).put('settings', JSON.stringify(clean));
-    return json(env, clean);
+    /* Chaque réglage appartient à un écran d'Administration, et chaque écran
+       se délègue séparément.
+       ------------------------------------------------------------------------
+       Sans ce contrôle clé par clé, confier « Disponibilités » à un
+       responsable lui donnerait aussi la matrice des accès : les deux vivent
+       dans le même objet, et une seule autorisation aurait tout ouvert. C'est
+       la porte dérobée qu'il fallait fermer en même temps qu'on ouvrait la
+       porte principale. */
+    const APPARTENANCE = {
+      visibleRoles: 'acces',
+      permsRO:      'acces',
+      agendaVis:    'agendaVis',
+      dispoRoles:   'dispoRoles',
+    };
+    const perms = await base(env).get('permissions', 'json') || {};
+    const avant = await base(env).get('settings', 'json') || {};
+    const refuses = Object.keys(clean)
+      .filter(k => !canWrite(s, APPARTENANCE[k], perms, avant.permsRO || {}));
+    if (refuses.length) return json(env, { error: 'forbidden', reglages: refuses }, 403);
+
+    /* Fusion, et non remplacement.
+       ------------------------------------------------------------------------
+       L'ancienne version réécrivait TOUT l'objet à partir du seul envoi reçu :
+       un écran qui n'envoyait que sa clé effaçait celles des autres. Maintenant
+       que chaque écran n'envoie que la sienne, remplacer serait catastrophique
+       — enregistrer les disponibilités viderait la matrice des accès. */
+    const sortie = Object.assign({}, avant, clean);
+    await base(env).put('settings', JSON.stringify(sortie));
+    return json(env, sortie);
   }
 
   return json(env, { error: 'method_not_allowed' }, 405);
