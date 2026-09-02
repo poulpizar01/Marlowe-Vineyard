@@ -2033,7 +2033,10 @@ async function handleAlias(request, env) {
   const perms = await base(env).get('permissions', 'json') || {};
   const reg = await base(env).get('settings', 'json') || {};
   if (!canWrite(s, 'rhRoster', perms, reg.permsRO || {})) {
-    return json(env, { error: 'forbidden' }, 403);
+    return json(env, { error: 'forbidden', detail:
+      'Rattacher une vente à une fiche demande le droit d\'écrire sur la page '
+      + 'Employés. Votre session est vue par le serveur comme : '
+      + `${s.roles.length ? s.roles.join(', ') : 'aucun rôle'}.` }, 403);
   }
   if (request.method === 'GET') return json(env, await lireAlias(env));
   if (request.method !== 'POST') return json(env, { error: 'method_not_allowed' }, 405);
@@ -2061,7 +2064,13 @@ async function handleLogs(request, env) {
   if (!s) return json(env, { error: 'unauthorized' }, 401);
 
   if (request.method === 'POST') {
-    if (!s.isPatron) return json(env, { error: 'forbidden' }, 403);
+    /* Le panel affichait « vous n'avez pas le droit d'envoyer un rappel » sur
+       ce refus-ci, faute de savoir ce qui avait été refusé. Le serveur le dit
+       désormais lui-même, et nomme la condition exacte. */
+    if (!s.isPatron) return json(env, { error: 'forbidden', detail:
+      'Relancer la lecture du salon est réservé au patron. Votre session est vue '
+      + `par le serveur comme : ${s.roles.length ? s.roles.join(', ') : 'aucun rôle'}`
+      + `${s.isOwner ? ' (accès développeur)' : ''}.` }, 403);
     return json(env, await lireLogs(env));
   }
   const etat = await base(env).get('logs:etat', 'json');

@@ -2116,7 +2116,7 @@ window.onload = function(){
       method: 'POST',
       body: JSON.stringify({ du, au: indef ? null : au, indef, motif }),
     });
-    if (!r.ok) { toast(phraseRefus(r)); return; }
+    if (!r.ok) { toast(phraseRefus(r, 'déclarer une absence')); return; }
 
     clear('absMoiDu', 'absMoiAu', 'absMoiMotif');
     if ($('absMoiIndef')) $('absMoiIndef').checked = false;
@@ -2442,6 +2442,105 @@ window.onload = function(){
     toast(`Avertissement enregistré pour ${nom}. ${envoi}`);
   }
 
+  /* ==========================================================================
+     AVERTIR TOUT LE MONDE D'UN COUP
+     --------------------------------------------------------------------------
+     Le bouton ⚠ des lignes se clique une fois par personne, et le dimanche
+     soir il y en a douze. Celui-ci fait la tournée — mais il ne décide de
+     rien de plus que les autres : il retient EXACTEMENT les mêmes fiches que
+     le ⚠ individuel, par la même fonction.
+
+     Deux garde-fous, et le second est le plus important :
+
+     · un ABSENT n'est jamais dans la liste. C'est déjà vrai ligne à ligne,
+       et ça reste vrai en lot : sanctionner quelqu'un qui n'était pas là est
+       le genre d'automatisme qui fâche une équipe ;
+
+     · quelqu'un DÉJÀ averti cette semaine est écarté. Sans ça, deux clics
+       dans la soirée feraient monter tout le monde d'un cran — rappel à
+       l'ordre, puis avertissement, puis dernier avertissement — pour une
+       seule et même semaine sous quota. Le panel dit combien de personnes il
+       a écartées et pourquoi, plutôt que de les traiter en silence. */
+  function dejaAvertiCetteSemaine(nom) {
+    const maintenant = new Date();
+    return avertissements.some(a => a && clefNom(a.nom) === clefNom(nom)
+      && (() => { const d = parseFR(a.date); return d && sameWeek(d, maintenant); })());
+  }
+
+  function aAvertirEnLot() {
+    return effectifData
+      .filter(e => { const act = actionSousQuota(e); return !!(act && act.avert); })
+      .map(e => ({ e, deja: dejaAvertiCetteSemaine(e.name) }));
+  }
+
+  async function avertirTousSousQuota() {
+    const tous = aAvertirEnLot();
+    const aFaire = tous.filter(x => !x.deja).map(x => x.e);
+    const ecartes = tous.filter(x => x.deja).length;
+
+    if (!tous.length) {
+      toast('Personne n\'est sous quota cette semaine — les absents ne comptent pas.');
+      return;
+    }
+    if (!aFaire.length) {
+      toast(`Les ${ecartes} personne(s) sous quota ont déjà été averties cette semaine.`);
+      return;
+    }
+
+    /* La liste est montrée EN ENTIER avant d'agir : douze avertissements
+       partent d'un coup dans douze tickets, ça ne se lance pas sur un chiffre. */
+    const lignes = aFaire.map(e => {
+      const manque = Math.max(0, (e.quota || 0) - (e.barils || 0));
+      return `${e.name} (${e.grade}) — ${niveauSuivant(e.name)}, `
+           + `${manque.toLocaleString('fr-FR')} vins manquants`;
+    });
+
+    const ok = await confirmAction(`Avertir ${aFaire.length} personne(s)`,
+      `${lignes.join('\n')}\n\n`
+      + (ecartes ? `${ecartes} personne(s) déjà averties cette semaine sont écartées. ` : '')
+      + `Chaque avertissement rejoint le dossier RH et part dans le ticket de la personne. `
+      + `Le niveau monte d'un cran par avertissement déjà au dossier.`,
+      'Avertir');
+    if (!ok) return;
+
+    /* Le dossier RH d'abord, en UNE écriture. Douze enregistrements séparés,
+       c'était douze allers-retours et autant d'occasions d'en perdre un. */
+    const sess = window.MarloweSession;
+    const faits = aFaire.map(e => {
+      const manque = Math.max(0, (e.quota || 0) - (e.barils || 0));
+      const motif = `Quota non atteint : ${Number(e.barils || 0).toLocaleString('fr-FR')} / `
+                  + `${Number(e.quota || 0).toLocaleString('fr-FR')} vins, `
+                  + `${manque.toLocaleString('fr-FR')} manquants.`;
+      const niveau = niveauSuivant(e.name);
+      avertissements.unshift({
+        nom: e.name, niveau, motif, date: todayFR(),
+        par: (sess && sess.name) || 'Direction',
+      });
+      return { nom: e.name, niveau, motif };
+    });
+
+    D().note(`a averti ${faits.length} employé(s) sous quota`);
+    D().saveMany(['avertissements', 'rhRoster']);
+    if (typeof renderAvertissements === 'function') renderAvertissements();
+    toast(`${faits.length} avertissement(s) enregistré(s) — envoi des notifications…`);
+
+    /* Les notifications ensuite, une par une et sans se presser : douze appels
+       lancés en même temps, Discord en refuse une partie. Un envoi manqué ne
+       remet pas en cause l'avertissement, qui est déjà au dossier. */
+    let prevenus = 0;
+    const rates = [];
+    for (const f of faits) {
+      const phrase = await notifierAvertissement(f.nom, f.niveau, f.motif);
+      if (/Prévenu/.test(phrase)) prevenus++; else rates.push(f.nom);
+      await new Promise(r => setTimeout(r, 350));
+    }
+
+    toast(`${faits.length} averti(s) · ${prevenus} prévenu(s) dans leur ticket`
+      + (rates.length ? ` · ${rates.length} non joint(s) : ${rates.slice(0, 3).join(', ')}`
+                        + (rates.length > 3 ? '…' : '') : '')
+      + (ecartes ? ` · ${ecartes} déjà averti(s) cette semaine` : ''));
+  }
+
   /* Prévient la personne dans son ticket. Rend une phrase à afficher. */
   async function notifierAvertissement(nom, niveau, motif) {
     const fiche = (typeof rhRosterData !== 'undefined' ? rhRosterData : [])
@@ -2462,7 +2561,7 @@ window.onload = function(){
         : 'Prévenu en message privé (aucun ticket ouvert).';
     }
     if (r.data && r.data.error === 'doublon') return 'Déjà notifié à l\'instant.';
-    return 'MAIS la notification n\'est pas partie — ' + phraseRefus(r);
+    return 'MAIS la notification n\'est pas partie — ' + phraseRefus(r, 'prévenir cette personne');
   }
 
   async function editEffectif(name) {
@@ -4946,6 +5045,7 @@ window.onload = function(){
     on('addClientBtn', addClient);
     on('addArticleBtn', addArticle);
     on('absMoiBtn', declarerMonAbsence);
+    on('effAvertirTous', avertirTousSousQuota);
     on('mvAddEvent', () => addEvent('public'));
     on('mvAddEventCom', () => addEvent('commercial'));
     on('primesExcBtn', addPrimeExceptionnelle);
@@ -9079,7 +9179,7 @@ window.onload = function(){
 
   /* Ce que dit le panel quand le Worker refuse. Chaque cas a sa phrase : un
      « échec » générique laisse la personne devant un mur. */
-  function phraseRefus(r) {
+  function phraseRefus(r, quoi) {
     const d = (r.data && r.data.detail) ? ' (' + r.data.detail + ')' : '';
     switch (r.data && r.data.error) {
       case 'sans_identifiant':
@@ -9097,7 +9197,16 @@ window.onload = function(){
         return `Aucun ticket ouvert, et les messages privés de cette personne sont fermés${d}. `
              + 'Rien n\'a été envoyé.';
       case 'inconnu':   return "Cette fiche n'existe plus dans le registre.";
-      case 'forbidden': return "Vous n'avez pas le droit d'envoyer un rappel.";
+      /* phraseRefus sert à SIX appels différents — rappel de permis,
+         avertissement, rattachement d'une vente, relecture des logs,
+         déclaration d'absence, lecture des quotas. Ce message-ci ne parlait
+         que du premier : cliquer « Relire maintenant » répondait « vous n'avez
+         pas le droit d'envoyer un rappel », et on cherchait une permission qui
+         n'était pas en cause. Le serveur dit maintenant lui-même ce qu'il
+         refuse, et à défaut on nomme l'action tentée. */
+      case 'forbidden':
+        return (r.data && r.data.detail)
+            || `Vous n'avez pas le droit ${quoi ? 'de ' + quoi : 'de faire ceci'}.`;
       case 'config':    return r.data.detail || 'Les catégories de tickets ne sont pas déclarées.';
       case 'reseau':    return 'Le serveur du panel est injoignable. Rien n\'a été envoyé.';
       /* Le routeur du Worker rend « not_found » quand l'URL demandée ne
@@ -9124,7 +9233,7 @@ window.onload = function(){
     let apercu = null;
     if (!estDemo() && A && A.apiBrut) {
       const r = await A.apiBrut('/api/rappel?civil=' + encodeURIComponent(civil));
-      if (!r.ok) { toast(phraseRefus(r)); return; }
+      if (!r.ok) { toast(phraseRefus(r, 'envoyer un rappel')); return; }
       apercu = r.data;
     }
 
@@ -9459,7 +9568,7 @@ window.onload = function(){
     const r = await A.apiBrut(`/api/quota?du=${du}&au=${au}`);
     qdEnCours = false;
     if (!r.ok) {
-      qdDonnees = { rattachees: [], orphelines: [], etat: { erreur: phraseRefus(r) } };
+      qdDonnees = { rattachees: [], orphelines: [], etat: { erreur: phraseRefus(r, 'lire les quotas') } };
       qdDessiner();
       return;
     }
@@ -9498,7 +9607,7 @@ window.onload = function(){
       const r = await window.MarloweAuth.apiBrut('/api/alias', {
         method: 'POST', body: JSON.stringify({ cle: o.dataset.orph, civil }),
       });
-      if (!r.ok) { toast(phraseRefus(r)); return; }
+      if (!r.ok) { toast(phraseRefus(r, 'rattacher une vente à une fiche')); return; }
       toast('Rattaché — les ventes suivantes suivront toutes seules.');
       renderQuotaDirect();
       /* La ligne quitte les non rattachées : elle doit aussi quitter le
@@ -9520,7 +9629,7 @@ window.onload = function(){
     b.disabled = true;
     const r = await window.MarloweAuth.apiBrut('/api/journaux', { method: 'POST' });
     b.disabled = false;
-    if (!r.ok) { toast(phraseRefus(r)); return; }
+    if (!r.ok) { toast(phraseRefus(r, 'relancer la lecture du salon')); return; }
     if (r.data && r.data.ok === false) { toast(r.data.erreur || 'La lecture a échoué.'); }
     else { toast(`${(r.data && r.data.gardees) || 0} vente(s) ajoutée(s).`); }
     renderQuotaDirect();
@@ -9548,6 +9657,7 @@ window.onload = function(){
     clefNom,
     enregistrerAvertissement, niveauSuivant, notifierAvertissement,
     retrograderEmploye, avertirEmploye, actionSousQuota,
+    avertirTousSousQuota, aAvertirEnLot, dejaAvertiCetteSemaine,
     renderQuotaDirect,
     /* Le collage de la tablette vit dans gestion.html, hors de cette portée :
        sans cet export il n'aurait que les fenêtres du navigateur pour parler. */
