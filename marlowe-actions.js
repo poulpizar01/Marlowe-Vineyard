@@ -7490,6 +7490,122 @@ window.onload = function(){
     return `hsl(${Math.round((i * 360) / Math.max(n, 1) + 28) % 360} 52% 52%)`;
   }
 
+  /* --------------------------------------------------------------------------
+     LA ROUE : UN SECTEUR PAR TICKET, MÉLANGÉS
+     --------------------------------------------------------------------------
+     Avant, chacun avait UN seul arc, large comme son nombre de tickets. C'est
+     exact mathématiquement, mais ça se regarde mal : celui qui a huit tickets
+     occupe un quartier entier, et la roue donne l'impression d'être jouée
+     d'avance. On découpe donc en secteurs d'UN ticket, et on les mélange :
+     huit tickets font huit petites parts éparpillées sur le tour.
+
+     Les chances ne changent pas d'un cheveu — huit parts sur cinquante, c'est
+     toujours huit sur cinquante. Seule la lecture change, et c'est tout
+     l'intérêt : une tombola doit avoir l'air juste autant qu'elle l'est.
+
+     Le mélange est un Fisher-Yates : chacune des permutations a exactement la
+     même probabilité. Un « trier au hasard » (sort avec Math.random) n'a PAS
+     cette propriété — il penche, et sur une roue ça se verrait.
+
+     ⚠️ Il est MÉMORISÉ, et ça compte. La roue est redessinée à chaque
+     rafraîchissement des données ; si l'ordre changeait entre le moment où
+     l'on vise un secteur et la fin de l'animation, la flèche s'arrêterait sur
+     le nom de quelqu'un d'autre que le gagnant annoncé. Le mélange n'est donc
+     refait que si la composition change vraiment (quelqu'un entre, sort, ou
+     gagne un ticket) — c'est ce que compare la signature.
+     -------------------------------------------------------------------------- */
+  let tombolaMelange = { signature: '', ordre: [] };
+
+  function melangerFisherYates(tab) {
+    for (let i = tab.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [tab[i], tab[j]] = [tab[j], tab[i]];
+    }
+    return tab;
+  }
+
+  /* --------------------------------------------------------------------------
+     RÉPARTIR LES TICKETS AUTOUR DE LA ROUE
+     --------------------------------------------------------------------------
+     Premier essai : un simple mélange au hasard. Résultat mesuré sur vingt
+     tickets dont huit à la même personne — cinq voisins identiques en
+     moyenne, et régulièrement quatre d'affilée. Autrement dit, le hasard
+     seul reforme le gros quartier qu'on voulait casser, et la capture d'écran
+     le montrait sans appel.
+
+     La méthode retenue garantit le résultat au lieu de l'espérer :
+
+       1. on distribue les tickets une place sur deux — 0, 2, 4… puis 1, 3,
+          5… — en commençant par celui qui en a le plus. Tant que personne ne
+          détient plus de la moitié des tickets, cette distribution ne place
+          JAMAIS deux tickets d'une même personne côte à côte ;
+
+       2. on fait ensuite tourner le tout d'un cran au hasard, et on échange
+          des paires prises au hasard — mais uniquement les échanges qui
+          conservent la propriété. La roue est donc différente chaque semaine
+          sans jamais recoller deux parts du même nom.
+
+     Ce que ça ne change pas : les chances. Le gagnant est tiré au prorata
+     des tickets AVANT que la roue ne tourne ; l'ordre d'affichage n'entre à
+     aucun moment dans ce tirage. Il ne sert qu'à regarder — et c'est
+     précisément ce qui autorise à l'arranger.
+
+     La roue est un CERCLE : la dernière part touche la première. Tout le
+     voisinage se calcule donc modulo la longueur. Oublier ce détail laisse
+     un doublon visible en haut, pile sous la flèche.
+
+     Le cas impossible : quelqu'un qui détient plus de la moitié des tickets.
+     Aucune disposition ne peut alors éviter les voisinages — la fonction fait
+     au mieux et n'essaie pas de forcer l'impossible.
+     -------------------------------------------------------------------------- */
+  function repartirLesTickets(proprietaires) {
+    const n = proprietaires.length;
+    if (n < 3) return proprietaires;
+
+    /* Combien de tickets par personne, du plus fourni au moins fourni.
+       À égalité, l'ordre est tiré au sort : sinon deux employés à trois
+       tickets occuperaient les mêmes places toutes les semaines. */
+    const compte = new Map();
+    proprietaires.forEach(p => compte.set(p, (compte.get(p) || 0) + 1));
+    const groupes = melangerFisherYates([...compte.entries()])
+      .sort((a, b) => b[1] - a[1]);
+
+    /* Une place sur deux, les paires d'abord puis les impaires. */
+    const places = [];
+    for (let i = 0; i < n; i += 2) places.push(i);
+    for (let i = 1; i < n; i += 2) places.push(i);
+
+    const ordre = new Array(n);
+    let k = 0;
+    for (const [qui, combien] of groupes) {
+      for (let c = 0; c < combien; c += 1) { ordre[places[k]] = qui; k += 1; }
+    }
+
+    /* Rotation au hasard : sans elle, le plus gros porteur commencerait
+       toujours à midi, juste sous la flèche. */
+    const decalage = Math.floor(Math.random() * n);
+    const tourne = ordre.map((_, i) => ordre[(i + decalage) % n]);
+
+    /* Puis on brasse — en n'acceptant que les échanges qui gardent chaque
+       nom séparé de lui-même. */
+    const libre = (tab, i, val) =>
+      tab[(i - 1 + n) % n] !== val && tab[(i + 1) % n] !== val;
+
+    for (let essai = 0; essai < n * 4; essai += 1) {
+      const i = Math.floor(Math.random() * n);
+      const j = Math.floor(Math.random() * n);
+      if (i === j) continue;
+      const a = tourne[i], b = tourne[j];
+      if (a === b) continue;
+      /* On teste l'échange sur une copie du voisinage : poser a en j puis
+         b en i doit laisser les deux emplacements propres. */
+      const t = tourne.slice();
+      t[i] = b; t[j] = a;
+      if (libre(t, i, b) && libre(t, j, a)) { tourne[i] = b; tourne[j] = a; }
+    }
+    return tourne;
+  }
+
   function participantsTombola() {
     const lignes = (typeof dash !== 'undefined' && Array.isArray(dash)) ? dash : [];
     const out = [];
@@ -7502,27 +7618,54 @@ window.onload = function(){
     out.sort((a, b) => b.total - a.total || String(a.name).localeCompare(b.name));
     out.forEach((p, i) => { p.color = teinte(i, out.length); });
 
-    let curseur = 0;
     const total = out.reduce((s, p) => s + p.total, 0);
+
+    /* La signature : qui participe, et avec combien de tickets. Elle ne
+       contient ni couleur ni ordre — deux choses qui se recalculent — pour
+       qu'un simple redessin ne relance pas le mélange. */
+    const signature = out.map(p => `${p.name}:${p.total}`).join('|');
+    if (signature !== tombolaMelange.signature) {
+      const billets = [];
+      out.forEach((p, i) => { for (let k = 0; k < p.total; k += 1) billets.push(i); });
+      tombolaMelange = { signature, ordre: repartirLesTickets(billets) };
+    }
+
+    /* Les secteurs, dans l'ordre mélangé. Chacun garde l'indice de son
+       propriétaire : c'est par lui que le tirage retrouve où viser. */
+    const pas = total ? 360 / total : 0;
+    const segments = tombolaMelange.ordre.map((idx, n) => ({
+      idx,
+      name: out[idx].name,
+      color: out[idx].color,
+      startDeg: n * pas,
+      endDeg: (n + 1) * pas,
+    }));
+
+    /* On garde aussi un arc par personne, mais UNIQUEMENT pour la légende :
+       plus rien ne s'en sert pour viser. */
+    let curseur = 0;
     out.forEach(p => {
       p.startDeg = total ? (curseur / total) * 360 : 0;
       curseur += p.total;
       p.endDeg = total ? (curseur / total) * 360 : 0;
     });
-    return { liste: out, total };
+
+    return { liste: out, total, segments };
   }
 
   function renderTombola() {
     const roue = $('tombolaWheel');
     if (!roue) return;
 
-    const { liste, total } = participantsTombola();
+    const { liste, total, segments } = participantsTombola();
     const lignes = (typeof dash !== 'undefined' && Array.isArray(dash)) ? dash : [];
 
-    /* La roue. Sans participant, un disque neutre plutôt qu'un dégradé vide,
-       qui s'afficherait en noir. */
-    roue.style.background = liste.length
-      ? `conic-gradient(${liste.map(p => `${p.color} ${p.startDeg}deg ${p.endDeg}deg`).join(', ')})`
+    /* La roue, dessinée sur les SECTEURS mélangés et non sur les personnes :
+       les tickets d'un même employé sont éparpillés autour du tour.
+       Sans participant, un disque neutre plutôt qu'un dégradé vide, qui
+       s'afficherait en noir. */
+    roue.style.background = segments.length
+      ? `conic-gradient(${segments.map(s => `${s.color} ${s.startDeg}deg ${s.endDeg}deg`).join(', ')})`
       : 'repeating-conic-gradient(#3D372C 0deg 12deg, #2E2A23 12deg 24deg)';
 
     const cpt = $('tombolaCompte');
@@ -7616,7 +7759,7 @@ window.onload = function(){
     const aff = $('tombolaWinner');
     if (!roue || !btn) return;
 
-    const { liste, total } = participantsTombola();
+    const { liste, total, segments } = participantsTombola();
     if (!liste.length || !total) {
       toast("Aucun participant : le tableau de bord de la semaine est vide.");
       return;
@@ -7626,8 +7769,24 @@ window.onload = function(){
     btn.disabled = true;
     if (aff) aff.textContent = '';
 
+    /* Le gagnant est désigné AVANT de lancer la roue, au prorata des tickets.
+       L'inverse — lire l'angle d'arrivée — dépendrait des arrondis du
+       navigateur et ne serait donc pas tout à fait proportionnel. */
     const gagnant = tirerAuSort(liste, total);
-    const cible = gagnant.startDeg + Math.random() * (gagnant.endDeg - gagnant.startDeg);
+
+    /* Puis on choisit LEQUEL de ses secteurs la flèche viendra désigner :
+       ils sont maintenant éparpillés sur le tour, il faut en prendre un.
+       Le repli sur l'arc de la personne ne sert que si la liste des secteurs
+       manquait — la roue s'arrêterait au bon endroit quand même. */
+    const miens = segments.filter(s => liste[s.idx] && liste[s.idx].name === gagnant.name);
+    const vise = miens.length ? miens[Math.floor(Math.random() * miens.length)] : gagnant;
+
+    /* On s'arrête un peu à l'intérieur du secteur, pas sur son bord : avec
+       des parts d'un seul ticket, une part vaut parfois deux ou trois degrés,
+       et tomber pile sur la frontière laisserait un doute sur la couleur
+       désignée. */
+    const marge = (vise.endDeg - vise.startDeg) * 0.15;
+    const cible = vise.startDeg + marge + Math.random() * ((vise.endDeg - vise.startDeg) - 2 * marge);
     tombolaAngle = (tombolaAngle - (tombolaAngle % 360)) + 6 * 360 + (360 - cible);
     roue.style.transform = `rotate(${tombolaAngle}deg)`;
 
@@ -9641,6 +9800,79 @@ window.onload = function(){
     </tr>`;
   }
 
+  /* --------------------------------------------------------------------------
+     LE TOP 5 DE LA PÉRIODE
+     --------------------------------------------------------------------------
+     Cinq cartes, classées au nombre de vins sur la fenêtre choisie en haut de
+     page. Trois décisions valent d'être expliquées :
+
+     · il ne suit PAS la barre de recherche. Un classement qui se recompose
+       quand on cherche quelqu'un ne classe plus rien ;
+
+     · il ne compte QUE les lignes rattachées à une fiche. Une ligne orpheline
+       n'est pas une personne, c'est un nom de log qu'on n'a pas encore relié —
+       la mettre sur le podium reviendrait à récompenser une inconnue. Mais si
+       une orpheline aurait sa place dans les cinq, on le DIT sous le tableau :
+       c'est le meilleur moment pour penser à la rattacher, et sans ça le
+       classement serait faux sans que personne ne s'en aperçoive ;
+
+     · à égalité de vins, c'est l'ordre alphabétique qui tranche, pas l'ordre
+       d'arrivée dans les logs. Sinon deux personnes à 3 000 vins changeraient
+       de place à chaque relecture, pour rien.
+     -------------------------------------------------------------------------- */
+  const QD_TOP_N = 5;
+
+  function qdTop(rattachees, orphelines) {
+    const el = $('qdTop');
+    if (!el) return;
+
+    const classes = ['or', 'arg', 'bro', '', ''];
+    const podium = (rattachees || []).slice()
+      .filter(r => r.vins > 0)
+      .sort((a, b) => b.vins - a.vins || String(a.nom).localeCompare(String(b.nom), 'fr'))
+      .slice(0, QD_TOP_N);
+
+    if (!podium.length) {
+      el.innerHTML = `
+        <div class="qd-top-head"><h3>Top ${QD_TOP_N} de la période</h3></div>
+        <div class="qd-top-vide">Personne n'a encore vendu sur cette période.</div>`;
+      return;
+    }
+
+    const seuil = podium[podium.length - 1].vins;
+    const orphGenantes = (orphelines || []).filter(o => o.vins >= seuil && o.vins > 0);
+
+    el.innerHTML = `
+      <div class="qd-top-head">
+        <h3>Top ${QD_TOP_N} de la période</h3>
+        <p class="mv-hint">${esc(qdBornes().titre)} · au nombre de vins</p>
+      </div>
+      <div class="qd-top-grid">
+        ${podium.map((r, i) => {
+          const quota = qdQuotaDe(r.poste);
+          const atteint = quota > 0 && r.vins >= quota;
+          return `<div class="qd-top-c ${classes[i] || ''}">
+            <div class="qd-top-r">
+              <span class="qd-top-n">${i + 1}</span>
+              <span class="qd-top-nom" title="${esc(r.nom)}">${esc(r.nom)}</span>
+            </div>
+            <div class="qd-top-v">${r.vins.toLocaleString('fr-FR')}</div>
+            <div class="qd-top-s${atteint ? ' ok' : ''}">${
+              quota > 0
+                ? (atteint
+                    ? '✓ quota atteint'
+                    : `${(quota - r.vins).toLocaleString('fr-FR')} avant le quota`)
+                : esc(r.poste || 'poste sans quota')
+            }</div>
+          </div>`;
+        }).join('')}
+      </div>
+      ${orphGenantes.length ? `<p class="mv-hint" style="margin:12px 0 0;">
+        ⚠ ${orphGenantes.length} ligne(s) non rattachée(s) atteignent ce niveau
+        (${orphGenantes.map(o => esc(o.nom)).join(', ')}) : ce classement les ignore
+        tant qu'elles ne sont pas reliées à une fiche.</p>` : ''}`;
+  }
+
   function qdOrpheline(o) {
     const noms = (typeof rhRosterData !== 'undefined' ? rhRosterData : [])
       .filter(f => f.status !== 'parti');
@@ -9661,6 +9893,10 @@ window.onload = function(){
     if (!qdDonnees) return;
     const { rattachees, orphelines, etat } = qdDonnees;
     qdBandeau(etat);
+
+    /* Le podium est dessiné AVANT le filtrage : il porte sur la période
+       entière, pas sur ce que la recherche laisse voir. */
+    qdTop(rattachees, orphelines);
 
     const q = qdFiltre.toLowerCase();
     const vus = q ? rattachees.filter(r => (r.nom + ' ' + r.poste).toLowerCase().includes(q)) : rattachees;

@@ -254,6 +254,33 @@
   .qd-bandeau.frais{background:rgba(74,145,90,.12);border:1px solid rgba(74,145,90,.4);color:#8FD2A0;}
   .qd-bandeau.tiede{background:rgba(227,154,78,.12);border:1px solid rgba(227,154,78,.45);color:#E3B478;}
   .qd-bandeau.muet{background:rgba(176,60,60,.13);border:1px solid rgba(176,60,60,.45);color:#E39191;}
+  /* --- Le top 5 de la période -------------------------------------------
+     Cinq cartes de largeur égale : un podium qui grossirait la première
+     rendrait les chiffres de rang 4 et 5 illisibles, alors que c'est
+     justement là que se joue la course. La hiérarchie passe par la couleur
+     du numéro, pas par la taille de la carte. */
+  .qd-top{margin-bottom:22px;}
+  .qd-top-head{display:flex;align-items:baseline;gap:12px;margin:0 0 12px;}
+  .qd-top-head h3{margin:0;font-size:15px;}
+  .qd-top-head .mv-hint{margin:0;font-size:12px;}
+  .qd-top-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;}
+  @media (max-width:1250px){ .qd-top-grid{grid-template-columns:repeat(3,1fr);} }
+  @media (max-width:820px){ .qd-top-grid{grid-template-columns:repeat(2,1fr);} }
+  .qd-top-c{background:var(--panel,#221F1A);border:1px solid var(--band,#3D372C);
+    border-radius:12px;padding:13px 15px;display:flex;flex-direction:column;gap:7px;min-width:0;}
+  .qd-top-c.or{border-color:rgba(201,169,97,.55);background:linear-gradient(180deg,rgba(201,169,97,.10),transparent 70%);}
+  .qd-top-r{display:flex;align-items:center;gap:9px;}
+  .qd-top-n{flex:none;width:23px;height:23px;border-radius:7px;display:grid;place-items:center;
+    font-size:12px;font-weight:700;background:rgba(255,255,255,.06);color:var(--muted);}
+  .qd-top-c.or .qd-top-n{background:var(--or,#C9A961);color:#17130F;}
+  .qd-top-c.arg .qd-top-n{background:rgba(197,197,197,.85);color:#17130F;}
+  .qd-top-c.bro .qd-top-n{background:rgba(176,110,72,.9);color:#17130F;}
+  /* Un nom long ne doit ni déborder ni écarter la carte : il se coupe. */
+  .qd-top-nom{font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .qd-top-v{font-family:var(--mono,ui-monospace,monospace);font-size:19px;font-weight:700;line-height:1;}
+  .qd-top-s{font-size:11.5px;color:var(--muted);}
+  .qd-top-s.ok{color:#8FD2A0;}
+  .qd-top-vide{color:var(--muted);font-size:13px;padding:14px 0;}
   .qd-jauge{position:relative;height:7px;border-radius:99px;background:rgba(255,255,255,.07);min-width:120px;}
   .qd-jauge i{position:absolute;inset:0 auto 0 0;border-radius:99px;background:linear-gradient(90deg,#B0553F,#E39A4E);}
   .qd-jauge.ok i{background:linear-gradient(90deg,#4A915A,#8FD2A0);}
@@ -1339,6 +1366,11 @@
         <div class="metric-value" id="qdVentes">—</div>
         <div class="metric-sub" id="qdVentesSub">messages du salon</div></div>
     </div>
+
+    <!-- Le top 5 de la période. Il ne suit PAS la barre de recherche
+         ci-dessous : un classement qui change quand on cherche quelqu'un
+         n'est plus un classement. -->
+    <div class="qd-top" id="qdTop"></div>
 
     <div class="panel">
       <div class="toolbar" style="margin-bottom:14px;">
