@@ -1,0 +1,60 @@
+# ============================================================================
+#  Ce dépôt est PUBLIC — il sert GitHub Pages.
+#  Tout fichier commité ici est lisible par n'importe qui, à l'adresse
+#  https://poulpizar01.github.io/Marlowe-Vineyard/<le fichier>
+#  et reste dans l'historique Git même après suppression.
+#
+#  Ce fichier liste ce qui ne doit JAMAIS y entrer.
+# ============================================================================
+
+# ---------------------------------------------------------------------------
+#  LES SECRETS
+# ---------------------------------------------------------------------------
+#  Le secret client Discord, le jeton du bot, l'URL du webhook, les mots de
+#  passe MariaDB. Ils vivent dans les secrets Cloudflare ou dans un .env sur
+#  le serveur — jamais dans un fichier du dépôt.
+.env
+.env.*
+!.env.example
+*.env
+backend/.dev.vars
+backend/.env
+.wrangler/
+
+# ---------------------------------------------------------------------------
+#  LES DONNÉES DU DOMAINE
+# ---------------------------------------------------------------------------
+#  Le registre du personnel contient des identités civiles, des téléphones,
+#  des RIB et des identifiants Discord. Un export produit pendant la migration
+#  MariaDB contient TOUT ça d'un bloc.
+#
+#  ⚠️  C'est le risque le plus concret de ce dépôt : un « git add . » lancé
+#      depuis un dossier où traîne un export publie le fichier du personnel
+#      en entier. Une fois poussé, le supprimer ne suffit plus — il faut
+#      réécrire l'historique ET considérer les données comme divulguées.
+export.json
+export*.json
+donnees.sql
+*.sql.gz
+sauvegardes/
+donnees/
+
+# Le pack de migration : il n'a rien à faire dans le dépôt du site.
+# Sa place est un dépôt privé, ou une transmission directe.
+migration-mariadb-marlowe/
+migration-mariadb-marlowe.zip
+
+# ---------------------------------------------------------------------------
+#  LE BRUIT
+# ---------------------------------------------------------------------------
+node_modules/
+package-lock.json
+*.log
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Les copies de sauvegarde laissées par les scripts.
+*.avant-mariadb
+*.bak
+*.orig
