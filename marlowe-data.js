@@ -93,6 +93,11 @@ window.MarloweData = (function () {
 
     /* Primes exceptionnelles de la semaine et réglage du palier :
        vivent dans marlowe-actions.js, d'où le passage par window. */
+    linterna: {
+      ref: () => window.MarloweLinterna,
+      render: [() => { const a = window.MarloweActions;
+                       if (a) { a.renderLinterna(); a.renderBilan(); } }],
+    },
     primesExc: {
       ref: () => window.MarlowePrimesExc,
       render: [() => { const a = window.MarloweActions; if (a) { a.renderPrimesExc(); a.renderBilan(); } }],

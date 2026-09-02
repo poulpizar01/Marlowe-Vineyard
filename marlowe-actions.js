@@ -2078,6 +2078,88 @@ window.onload = function(){
     toast('Événement supprimé.');
   }
 
+  function renderLinterna() {
+    const corps = $('lintBody');
+    if (!corps) return;
+
+    const tarif = montantDuRaisin();
+    const moi = moiSession();
+    const miens = raisinsDe(moi);
+
+    const cartes = $('lintCartes');
+    if (cartes) {
+      const total = linterna.reduce((s2, l) => s2 + (Number(l.raisins) || 0), 0);
+      const f = n => Number(n || 0).toLocaleString('fr-FR');
+      cartes.innerHTML = `
+        <div class="mv-kpi"><div class="mv-kpi-l">Ma récolte</div>
+          <div class="mv-kpi-v">${f(miens)}</div>
+          <div class="mv-kpi-s">raisins cette semaine</div></div>
+        <div class="mv-kpi"><div class="mv-kpi-l">Ce que ça me rapporte</div>
+          <div class="mv-kpi-v">${f(miens * tarif)} $</div>
+          <div class="mv-kpi-s">${f(tarif)} $ le raisin, dans la limite du plafond de prime</div></div>
+        <div class="mv-kpi"><div class="mv-kpi-l">Récolte de l'équipe</div>
+          <div class="mv-kpi-v">${f(total)}</div>
+          <div class="mv-kpi-s">${linterna.length} déclarant(s)</div></div>`;
+    }
+
+    const lignes = linterna.slice()
+      .sort((a, b) => (Number(b.raisins) || 0) - (Number(a.raisins) || 0));
+
+    corps.innerHTML = lignes.length ? lignes.map(l => `
+      <tr>
+        <td>${esc(l.name)}${clefNom(l.name) === clefNom(moi)
+          ? ' <span class="qd-via">vous</span>' : ''}</td>
+        <td class="num"><b>${Number(l.raisins || 0).toLocaleString('fr-FR')}</b></td>
+        <td class="num">${(Number(l.raisins || 0) * tarif).toLocaleString('fr-FR')} $</td>
+      </tr>`).join('')
+      : `<tr><td colspan="3" class="empty-note" style="text-align:center;padding:22px;">
+           Personne n'a encore déclaré de récolte cette semaine.</td></tr>`;
+  }
+
+  /* Déclarer sa récolte. Le panel n'écrit rien lui-même : le serveur le fait,
+     au nom de la session, pour la même raison que l'absence — un employé n'a
+     pas le droit d'écrire cette collection, et le lui donner lui ouvrirait la
+     récolte de toute l'équipe. */
+  async function declarerRecolte(mode) {
+    const champ = $('lintNb');
+    let n = Math.round(Number(champ && champ.value) || 0);
+
+    if (mode === 'total') {
+      const r = await askForm('Corriger mon total', [
+        { key: 'total', label: 'Total de raisins récoltés cette semaine',
+          value: String(raisinsDe(moiSession())), type: 'number' },
+      ], 'Remplace votre total au lieu de s\'y ajouter — pour rattraper une saisie de trop.');
+      if (!r) return;
+      n = Math.round(Number(r.total) || 0);
+      if (n < 0) { toast('Un total ne peut pas être négatif.'); return; }
+    } else if (n <= 0) {
+      toast('Indiquez un nombre de raisins à ajouter.');
+      return;
+    }
+
+    if (estDemo()) { toast('(démo) La récolte aurait été déclarée.'); return; }
+
+    const A = window.MarloweAuth;
+    if (!A || !A.apiBrut) { toast('Le panel n\'est pas connecté au serveur.'); return; }
+
+    const r = await A.apiBrut('/api/linterna', {
+      method: 'POST', body: JSON.stringify({ raisins: n, mode: mode === 'total' ? 'total' : 'ajout' }),
+    });
+    if (!r.ok) { toast(phraseRefus(r, 'déclarer une récolte')); return; }
+
+    if (champ) champ.value = '';
+    /* Le serveur a écrit : on relit, sinon la carte afficherait encore
+       l'ancien total et la prime l'ancien gain. */
+    try { await D().load(); } catch (e) {}
+    renderLinterna();
+    try { if (typeof window.mvRenderPrimes === 'function') window.mvRenderPrimes(); } catch (e) {}
+    try { renderBilan(); } catch (e) {}
+
+    const t = (r.data && r.data.total) || 0;
+    toast(`Récolte enregistrée — ${t.toLocaleString('fr-FR')} raisin(s) cette semaine, `
+        + `${(t * montantDuRaisin()).toLocaleString('fr-FR')} $ sur votre prime.`);
+  }
+
   /* ==========================================================================
      DÉCLARER SON ABSENCE — depuis l'espace personnel
      --------------------------------------------------------------------------
@@ -2665,6 +2747,7 @@ window.onload = function(){
       effectif: JSON.parse(JSON.stringify(effectifData)),
       serviceHistory: JSON.parse(JSON.stringify(serviceHistory)),
       dash: JSON.parse(JSON.stringify(dash)),
+      linterna: JSON.parse(JSON.stringify(linterna)),
       weekId: label + ' ' + frDate(start),
     };
 
@@ -2708,10 +2791,14 @@ window.onload = function(){
     serviceHistory.length = 0;
     serviceActive = false;
     primesExc.length = 0;
+    /* La récolte de la Linterna repart de zéro comme les vins : sans ça, la
+       prime de la semaine suivante se calculerait sur les raisins de celle-ci
+       et les repayerait. */
+    linterna.length = 0;
     resetServiceButton();
 
     D().note(`a clôturé ${label} (${eligibles.length} éligible(s), ${Math.round(bil.caTotal).toLocaleString('fr-FR')} $ de CA)`);
-    D().saveMany(['effectif', 'serviceHistory', 'dash']);
+    D().saveMany(['effectif', 'serviceHistory', 'dash', 'linterna']);
     D().save('clotures', false);
     D().save('primesExc', false);
     refreshWeekHeaders();
@@ -2746,6 +2833,12 @@ window.onload = function(){
       dash.length = 0;
       clotures.undo.dash.forEach(d => dash.push(d));
     }
+    /* La récolte revient avec le reste : sans ça, annuler une clôture rendrait
+       les vins et les heures mais laisserait les raisins à zéro. */
+    if (Array.isArray(clotures.undo.linterna)) {
+      linterna.length = 0;
+      clotures.undo.linterna.forEach(l => linterna.push(l));
+    }
 
     if (Array.isArray(w.primesExceptionnelles)) {
       primesExc.length = 0;
@@ -2756,7 +2849,7 @@ window.onload = function(){
     clotures.undo = null;
 
     D().note(`a annulé la clôture de ${w.label}`);
-    D().saveMany(['effectif', 'serviceHistory', 'dash']);
+    D().saveMany(['effectif', 'serviceHistory', 'dash', 'linterna']);
     D().save('clotures', false);
     refreshWeekHeaders();
     renderEligibilite();
@@ -3095,6 +3188,38 @@ window.onload = function(){
   }
   window.mvQuotaFiche = quotaDeLaFiche;
 
+  /* ==========================================================================
+     LINTERNA — la récolte de raisins
+     --------------------------------------------------------------------------
+     Chacun déclare la sienne depuis l'espace personnel, et chaque raisin
+     s'ajoute à la prime de la semaine. Le compteur repart à zéro à la clôture
+     du lundi, comme les vins et les heures : sans ça, la prime de la semaine
+     se calculerait sur tous les raisins jamais récoltés et les repayerait
+     chaque semaine.
+
+     Le gain entre dans la prime AVANT le plafond du palier — le choix du
+     domaine. Quelqu'un déjà au plafond ne touche donc rien de plus pour ses
+     raisins, ce qui n'est pas une erreur mais une règle : le plafond du palier
+     est une limite du serveur, et rien ne passe par-dessus. */
+  const linterna = [];
+
+  const RAISIN_DEFAUT = 5;
+
+  function montantDuRaisin() {
+    const v = reglages ? reglages.raisinMontant : undefined;
+    if (v === undefined || v === null || v === '') return RAISIN_DEFAUT;
+    return Math.max(0, Math.round(Number(v) || 0));
+  }
+  window.mvMontantRaisin = montantDuRaisin;
+
+  function raisinsDe(nom) {
+    const k = clefNom(nom);
+    if (!k) return 0;
+    const l = linterna.find(x => x && clefNom(x.name) === k);
+    return l ? Math.max(0, Math.round(Number(l.raisins) || 0)) : 0;
+  }
+  window.mvRaisinsDe = raisinsDe;
+
   window.mvCalculPrime = function (runs, rang, palier, nom) {
     const barils = Math.round((runs || 0) / 5);
 
@@ -3107,7 +3232,10 @@ window.onload = function(){
     if (seuil > 0 && barils < seuil) return 0;
 
     const mult = multiplicateurDuGrade(rang);
-    let prime = barils * mult;
+    /* La récolte de la Linterna s'ajoute AVANT l'écrêtage : c'est la règle
+       choisie par le domaine. Elle ne franchit donc pas le plafond du palier,
+       et quelqu'un qui y est déjà ne gagne rien de plus à récolter. */
+    let prime = barils * mult + raisinsDe(nom) * montantDuRaisin();
     /* Le plafond du palier : « sans dépasser le max » du bilan comptable. */
     if (palier) {
       const patron = RANGS_PATRON().includes(rang);
@@ -5045,6 +5173,8 @@ window.onload = function(){
     on('addClientBtn', addClient);
     on('addArticleBtn', addArticle);
     on('absMoiBtn', declarerMonAbsence);
+    on('lintAjouter', () => declarerRecolte('ajout'));
+    on('lintCorriger', () => declarerRecolte('total'));
     on('effAvertirTous', avertirTousSousQuota);
     on('mvAddEvent', () => addEvent('public'));
     on('mvAddEventCom', () => addEvent('commercial'));
@@ -5117,6 +5247,7 @@ window.onload = function(){
     renderMagasin();
     renderComRunner();
     renderRegles();
+    renderLinterna();
     renderTombola();
     renderEntretien();
     renderDocuments();
@@ -6036,6 +6167,7 @@ window.onload = function(){
     primeRecrutMontant: 0,  /* prime de BIENVENUE, versée à une recrue de fin de semaine */
     primeRecrutQuota: 0,    /* vins minimum pour y avoir droit */
     primeParRecrutement: undefined, /* prime versée au RECRUTEUR, par personne amenée */
+    raisinMontant: undefined, /* ce que rapporte un raisin de la Linterna, en dollars */
     rappelPermis: '',       /* texte par défaut du rappel de permis, vide = celui du serveur */
     quotas: {},             /* quota MINIMUM de vins par grade ; 0 = aucun quota exigé */
     salaires: {},           /* salaire fixe par grade, en dollars ; absent ou 0 = pas de salaire */
@@ -6307,6 +6439,19 @@ window.onload = function(){
       </div>
 
       <div class="mv-vit-sec">
+        <h4>Linterna — ce que rapporte un raisin</h4>
+        <p class="mv-hint" style="margin:0 0 12px;">Chaque raisin récolté à la Linterna et déclaré par
+          l'intéressé s'ajoute à sa prime de la semaine. Le gain entre dans la prime <b>avant</b> le
+          plafond du palier : quelqu'un déjà au plafond ne gagne rien de plus à récolter, le plafond
+          reste une limite du serveur. <b>0</b> = les raisins ne rapportent plus rien.</p>
+        <div class="mv-vit-champs">
+          <label class="mv-lab">Montant par raisin ($)
+            <input type="number" id="mvRegRaisin" min="0" step="1" value="${montantDuRaisin()}">
+          </label>
+        </div>
+      </div>
+
+      <div class="mv-vit-sec">
         <h4>Prime de bienvenue — versée à la recrue</h4>
         <p class="mv-hint" style="margin:0 0 12px;">Versée aux employés arrivés <b>entre le jeudi et le dimanche</b>
           de la semaine en cours, à condition d'avoir atteint le nombre de vins indiqué. Ils n'ont que
@@ -6422,6 +6567,7 @@ window.onload = function(){
     /* Toujours stocké, zéro compris : ici le zéro veut dire « plus de prime
        au recruteur », et non « je n'y touche pas ». */
     reglages.primeParRecrutement = Math.round(n('mvRegPrimeRec'));
+    reglages.raisinMontant = Math.round(n('mvRegRaisin'));
     const rap = $('mvRegRappel');
     if (rap) reglages.rappelPermis = rap.value.trim().slice(0, 1500);
     const sal = {};
@@ -6509,6 +6655,7 @@ window.onload = function(){
     if (typeof window.mvRenderPrimes === 'function') window.mvRenderPrimes();
     if (typeof renderBilan === 'function') renderBilan();
     renderQuotaService();
+    renderLinterna();
     /* Le formulaire se redessine : sans ça, la grille garderait les valeurs
        d'avant en mémoire de rendu, et l'enregistrement suivant les relirait
        comme si elles venaient d'être choisies. */
@@ -9645,6 +9792,7 @@ window.onload = function(){
     renderQuotas3, renderJournal, appliquerLectureSeule, remplirVides,
     renderMaSemaine, reinitialiserService,
     renderVitrine, renderCatalogues, appliquerAccesService, renderAvertissements, compteAvertissements,
+    renderLinterna, declarerRecolte, montantDuRaisin, raisinsDe,
     openInvoiceDoc, ouvrirFacturation, ouvrirFacturesRecues, prochainNumero, renderRegles, importerListeRH, analyserListeRH, modifierEmploye, estFormatRegistre,
     synchroniserEffectif, syncEffectifEtEnregistrer, renderMagasin, renderCommandes, renderStock, renderMagRecap, renderFormBon,
     chargerQuotaSemaine,
@@ -9675,6 +9823,7 @@ window.onload = function(){
   window.MarloweClotureSteps = clotureSteps;
 
   window.MarloweBcManuels = bcManuels;
+  window.MarloweLinterna = linterna;
   window.MarlowePrimesExc = primesExc;
   window.MarloweBilanConfig = bilanConfig;
 })();

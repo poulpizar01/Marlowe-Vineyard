@@ -125,6 +125,7 @@
     { id: 'tombola',        label: 'Tombola',         group: 'Gestion' },
 
     { id: 'documents',      label: 'Documents',       group: 'Perso' },
+    { id: 'linterna',       label: 'Linterna',        group: 'Perso' },
     { id: 'comrunner',      label: 'Com Runner',      group: 'Perso' },
     { id: 'masemaine',      label: 'Ma semaine',      group: 'Perso' },
     { id: 'agenda',         label: 'Agenda',          group: 'Perso' },

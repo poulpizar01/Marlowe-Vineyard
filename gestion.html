@@ -787,6 +787,7 @@
       <div class="nav-section">Perso</div>
       <div class="nav-item" data-page="documents">Documents</div>
       <div class="nav-item" data-page="comrunner">Com Runner</div>
+      <div class="nav-item" data-page="linterna">Linterna</div>
       <div class="nav-item" data-page="masemaine">Ma semaine</div>
       <div class="nav-item" data-page="agenda">Agenda</div>
     </nav>
@@ -1841,6 +1842,38 @@
       <div class="panel">
         <h3>Événements à venir</h3>
         <div id="agendaComList"></div>
+      </div>
+    </div>
+
+    <!-- ================= LINTERNA ================= -->
+    <div class="page-content" id="page-linterna">
+      <h1 class="page-title">Linterna</h1>
+      <p class="page-sub">Les raisins que vous récoltez à la Linterna. Chacun déclare les siens,
+        et chaque raisin s'ajoute à votre prime de la semaine. Le compteur repart à zéro
+        à la clôture du lundi, comme les vins.</p>
+
+      <div class="panel">
+        <h3>Ma récolte de la semaine</h3>
+        <div class="mv-kpis mv-kpis-3" id="lintCartes"></div>
+
+        <div class="field-row-3" style="margin-top:18px;">
+          <div class="field"><label>Raisins récoltés à ajouter</label>
+            <input type="number" id="lintNb" min="1" step="1" placeholder="50"></div>
+        </div>
+        <div class="btn-row" style="margin-top:4px;">
+          <button class="btn primary" id="lintAjouter">Ajouter à ma récolte</button>
+          <button class="btn" id="lintCorriger">Corriger mon total…</button>
+        </div>
+        <p class="empty-note" style="margin-top:12px;font-size:11px;opacity:.7;">
+          On ne déclare que sa propre récolte : le nom vient de votre session, pas du formulaire.</p>
+      </div>
+
+      <div class="panel">
+        <h3>La récolte de l'équipe</h3>
+        <table class="gtable">
+          <thead><tr><th>Employé</th><th class="num">Raisins</th><th class="num">Gain sur la prime</th></tr></thead>
+          <tbody id="lintBody"></tbody>
+        </table>
       </div>
     </div>
 

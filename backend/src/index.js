@@ -605,6 +605,11 @@ const COLLECTION_PAGES = {
   /* Les deux pages écrivent dans la même collection : l'agenda commercial
      n'est pas une autre donnée, c'est le même agenda trié autrement. */
   agenda:          ['agenda', 'agendacom'],
+  /* La récolte se déclare par /api/linterna, jamais depuis le navigateur : la
+     seule écriture directe est la remise à zéro de la clôture du lundi. Ouvrir
+     cette collection à la page Linterna reviendrait à laisser chacun réécrire
+     la récolte de toute l'équipe. */
+  linterna:        ['cloture'],
   serviceHistory:  ['masemaine'],
   tombola:         ['tombola'],
   commandes:       ['magcommandes', 'magrecap'],
@@ -2313,6 +2318,75 @@ async function handleAbsence(request, env) {
   return json(env, { ok: true, rev: meta.rev, annonce, detail });
 }
 
+/* ==========================================================================
+   LINTERNA — la récolte de raisins, déclarée par l'intéressé
+   --------------------------------------------------------------------------
+   Même principe que l'absence, et pour la même raison : le nom vient de la
+   SESSION, et c'est le serveur qui écrit. Un employé n'a pas le droit
+   d'écrire la collection depuis son navigateur — le lui donner pour cette
+   seule fonction lui ouvrirait la récolte de toute l'équipe, alors que ce
+   nombre vaut de l'argent sur la prime.
+
+   Deux modes, et le second existe pour une raison précise : « ajout » pour
+   la marche normale, « total » pour corriger. Sans lui, un 500 tapé à la
+   place de 50 resterait au dossier jusqu'à la clôture.
+   ========================================================================== */
+
+const RAISINS_MAX = 100000;   /* garde-fou : au-delà c'est une faute de frappe */
+
+async function handleLinterna(request, env) {
+  if (request.method !== 'POST') return json(env, { error: 'method' }, 405);
+
+  let body = {};
+  try { body = await request.json(); } catch (e) { body = {}; }
+  if (!body || typeof body !== 'object') body = {};
+
+  const s = await currentSession(request, env, typeof body.token === 'string' ? body.token : null);
+  if (!s) return json(env, { error: 'unauthorized' }, 401);
+  if (s.invite) return json(env, { error: 'forbidden', detail:
+    "Un accès extérieur ne récolte pas : il n'a pas de récolte à déclarer." }, 403);
+
+  const n = Math.round(Number(body.raisins));
+  if (!Number.isFinite(n)) return json(env, { error: 'nombre', detail:
+    'Indiquez un nombre de raisins.' }, 400);
+
+  const mode = body.mode === 'total' ? 'total' : 'ajout';
+  if (mode === 'ajout' && n <= 0) return json(env, { error: 'nombre', detail:
+    'Le nombre à ajouter doit être positif. Pour corriger à la baisse, passez par « Corriger mon total ».' }, 400);
+  if (n < 0) return json(env, { error: 'nombre', detail: 'Un total ne peut pas être négatif.' }, 400);
+  if (n > RAISINS_MAX) return json(env, { error: 'nombre', detail:
+    `${n.toLocaleString('fr-FR')} raisins, c'est plus que tout ce que le domaine récolte en une saison — vérifiez le chiffre.` }, 400);
+
+  const nom = String(s.user.name || '').trim();
+  const data = await base(env).get('data', 'json') || {};
+  const liste = Array.isArray(data.linterna) ? data.linterna : [];
+
+  const i = liste.findIndex(x => x && String(x.name || '').trim().toLowerCase() === nom.toLowerCase());
+  const avant = i >= 0 ? (Number(liste[i].raisins) || 0) : 0;
+  const apres = mode === 'total' ? n : avant + n;
+  if (apres > RAISINS_MAX) return json(env, { error: 'nombre', detail:
+    'Ce total dépasse le garde-fou du domaine — corrigez plutôt votre total.' }, 400);
+
+  const ligne = { name: nom, raisins: apres, at: new Date().toISOString() };
+  if (i >= 0) liste[i] = ligne; else liste.unshift(ligne);
+  data.linterna = liste;
+
+  delete data._meta;
+  const out = JSON.stringify(data);
+  if (out.length > DATA_MAX) return json(env, { error: 'too_large' }, 413);
+  await base(env).put('data', out);
+
+  const prev = await base(env).get('datameta', 'json');
+  const meta = { rev: ((prev && prev.rev) || 0) + 1, by: nom,
+                 at: new Date().toISOString(), keys: ['linterna'] };
+  await base(env).put('datameta', JSON.stringify(meta));
+  await appendJournal(env, s,
+    mode === 'total' ? `a corrigé sa récolte Linterna à ${apres}`
+                     : `a déclaré ${n} raisin(s) à la Linterna`, ['linterna']);
+
+  return json(env, { ok: true, rev: meta.rev, avant, total: apres });
+}
+
 /* GET /api/logout */
 async function handleLogout(request, env) {
   const sid = bearer(request);
@@ -2520,7 +2594,7 @@ export default {
           routes: ['login', 'callback', 'me', 'roles', 'permissions', 'settings', 'orga',
                    'vitrine', 'upload', 'relais', 'invites', 'invite-login', 'data',
                    'presence', 'journal', 'logout', 'rappel', 'avertissement',
-                   'dispo', 'absence', 'quota', 'alias', 'journaux'],
+                   'dispo', 'absence', 'linterna', 'quota', 'alias', 'journaux'],
           rappelDansLeTexte: true,   /* faux = ancienne version, le rappel partait en embed */
           categoriesTickets: categoriesTickets(env).length,
           salonLogs: /^\d{17,20}$/.test(String(env.DISCORD_LOGS_CHANNEL || '')),
@@ -2548,6 +2622,7 @@ export default {
         case '/api/discord':      return await handleDiscord(request, env);
         case '/api/dispo':        return await handleDispo(request, env);
         case '/api/absence':      return await handleAbsence(request, env);
+        case '/api/linterna':     return await handleLinterna(request, env);
         case '/api/invites':      return await handleInvites(request, env);
         case '/api/invite-login': return await handleInviteLogin(request, env);
         case '/api/data':        return await handleData(request, env);
