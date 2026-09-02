@@ -259,6 +259,23 @@
      rendrait les chiffres de rang 4 et 5 illisibles, alors que c'est
      justement là que se joue la course. La hiérarchie passe par la couleur
      du numéro, pas par la taille de la carte. */
+  /* --- « En service maintenant », sur Com Runner ------------------------- */
+  .cr-service-liste{display:flex;flex-direction:column;gap:2px;margin-top:10px;}
+  .cr-service-l{display:flex;align-items:center;gap:11px;padding:9px 2px;
+    border-bottom:1px solid rgba(61,55,44,.5);}
+  .cr-service-l:last-child{border-bottom:none;}
+  /* Une pastille qui respire : « en ce moment » se lit mieux qu'il ne
+     s'écrit. Elle s'immobilise si la personne demande moins d'animations. */
+  .cr-service-pt{flex:none;width:8px;height:8px;border-radius:99px;background:#8FD2A0;
+    box-shadow:0 0 0 3px rgba(143,210,160,.16);animation:crPouls 2.4s ease-in-out infinite;}
+  @keyframes crPouls{0%,100%{opacity:1;}50%{opacity:.45;}}
+  @media (prefers-reduced-motion:reduce){ .cr-service-pt{animation:none;} }
+  .cr-service-nom{font-weight:600;font-size:13.5px;}
+  .cr-service-poste{font-size:11.5px;color:var(--muted);
+    border:1px solid var(--band,#3D372C);border-radius:99px;padding:2px 9px;}
+  .cr-service-h{margin-left:auto;font-size:12px;color:var(--muted);
+    font-family:var(--mono,ui-monospace,monospace);}
+
   .qd-top{margin-bottom:22px;}
   .qd-top-head{display:flex;align-items:baseline;gap:12px;margin:0 0 12px;}
   .qd-top-head h3{margin:0;font-size:15px;}
@@ -1829,6 +1846,15 @@
            plus de message écrit de but en blanc. Il garde les deux boutons qui
            parlent au salon, les entrées qu'ils déposent, et les réponses sous
            chaque entrée. -->
+      <!-- Qui est en service en ce moment. Rempli par marlowe-actions.js à
+           partir des pointages ouverts : un runner voit d'un coup d'œil qui
+           il peut appeler, sans demander dans le salon. -->
+      <div class="panel" id="crServicePanel" style="margin-bottom:18px;">
+        <h3 style="margin:0 0 4px;">En service maintenant
+          <span class="mv-cpt-av" id="crServiceCpt"></span></h3>
+        <div id="crServiceListe"></div>
+      </div>
+
       <div id="crFil"></div>
     </div>
 
@@ -3489,39 +3515,114 @@ function durationMinutes(start, end){
 }
 function durationStr(mins){ return `${Math.floor(mins / 60)}h${pad2(mins % 60)}`; }
 
+/* --------------------------------------------------------------------------
+   À QUI APPARTIENT UN POINTAGE
+   --------------------------------------------------------------------------
+   Jusqu'ici, une ligne de service ne portait PAS de nom : {date, start, end}.
+   Comme la collection est partagée par tout le domaine, ça avait trois
+   conséquences que personne ne voyait :
+
+     · le tableau « Prise de service » montrait les pointages de TOUT LE MONDE
+       mélangés, sans distinction ;
+     · le total « heures cette semaine », et donc la barre de quota d'heures,
+       additionnaient les heures de toute l'équipe et les attribuaient à celui
+       qui regardait ;
+     · et surtout, on ne pouvait pas savoir qui est en service à un instant
+       donné — ce que la page Com Runner a précisément besoin d'afficher.
+
+   Chaque ligne porte maintenant le nom de son auteur, pris dans la SESSION.
+   Les lignes sans nom sont des pointages d'avant cette version : elles sont
+   affichées à part plutôt que comptées au hasard, et disparaîtront d'elles-
+   mêmes à la clôture du lundi, qui remet les heures à zéro.
+   -------------------------------------------------------------------------- */
+function serviceClef(t){
+  return String(t || '').toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ').trim();
+}
+function serviceMonNom(){
+  const s = window.MarloweSession;
+  return (s && s.name) ? String(s.name) : '';
+}
+function serviceMiens(){
+  const k = serviceClef(serviceMonNom());
+  if(!k) return [];
+  return serviceHistory.filter(s => s && serviceClef(s.nom) === k);
+}
+/* Le service ouvert, s'il y en a un. C'est LUI qui décide de l'état du
+   bouton — pas une variable de page. Avant, un simple rechargement remettait
+   le bouton sur « Prise de service » alors que la ligne restait ouverte : le
+   clic suivant ouvrait donc une DEUXIÈME ligne, et les heures doublaient. */
+function serviceOuvert(){
+  return serviceMiens().find(s => !s.end) || null;
+}
+
 function renderServiceHistory(){
-  document.getElementById('serviceHistoryBody').innerHTML = serviceHistory.map(s => `
+  const corps = document.getElementById('serviceHistoryBody');
+  if(!corps) return;
+  const miens = serviceMiens();
+  const orphelins = serviceHistory.filter(s => s && !s.nom).length;
+
+  corps.innerHTML = miens.length ? miens.map(s => `
     <tr>
       <td class="mono">${s.date}</td>
       <td class="mono">${s.start}</td>
       <td class="mono">${s.end || '—'}</td>
       <td class="num">${s.end ? durationStr(durationMinutes(s.start, s.end)) : '<span class="status-chip status-pending">en cours</span>'}</td>
-    </tr>`).join('');
-  const totalMin = serviceHistory.filter(s => s.end).reduce((sum, s) => sum + durationMinutes(s.start, s.end), 0);
-  document.getElementById('serviceTotal').textContent = durationStr(totalMin);
+    </tr>`).join('')
+    : `<tr><td colspan="4" class="empty-note">Aucun pointage à votre nom cette semaine.${
+        orphelins ? ` (${orphelins} pointage${orphelins > 1 ? 's' : ''} d'avant la mise à jour ${
+        orphelins > 1 ? 'ne portent' : 'ne porte'} aucun nom et ${
+        orphelins > 1 ? 'ne sont' : 'n\'est'} donc compté${orphelins > 1 ? 's' : ''} pour personne.)` : ''
+      }</td></tr>`;
+
+  const totalMin = miens.filter(s => s.end)
+    .reduce((sum, s) => sum + durationMinutes(s.start, s.end), 0);
+  const tot = document.getElementById('serviceTotal');
+  if(tot) tot.textContent = durationStr(totalMin);
+
+  const btn = document.getElementById('serviceBtn');
+  const statusEl = document.getElementById('serviceStatus');
+  const ouvert = serviceOuvert();
+  serviceActive = !!ouvert;
+  if(btn){
+    btn.textContent = ouvert ? 'Fin de service' : 'Prise de service';
+    btn.classList.toggle('danger', !!ouvert);
+  }
+  if(statusEl){
+    statusEl.textContent = ouvert ? `En service depuis ${ouvert.start}` : 'Hors service';
+    statusEl.classList.toggle('on', !!ouvert);
+  }
 }
 renderServiceHistory();
 
 document.getElementById('serviceBtn').addEventListener('click', () => {
-  const btn = document.getElementById('serviceBtn');
-  const statusEl = document.getElementById('serviceStatus');
-  if(!serviceActive){
-    serviceActive = true;
-    const start = nowHM();
-    serviceHistory.push({date: todayFR(), start, end: null});
-    statusEl.textContent = `En service depuis ${start}`;
-    statusEl.classList.add('on');
-    btn.textContent = 'Fin de service';
-    btn.classList.add('danger');
+  const nom = serviceMonNom();
+  if(!nom){
+    if(window.MarloweActions && window.MarloweActions.toast){
+      window.MarloweActions.toast("Impossible de pointer : le panel ne sait pas qui vous êtes. Reconnectez-vous.");
+    }
+    return;
+  }
+  const ouvert = serviceOuvert();
+  if(!ouvert){
+    serviceHistory.push({ nom, date: todayFR(), start: nowHM(), end: null });
   } else {
-    serviceActive = false;
-    serviceHistory[serviceHistory.length - 1].end = nowHM();
-    statusEl.textContent = 'Hors service';
-    statusEl.classList.remove('on');
-    btn.textContent = 'Prise de service';
-    btn.classList.remove('danger');
+    ouvert.end = nowHM();
   }
   renderServiceHistory();
+
+  /* L'enregistrement manquait complètement : le pointage ne vivait que dans
+     l'onglet. Au rafraîchissement suivant, le panel relisait les données du
+     serveur et écrasait la ligne — les heures disparaissaient sans un mot.
+     C'est la correction la plus importante de ce panneau. */
+  if(window.MarloweData){
+    window.MarloweData.note(ouvert ? 'a terminé son service' : 'a pris son service');
+    window.MarloweData.save('serviceHistory');
+  }
+  if(window.MarloweActions && window.MarloweActions.renderQuotaService){
+    window.MarloweActions.renderQuotaService();
+  }
 });
 
 /* ---------- Kit d'entretien ----------

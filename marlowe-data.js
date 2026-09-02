@@ -87,9 +87,14 @@ window.MarloweData = (function () {
     tombola:         { ref: () => tombolaParticipants,
                        render: [() => { const a = window.MarloweActions;
                                         if (a) a.renderTombola(); }] },
+    /* Un pointage touche trois écrans : le tableau personnel, la barre de
+       quota d'heures, et — depuis que la ligne porte un nom — la liste
+       « en service maintenant » de Com Runner. Oublier le troisième laissait
+       un runner regarder une liste périmée sans le savoir. */
     serviceHistory:  { ref: () => serviceHistory,
                        render: [call('renderServiceHistory'),
-                                () => { const a = window.MarloweActions; if (a) a.renderQuotaService(); }] },
+                                () => { const a = window.MarloweActions;
+                                        if (a) { a.renderQuotaService(); a.renderServiceEnCours(); } }] },
 
     /* Primes exceptionnelles de la semaine et réglage du palier :
        vivent dans marlowe-actions.js, d'où le passage par window. */

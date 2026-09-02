@@ -5778,8 +5778,59 @@ window.onload = function(){
     return peutVoirAutrui();
   }
 
+  /* --------------------------------------------------------------------------
+     QUI PEUT-ON REGARDER DANS « MA SEMAINE »
+     --------------------------------------------------------------------------
+     Le menu ne listait que `effectifData`, c'est-à-dire le suivi de PRODUCTION.
+     Or l'effectif ne contient que les postes qui produisent du vin —
+     Saisonnier, Ouvrier Viticole, Chef de Culture, Vendeur. Le patron, les
+     co-patrons, les DRH, les RH, les commerciaux et les responsables n'y sont
+     pas, et n'apparaissaient donc jamais dans le menu : impossible d'ouvrir
+     la fiche d'un responsable pour regarder ses heures.
+
+     La liste part maintenant du REGISTRE, qui contient tout le monde, et
+     rattache la fiche de production quand elle existe. Une personne sans
+     fiche de production s'affiche quand même : elle a des heures, un
+     historique et une absence, qui sont eux aussi « sa semaine ».
+     -------------------------------------------------------------------------- */
   function maSemaineFiches() {
-    return (typeof effectifData !== 'undefined' ? effectifData : []).filter(e => e.active !== false);
+    const eff = (typeof effectifData !== 'undefined' ? effectifData : [])
+      .filter(e => e && e.active !== false);
+    const roster = (typeof rhRosterData !== 'undefined' ? rhRosterData : [])
+      .filter(f => f && f.status !== 'parti');
+
+    /* Sans registre — le tout début d'une installation — on retombe sur
+       l'effectif seul plutôt que de rendre une liste vide. */
+    if (!roster.length) return eff;
+
+    const parClef = new Map(eff.map(e => [clefNom(e.name), e]));
+    const vus = new Set();
+    const out = [];
+
+    roster.forEach(f => {
+      const k = clefNom(f.name);
+      if (!k || vus.has(k)) return;
+      vus.add(k);
+      const prod = parClef.get(k);
+      /* La fiche de production quand elle existe, sinon une fiche minimale
+         qui porte le nom et le poste. `sansProduction` dit à l'affichage de
+         ne pas montrer une jauge de quota à 0 % pour un poste qui n'en a
+         pas — ce serait lu comme un reproche. */
+      out.push(prod
+        ? Object.assign({}, prod, { poste: f.poste })
+        : { name: f.name, grade: f.poste || '', poste: f.poste || '',
+            barils: 0, quota: 0, active: true, sansProduction: true });
+    });
+
+    /* Quelqu'un présent dans l'effectif mais absent du registre existe
+       vraiment : c'est une ligne de tablette qu'on n'a pas encore rattachée.
+       La cacher reviendrait à la rendre introuvable. */
+    eff.forEach(e => {
+      const k = clefNom(e.name);
+      if (k && !vus.has(k)) { vus.add(k); out.push(e); }
+    });
+
+    return out;
   }
 
   /* La fiche de la personne connectée, si on arrive à la reconnaître. */
@@ -5862,8 +5913,15 @@ window.onload = function(){
     const barils = Number(e.barils) || 0;
     const quota = Number(e.quota) || 0;
     const pct = quota > 0 ? Math.min(100, Math.round(barils / quota * 100)) : 0;
-    $('prodValue').innerHTML = `${pct}<span>%</span>`;
-    $('prodLabel').textContent = `${barils.toLocaleString('fr-FR')} / ${quota.toLocaleString('fr-FR')} vins`;
+
+    /* Un poste qui ne produit pas de vin — patron, DRH, commercial — n'a pas
+       de quota de production. Lui afficher « 0 % » et une jauge vide se lit
+       comme un reproche alors que ce n'est simplement pas son métier. */
+    const sansProd = e.sansProduction || quota <= 0;
+    $('prodValue').innerHTML = sansProd ? '—' : `${pct}<span>%</span>`;
+    $('prodLabel').textContent = sansProd
+      ? 'Poste sans quota de production'
+      : `${barils.toLocaleString('fr-FR')} / ${quota.toLocaleString('fr-FR')} vins`;
     const bar = $('prodBar');
     if (bar) {
       bar.style.width = pct + '%';
@@ -5879,16 +5937,24 @@ window.onload = function(){
 
     const rec = $('prodReward');
     if (rec) {
-      const lot = (typeof rewardsByGrade === 'object' && rewardsByGrade[e.grade]) || '—';
-      rec.innerHTML = `Si le quota est atteint cette semaine → <b style="color:var(--or);">${esc(lot)}</b>
-        <div class="prod-reward-check ${pct >= 100 ? 'ok' : 'pending'}">${pct >= 100
-          ? '✓ Quota atteint — récompense acquise'
-          : '○ Quota en cours — récompense pas encore débloquée'}</div>`;
+      if (sansProd) {
+        rec.innerHTML = `<span class="dim">Ce poste n'entre pas dans la course aux vins :
+          il n'a ni quota de production ni récompense hebdomadaire. Les heures de
+          service, l'agenda et l'historique ci-dessous restent valables.</span>`;
+      } else {
+        const lot = (typeof rewardsByGrade === 'object' && rewardsByGrade[e.grade]) || '—';
+        rec.innerHTML = `Si le quota est atteint cette semaine → <b style="color:var(--or);">${esc(lot)}</b>
+          <div class="prod-reward-check ${pct >= 100 ? 'ok' : 'pending'}">${pct >= 100
+            ? '✓ Quota atteint — récompense acquise'
+            : '○ Quota en cours — récompense pas encore débloquée'}</div>`;
+      }
     }
 
     const nxt = $('prodNext');
     if (nxt) {
-      if (e.isFinal || !e.promoTarget) {
+      if (sansProd) {
+        nxt.innerHTML = '';
+      } else if (e.isFinal || !e.promoTarget) {
         nxt.innerHTML = `<p class="prod-next-title">Vous êtes au <b>grade final</b> de la filière viticole.
           Continuez de dépasser votre quota pour rester dans le Top 5 de la semaine.</p>`;
       } else {
@@ -6269,11 +6335,28 @@ window.onload = function(){
 
   /* Minutes de service faites cette semaine, depuis les pointages de
      « Ma semaine ». Un service en cours ne compte pas : il n'est pas fini. */
-  function minutesServiceSemaine() {
+  /* --------------------------------------------------------------------------
+     LES HEURES DE LA PERSONNE CONNECTÉE — pas celles de tout le domaine
+     --------------------------------------------------------------------------
+     Cette fonction additionnait TOUS les pointages de la collection, qui est
+     partagée. La barre « Quota de service » affichait donc à chacun la somme
+     des heures de l'équipe entière : trois personnes ayant fait 4 h chacune
+     voyaient toutes les trois « 12 h faites », et le quota se validait pour
+     des gens qui n'avaient rien fait.
+
+     Depuis que chaque ligne porte le nom de son auteur, on ne compte que les
+     siennes. Les lignes anciennes, sans nom, ne sont comptées pour PERSONNE :
+     les attribuer au hasard serait recréer exactement le défaut qu'on corrige.
+     Elles disparaissent à la clôture du lundi.
+     -------------------------------------------------------------------------- */
+  function minutesServiceSemaine(nom) {
     if (typeof serviceHistory === 'undefined') return 0;
+    const s = window.MarloweSession;
+    const cible = clefNom(nom || (s && s.name) || '');
+    if (!cible) return 0;
     return serviceHistory
-      .filter(s => s && s.end)
-      .reduce((t, s) => t + (typeof durationMinutes === 'function' ? durationMinutes(s.start, s.end) : 0), 0);
+      .filter(l => l && l.end && clefNom(l.nom) === cible)
+      .reduce((t, l) => t + (typeof durationMinutes === 'function' ? durationMinutes(l.start, l.end) : 0), 0);
   }
 
   function renderQuotaService() {
@@ -8698,9 +8781,89 @@ window.onload = function(){
     return pied + liste + saisie;
   }
 
+  /* ==========================================================================
+     QUI EST EN SERVICE MAINTENANT
+     --------------------------------------------------------------------------
+     Un pointage ouvert — pris, pas encore terminé — vaut « je suis là ». La
+     page Com Runner l'affiche pour que le runner qui cherche du vin sache
+     tout de suite qui appeler, au lieu de le demander dans le salon.
+
+     Rien de nouveau n'est stocké : c'est la même prise de service, lue
+     autrement. Ce qui a changé, c'est que le pointage porte désormais le nom
+     de son auteur — sans lui, cette liste était impossible à écrire.
+
+     Un service oublié ouvert toute la nuit ne doit pas faire croire que
+     quelqu'un est disponible : au-delà de douze heures, la ligne est écartée
+     et le panneau le dit. Douze heures, parce qu'un service réel de la
+     journée n'y arrive jamais et qu'un oubli de la veille, si.
+     ========================================================================== */
+  const SERVICE_OUBLI_MIN = 12 * 60;
+
+  function servicesEnCours() {
+    const lignes = (typeof serviceHistory !== 'undefined' && Array.isArray(serviceHistory))
+      ? serviceHistory : [];
+    const roster = (typeof rhRosterData !== 'undefined') ? rhRosterData : [];
+    const maintenant = new Date();
+    const minutesDepuis = (dateFR, hm) => {
+      const d = (typeof parseFR === 'function') ? parseFR(dateFR) : null;
+      const [h, m] = String(hm || '').split(':').map(Number);
+      if (!d || !Number.isFinite(h)) return null;
+      d.setHours(h, m || 0, 0, 0);
+      return Math.round((maintenant - d) / 60000);
+    };
+
+    const ouverts = [], oublies = [];
+    lignes.forEach(s => {
+      if (!s || s.end || !s.nom) return;
+      const min = minutesDepuis(s.date, s.start);
+      const fiche = roster.find(f => clefNom(f.name) === clefNom(s.nom));
+      const item = {
+        nom: s.nom, poste: fiche ? fiche.poste : '', depuis: s.start,
+        date: s.date, minutes: min,
+      };
+      if (min !== null && min > SERVICE_OUBLI_MIN) oublies.push(item);
+      else ouverts.push(item);
+    });
+    ouverts.sort((a, b) => (b.minutes || 0) - (a.minutes || 0));
+    return { ouverts, oublies };
+  }
+
+  function renderServiceEnCours() {
+    const box = $('crServiceListe');
+    if (!box) return;
+    const { ouverts, oublies } = servicesEnCours();
+
+    const cpt = $('crServiceCpt');
+    if (cpt) cpt.textContent = ouverts.length || '';
+
+    const duree = m => (m === null ? '—'
+      : `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}`);
+
+    box.innerHTML = ouverts.length
+      ? `<div class="cr-service-liste">${ouverts.map(p => `
+          <div class="cr-service-l">
+            <span class="cr-service-pt"></span>
+            <span class="cr-service-nom">${esc(p.nom)}</span>
+            <span class="cr-service-poste">${esc(p.poste || '—')}</span>
+            <span class="cr-service-h">depuis ${esc(p.depuis)} · ${duree(p.minutes)}</span>
+          </div>`).join('')}</div>`
+      : `<p class="empty-note" style="margin:8px 0 0;">Personne n'est en service pour l'instant.
+          Une prise de service depuis « Ma semaine » apparaît ici tout de suite.</p>`;
+
+    if (oublies.length) {
+      box.innerHTML += `<p class="mv-hint" style="margin:12px 0 0;">
+        ${oublies.length} service${oublies.length > 1 ? 's' : ''} ouvert${oublies.length > 1 ? 's' : ''}
+        depuis plus de 12 h (${oublies.map(o => esc(o.nom)).join(', ')}) :
+        probablement une fin de service oubliée, donc ${oublies.length > 1 ? 'ils ne sont' : 'il n\'est'}
+        pas compté${oublies.length > 1 ? 's' : ''} comme présent${oublies.length > 1 ? 's' : ''}.</p>`;
+    }
+  }
+
   function renderComRunner() {
     const fil = $('crFil');
     if (!fil) return;
+
+    renderServiceEnCours();
 
     /* Le droit d'annoncer peut changer en cours de session — le patron coche
        un rôle dans Paramètres et la page ne recharge pas. On le relit à
@@ -10033,6 +10196,9 @@ window.onload = function(){
     synchroniserEffectif, syncEffectifEtEnregistrer, renderMagasin, renderCommandes, renderStock, renderMagRecap, renderFormBon,
     chargerQuotaSemaine,
     renderComRunner, testerDiscord, renderQuotaService, renderPrimeRecrutement,
+    /* `toast` sort d'ici pour que le bouton de prise de service, qui vit dans
+       gestion.html, puisse dire pourquoi il refuse au lieu de ne rien faire. */
+    toast, renderServiceEnCours, servicesEnCours,
     renderTombola, ticketsDe, renderEntretien, renderDocuments,
     railConstruire, railSynchroniser, allerA,
     totalPrimeRecrutement, primeParRecrutement, primeRecruteurTotale,
