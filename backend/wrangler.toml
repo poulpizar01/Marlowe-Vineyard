@@ -66,6 +66,13 @@ DISCORD_AGENDA_CHANNEL = "1509337025663471676"
 # n'est prévenu, et /api/version le dit (rolesAgenda: 0).
 DISCORD_AGENDA_ROLES = "943582598641381484,943583588581003365,1360832465211490317,1496532772326604881"
 
+# Le salon où arrive une absence déclarée depuis l'espace personnel. Le bot y
+# écrit une ligne : qui, quelles dates, quel motif. Personne n'est mentionné —
+# c'est une information, pas une alerte.
+# Laisser vide = l'absence est quand même enregistrée au registre, mais rien
+# n'est annoncé, et le panel le dit au lieu de laisser croire au succès.
+DISCORD_ABSENCE_CHANNEL = "1489652680765866125"
+
 # ---------------------------------------------------------------------------
 # Stockage principal : D1 (base SQLite).
 #

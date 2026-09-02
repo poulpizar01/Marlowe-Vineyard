@@ -2157,6 +2157,153 @@ async function handleData(request, env) {
   return json(env, { error: 'method_not_allowed' }, 405);
 }
 
+/* ==========================================================================
+   DÉCLARER SON ABSENCE — depuis l'espace personnel
+   --------------------------------------------------------------------------
+   Jusqu'ici une absence ne s'inscrivait que depuis la page Recrutement, par
+   quelqu'un des RH. L'intéressé, lui, prévenait sur Discord et espérait que
+   ça soit reporté. Deux endroits pour une même information, donc un des deux
+   finit par mentir.
+
+   Trois décisions structurent cette route :
+
+   · le nom vient de la SESSION, jamais du corps de la requête. On ne déclare
+     que sa propre absence — sinon n'importe qui mettrait le voisin en congé ;
+
+   · c'est le WORKER qui écrit dans le registre, pas le navigateur. Écrire
+     rhAbsences depuis le panel exige le droit sur la page Recrutement : le
+     donner à toute l'équipe pour cette seule fonction ouvrirait aussi la
+     suppression des absences des autres. Ici, la seule ligne qu'une personne
+     peut toucher est la sienne, et le serveur s'en assure ;
+
+   · le message Discord part APRÈS l'écriture. Si Discord refuse, l'absence
+     est quand même enregistrée et la réponse le dit — l'inverse perdrait une
+     information RH pour une histoire de permission de salon.
+   ========================================================================== */
+
+const ABSENCE_MIN_MS = 5 * 60 * 1000;   /* deux déclarations d'affilée = maladresse */
+
+function absenceSalon(env) {
+  const salon = String(env.DISCORD_ABSENCE_CHANNEL || '').trim();
+  return /^\d{17,20}$/.test(salon) ? salon : '';
+}
+
+/* jj/mm/aaaa, et rien d'autre. Une date libre finirait par arriver dans le
+   registre sous quinze formes différentes. */
+function dateFRValide(v) {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(v || '').trim());
+  if (!m) return null;
+  const j = +m[1], mo = +m[2], a = +m[3];
+  if (mo < 1 || mo > 12 || j < 1 || j > 31 || a < 2020 || a > 2100) return null;
+  const d = new Date(Date.UTC(a, mo - 1, j));
+  if (d.getUTCDate() !== j || d.getUTCMonth() !== mo - 1) return null;   /* 31/02 */
+  return `${m[1]}/${m[2]}/${m[3]}`;
+}
+
+function messageAbsence(nom, ligne, motif) {
+  const propre = v => String(v == null ? '' : v).replace(/[`@]/g, '');
+  return `**Absence déclarée**\n`
+       + `> **${propre(nom).slice(0, 60)}** — ${propre(ligne)}\n`
+       + `> Motif : ${propre(motif || 'non précisé').slice(0, 200)}`;
+}
+
+async function handleAbsence(request, env) {
+  if (request.method !== 'POST') return json(env, { error: 'method' }, 405);
+
+  let body = {};
+  try { body = await request.json(); } catch (e) { body = {}; }
+  if (!body || typeof body !== 'object') body = {};
+
+  const s = await currentSession(request, env, typeof body.token === 'string' ? body.token : null);
+  if (!s) return json(env, { error: 'unauthorized' }, 401);
+
+  /* Un accès extérieur — comptable, partenaire — n'est pas un employé du
+     domaine : il n'a pas d'absence à déclarer. */
+  if (s.invite) return json(env, { error: 'forbidden', detail:
+    "Un accès extérieur ne peut pas déclarer d'absence." }, 403);
+
+  const du = dateFRValide(body.du);
+  if (!du) return json(env, { error: 'date', detail:
+    'La date de départ doit être au format jj/mm/aaaa.' }, 400);
+
+  const indef = body.indef === true;
+  const au = indef ? null : dateFRValide(body.au);
+  if (!indef && !au) return json(env, { error: 'date', detail:
+    'Indiquez une date de retour au format jj/mm/aaaa, ou cochez « retour indéfini ».' }, 400);
+
+  const motif = String(body.motif || '').trim().slice(0, 200);
+
+  const cle = 'absence:' + s.user.id;
+  if (await base(env).get(cle)) {
+    return json(env, { error: 'trop_vite', detail:
+      'Vous venez de déclarer une absence. Attendez quelques minutes.' }, 429);
+  }
+
+  /* Le registre, d'abord. C'est la donnée ; le message n'en est que l'écho. */
+  const nom = String(s.user.name || '').trim();
+  const court = d => String(d).slice(0, 5);
+  const ligne = indef ? `${court(du)} → indéfini` : `${court(du)} → ${court(au)}`;
+
+  const data = await base(env).get('data', 'json') || {};
+  const abs = Array.isArray(data.rhAbsences) ? data.rhAbsences : [];
+  const row = { name: nom, range: ligne, indef, motif: motif || 'Congé', parSoi: true };
+
+  /* Une deuxième déclaration remplace la première : quelqu'un qui corrige ses
+     dates ne doit pas se retrouver avec deux absences à son nom. */
+  const i = abs.findIndex(a => a && String(a.name || '').trim().toLowerCase() === nom.toLowerCase());
+  if (i >= 0) abs[i] = row; else abs.unshift(row);
+  data.rhAbsences = abs;
+
+  /* Le registre RH suit, quand la fiche existe : c'est lui que lisent les
+     compteurs d'effectif. Une personne sans fiche déclare quand même son
+     absence — elle ne va pas attendre que les RH la saisissent. */
+  let ficheTrouvee = false;
+  if (Array.isArray(data.rhRoster)) {
+    const f = data.rhRoster.find(e => e && String(e.name || '').trim().toLowerCase() === nom.toLowerCase());
+    if (f) {
+      f.status = 'absent';
+      f.absence = ligne;
+      f.motif = row.motif;
+      ficheTrouvee = true;
+    }
+  }
+
+  delete data._meta;
+  const out = JSON.stringify(data);
+  if (out.length > DATA_MAX) return json(env, { error: 'too_large' }, 413);
+  await base(env).put('data', out);
+
+  const prev = await base(env).get('datameta', 'json');
+  const meta = {
+    rev: ((prev && prev.rev) || 0) + 1,
+    by: nom,
+    at: new Date().toISOString(),
+    keys: ficheTrouvee ? ['rhAbsences', 'rhRoster'] : ['rhAbsences'],
+  };
+  await base(env).put('datameta', JSON.stringify(meta));
+  await appendJournal(env, s, `a déclaré son absence (${ligne})`, meta.keys);
+
+  try { await base(env).put(cle, '1', { expirationTtl: Math.ceil(ABSENCE_MIN_MS / 1000) }); }
+  catch (e) { /* le garde-fou est un confort, pas une sécurité */ }
+
+  /* Le salon, ensuite. Un refus de Discord ne remet pas en cause l'absence. */
+  const salon = absenceSalon(env);
+  if (!salon) return json(env, { ok: true, rev: meta.rev, annonce: false, raison: 'pas_de_salon' });
+
+  let annonce = false, detail = null;
+  try {
+    const r = await botPost(env, `/channels/${salon}/messages`, {
+      content: messageAbsence(nom, ligne, row.motif),
+      /* Personne n'est mentionné : c'est une information, pas une alerte. */
+      allowed_mentions: { parse: [] },
+    });
+    annonce = !!(r && r.ok);
+    if (!annonce) detail = 'discord ' + (r && r.status);
+  } catch (e) { detail = String((e && e.message) || e); }
+
+  return json(env, { ok: true, rev: meta.rev, annonce, detail });
+}
+
 /* GET /api/logout */
 async function handleLogout(request, env) {
   const sid = bearer(request);
@@ -2364,7 +2511,7 @@ export default {
           routes: ['login', 'callback', 'me', 'roles', 'permissions', 'settings', 'orga',
                    'vitrine', 'upload', 'relais', 'invites', 'invite-login', 'data',
                    'presence', 'journal', 'logout', 'rappel', 'avertissement',
-                   'dispo', 'quota', 'alias', 'journaux'],
+                   'dispo', 'absence', 'quota', 'alias', 'journaux'],
           rappelDansLeTexte: true,   /* faux = ancienne version, le rappel partait en embed */
           categoriesTickets: categoriesTickets(env).length,
           salonLogs: /^\d{17,20}$/.test(String(env.DISCORD_LOGS_CHANNEL || '')),
@@ -2373,6 +2520,7 @@ export default {
              place : le salon déclaré, et le nombre de rôles réveillés. */
           salonAgenda: /^\d{17,20}$/.test(String(env.DISCORD_AGENDA_CHANNEL || '').trim()),
           rolesAgenda: rolesAgenda(env).length,
+          salonAbsence: !!absenceSalon(env),
         });
         case '/api/login':       return await handleLogin(request, env, url);
         case '/api/callback':    return await handleCallback(request, env, url);
@@ -2390,6 +2538,7 @@ export default {
         case '/api/relais':       return await handleDiscord(request, env);
         case '/api/discord':      return await handleDiscord(request, env);
         case '/api/dispo':        return await handleDispo(request, env);
+        case '/api/absence':      return await handleAbsence(request, env);
         case '/api/invites':      return await handleInvites(request, env);
         case '/api/invite-login': return await handleInviteLogin(request, env);
         case '/api/data':        return await handleData(request, env);

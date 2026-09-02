@@ -1600,6 +1600,28 @@
         </div>
       </div>
 
+      <div class="panel" id="absencePanel">
+        <h3>Déclarer une absence</h3>
+        <p class="empty-note" style="margin:0 0 14px;">Elle s'inscrit aussitôt au registre des absences
+          des RH, à votre nom, et une ligne part dans le salon Discord prévu. Une nouvelle déclaration
+          remplace la précédente — c'est ainsi qu'on corrige ses dates.</p>
+        <div class="field-row-3">
+          <div class="field"><label>Du (jj/mm/aaaa)</label><input type="text" id="absMoiDu" placeholder="03/09/2026"></div>
+          <div class="field"><label>Au (jj/mm/aaaa)</label><input type="text" id="absMoiAu" placeholder="10/09/2026"></div>
+          <div class="field"><label>Motif</label><input type="text" id="absMoiMotif" placeholder="Congé, examens, indisponible…"></div>
+        </div>
+        <!-- Sans classe : « mv-lab » centre et met en capitales, ce qui donnait
+             une case à cocher posée au-dessus de son propre libellé. -->
+        <label style="display:flex;align-items:center;gap:9px;margin:10px 0 0;
+                      font-size:12.5px;color:var(--muted,#9C9384);cursor:pointer;">
+          <input type="checkbox" id="absMoiIndef" style="width:16px;height:16px;accent-color:var(--or,#C9A961);cursor:pointer;">
+          Retour indéfini — je ne connais pas encore ma date de retour
+        </label>
+        <div class="btn-row" style="margin-top:14px;">
+          <button class="btn primary" id="absMoiBtn">Déclarer mon absence</button>
+        </div>
+      </div>
+
       <div class="panel" id="servicePanel">
         <h3>Prise de service</h3>
         <div class="service-row">

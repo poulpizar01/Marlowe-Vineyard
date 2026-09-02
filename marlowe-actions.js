@@ -2078,6 +2078,60 @@ window.onload = function(){
     toast('Événement supprimé.');
   }
 
+  /* ==========================================================================
+     DÉCLARER SON ABSENCE — depuis l'espace personnel
+     --------------------------------------------------------------------------
+     Le panel ne touche à rien lui-même : il envoie la demande au serveur, qui
+     écrit le registre à sa place. Deux raisons, et la deuxième est la vraie :
+
+       · écrire rhAbsences depuis le navigateur exige le droit sur la page
+         Recrutement. L'accorder à toute l'équipe pour cette seule fonction
+         ouvrirait aussi la suppression des absences des autres ;
+       · le nom vient de la SESSION, côté serveur. On ne déclare que la
+         sienne, et aucune ligne du corps de la requête n'y change rien.
+     ========================================================================== */
+  async function declarerMonAbsence() {
+    const du = (val('absMoiDu') || '').trim();
+    const au = (val('absMoiAu') || '').trim();
+    const motif = (val('absMoiMotif') || '').trim();
+    const indef = !!($('absMoiIndef') && $('absMoiIndef').checked);
+
+    const jjmmaaaa = /^\d{2}\/\d{2}\/\d{4}$/;
+    if (!jjmmaaaa.test(du)) { toast('La date de départ s\'écrit jj/mm/aaaa.'); return; }
+    if (!indef && !jjmmaaaa.test(au)) {
+      toast('Indiquez une date de retour, ou cochez « Retour indéfini ».'); return;
+    }
+
+    const ligne = indef ? `${du.slice(0, 5)} → indéfini` : `${du.slice(0, 5)} → ${au.slice(0, 5)}`;
+    if (!await confirmAction('Déclarer votre absence',
+      `Votre absence ${ligne} sera inscrite au registre des RH à votre nom, et annoncée `
+      + `dans le salon prévu. Motif : ${motif || 'non précisé'}.`, 'Déclarer')) return;
+
+    if (estDemo()) { toast('(démo) L\'absence aurait été déclarée.'); return; }
+
+    const A = window.MarloweAuth;
+    if (!A || !A.apiBrut) { toast('Le panel n\'est pas connecté au serveur.'); return; }
+
+    const r = await A.apiBrut('/api/absence', {
+      method: 'POST',
+      body: JSON.stringify({ du, au: indef ? null : au, indef, motif }),
+    });
+    if (!r.ok) { toast(phraseRefus(r)); return; }
+
+    clear('absMoiDu', 'absMoiAu', 'absMoiMotif');
+    if ($('absMoiIndef')) $('absMoiIndef').checked = false;
+
+    /* Le serveur a écrit : on relit, sinon l'absence n'apparaîtrait au
+       registre qu'à la prochaine synchronisation. */
+    try { await D().load(); } catch (e) { /* la synchro la ramènera */ }
+
+    /* « annonce: false » n'est pas un échec : l'absence EST enregistrée. On le
+       dit tel quel plutôt que de laisser croire que tout est parti. */
+    toast(r.data && r.data.annonce
+      ? `Absence déclarée ${ligne} — le salon a été prévenu.`
+      : `Absence déclarée ${ligne} — mais le salon n'a pas pu être prévenu.`);
+  }
+
   /* Le bouton d'ajout n'existe pas dans la page : on l'insère. Un par agenda,
      et celui de l'agenda commercial ouvre le formulaire déjà réglé sur
      « commercial » — sinon on créerait par mégarde un événement qui
@@ -4827,6 +4881,7 @@ window.onload = function(){
     on('blAddBtn', addBlacklist);
     on('addClientBtn', addClient);
     on('addArticleBtn', addArticle);
+    on('absMoiBtn', declarerMonAbsence);
     on('mvAddEvent', () => addEvent('public'));
     on('mvAddEventCom', () => addEvent('commercial'));
     on('primesExcBtn', addPrimeExceptionnelle);
