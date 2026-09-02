@@ -243,6 +243,30 @@
     return ROLE_KEYWORDS.some(k => n === k || n.startsWith(k + ' ') || n.includes(' ' + k));
   }
 
+  /* ------------------------------------------------------------------------
+     RECONNAÎTRE UN RÔLE PATRON
+     ------------------------------------------------------------------------
+     La même normalisation, au caractère près, que celle du serveur : sinon
+     le panel afficherait une chose et le serveur en déciderait une autre.
+     Elle rapproche les écritures d'un même nom — « 👑 · PATRON », « Patron »,
+     « co patron » — sans jamais rapprocher deux noms différents : l'égalité
+     reste stricte sur la forme normalisée, donc « Sous-Patron » n'ouvre rien.
+
+     ⚠️ Ne pas confondre avec normalizeRole() juste au-dessus, qui efface
+     aussi les chiffres : elle sert à deviner un rôle du domaine, pas à
+     décider d'un droit.
+     ------------------------------------------------------------------------ */
+  function clefRole(nom) {
+    return String(nom || '').toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9]+/g, ' ').trim();
+  }
+
+  function estRolePatronNom(nom) {
+    const k = clefRole(nom);
+    return !!k && CONFIG.PATRON_ROLES.some(r => clefRole(r) === k);
+  }
+
   /* ==========================================================================
      VISIBILITÉ DE L'AGENDA
      --------------------------------------------------------------------------
@@ -434,13 +458,8 @@
          serveur : « Patron 👑 » et « Patron » sont le même rôle, et le panel
          ne doit pas dire l'inverse de ce que le serveur décidera. L'égalité
          reste stricte sur la forme normalisée — « Sous-Patron » n'ouvre rien. */
-      const clefRole = n => String(n || '').toLowerCase()
-        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-z0-9]+/g, ' ').trim();
-      const attendus = CONFIG.PATRON_ROLES.map(clefRole);
-
       s.isOwner  = CONFIG.OWNER_IDS.includes(String(s.user.id));
-      s.isPatron = s.isOwner || s.roles.some(r => attendus.includes(clefRole(r)));
+      s.isPatron = s.isOwner || s.roles.some(estRolePatronNom);
       return s;
     },
 
@@ -1163,7 +1182,31 @@
       : roles.filter(looksLikeDomainRole);
     if (!visible.length) visible = roles.slice();
 
-    const otherRoles = visible.filter(r => !CONFIG.PATRON_ROLES.includes(r));
+    /* La colonne « patron » est la traduction en tableau d'une règle qui ne se
+       coche pas : le patron a tous les accès, la matrice n'y peut rien. Les
+       rôles qui la déclenchent doivent donc en sortir, sinon ils s'affichent
+       DEUX fois — une colonne figée qui dit « ✓ toujours » et une colonne à
+       cases qui laisse croire qu'on peut leur retirer une page.
+
+       Le tri se fait sur le nom normalisé, comme partout ailleurs : les rôles
+       s'appellent « 👑 · PATRON » et « 👑 · CO PATRON » sur le Discord, jamais
+       « Patron » tout court, et une comparaison lettre pour lettre les laissait
+       passer dans les colonnes ordinaires. */
+    const rolesPatronVus = visible.filter(estRolePatronNom);
+    const otherRoles     = visible.filter(r => !estRolePatronNom(r));
+
+    /* L'en-tête nomme les rôles RÉELLEMENT reconnus, pas le réglage : voir
+       « 👑 · PATRON » écrit là prouve d'un coup d'œil que le rôle du serveur
+       est bien celui que le panel attend. Si aucun ne correspond, on affiche
+       le réglage et on le dit — c'est exactement le cas qui refuse un patron. */
+    const titrePatron = rolesPatronVus.length
+      ? rolesPatronVus.join(' / ')
+      : CONFIG.PATRON_ROLES.join(' / ');
+    const aidePatron = rolesPatronVus.length
+      ? 'Ces rôles ont toujours accès à tout : la règle ne se coche pas.'
+      : 'Aucun rôle retenu ne correspond au réglage « '
+        + CONFIG.PATRON_ROLES.join(' / ') + ' » : personne n\'est reconnu comme '
+        + 'patron par cette colonne. Vérifiez le nom exact du rôle sur Discord.';
     const groups = [...new Set(PAGES.map(p => p.group))];
 
     let rows = '';
@@ -1177,7 +1220,7 @@
       PAGES.filter(p => p.group === g).forEach(p => {
         rows += `<tr data-page="${esc(p.id)}">
           <th>${esc(p.label)}<button class="mv-rowbtn" data-toggle-row="${esc(p.id)}">tout</button></th>
-          <td class="mv-always" title="Le patron a toujours accès à tout">✓</td>
+          <td class="mv-always" title="${esc(aidePatron)}">✓</td>
           ${otherRoles.map(r => {
             const vu = (perms[p.id] || []).includes(r);
             const ro = ((settings.permsRO || {})[p.id] || []).includes(r);
@@ -1248,7 +1291,7 @@
               <thead>
                 <tr>
                   <th>Page</th>
-                  <th class="mv-patron-col">${esc(CONFIG.PATRON_ROLES.join(' / '))}</th>
+                  <th class="mv-patron-col" title="${esc(aidePatron)}">${esc(titrePatron)}</th>
                   ${otherRoles.map(r => `<th>${esc(r)}</th>`).join('')}
                 </tr>
               </thead>
@@ -1603,8 +1646,19 @@
     function brancherAccesEnregistrement(acces) {
     /* --- enregistrer --- */
     acces.querySelector('#mvSave').addEventListener('click', async () => {
+      /* Enregistrer ne doit effacer QUE ce que le tableau montre.
+         Un rôle absent du tableau — écarté par le choix des « rôles du
+         domaine », ou reconnu comme patron et donc sorti dans sa colonne
+         figée — n'a pas de case ici : repartir d'une page blanche lui
+         retirerait ses droits sans que personne ait rien décoché. On
+         recopie donc d'abord ce qui le concerne, puis on écrit ce qui est
+         affiché par-dessus. */
+      const montres = new Set(otherRoles);
       const next = {}, nextRO = {};
-      PAGES.forEach(p => { next[p.id] = []; nextRO[p.id] = []; });
+      PAGES.forEach(p => {
+        next[p.id]   = ((perms[p.id] || []).filter(r => !montres.has(r)));
+        nextRO[p.id] = (((settings.permsRO || {})[p.id] || []).filter(r => !montres.has(r)));
+      });
 
       acces.querySelectorAll('[data-cell]').forEach(c => {
         const [pid, role] = c.dataset.cell.split('|');
