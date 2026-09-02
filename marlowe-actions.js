@@ -2194,9 +2194,28 @@ window.onload = function(){
     const roster = (typeof rhRosterData !== 'undefined') ? rhRosterData : [];
     const lignes = (typeof dash !== 'undefined' && Array.isArray(dash)) ? dash : [];
 
+    /* Deux sources pour un même chiffre, et on garde le PLUS ÉLEVÉ.
+       -----------------------------------------------------------------------
+       La tablette collée est un instantané : elle date du moment où on l'a
+       collée. Les logs, eux, avancent en continu.
+
+       Écraser l'un par l'autre serait fautif dans les deux sens : une lecture
+       de logs incomplète — bot arrêté, messages manqués — ferait fondre la
+       production de quelqu'un et sa prime avec ; et une tablette de la semaine
+       passée, pas encore recollée, écraserait le direct du lundi matin.
+
+       Le maximum ne se trompe que d'un côté : il ne fait jamais PERDRE de la
+       production. C'est le sens que le domaine a choisi.
+
+       Les noms se comparent par clefNom — la tablette écrit « Julio Cortes »,
+       les logs « julio cortes », et une majuscule ne doit pas dédoubler
+       quelqu'un. */
     const production = new Map();
-    lignes.forEach(d => production.set(String(d.name).trim().toLowerCase(),
+    lignes.forEach(d => production.set(clefNom(d.name),
                                        Math.round((Number(d.runs) || 0) / 5)));
+    qdVinsSemaine.forEach((vins, cle) => {
+      production.set(cle, Math.max(production.get(cle) || 0, Math.max(0, Math.round(vins))));
+    });
 
     const existantes = new Map(effectifData.map(e => [String(e.name).trim().toLowerCase(), e]));
     let crees = 0, majBarils = 0;
@@ -2207,6 +2226,10 @@ window.onload = function(){
       if (!g) return;                       /* hors parcours de production */
 
       const cle = String(emp.name).trim().toLowerCase();
+      /* La fiche se retrouve par son ancienne clé — c'est celle qui indexe
+         effectifData — mais la PRODUCTION se cherche par clefNom, la même que
+         les deux sources. */
+      const cleProd = clefNom(emp.name);
       let e = existantes.get(cle);
 
       if (!e) {
@@ -2227,8 +2250,8 @@ window.onload = function(){
         crees++;
       }
 
-      if (production.has(cle)) {
-        const b = production.get(cle);
+      if (production.has(cleProd)) {
+        const b = production.get(cleProd);
         if (e.barils !== b) { e.barils = b; majBarils++; }
       }
     });
@@ -3020,23 +3043,55 @@ window.onload = function(){
      Paris → maintenant. On ne lit PAS le sélecteur de Quota en direct : le
      bilan ne doit pas changer de période parce que quelqu'un a regardé les
      30 derniers jours sur une autre page. */
-  async function chargerOrphelinsBilan() {
+  /* Les vins lus dans les logs pour la SEMAINE EN COURS, par personne.
+     -------------------------------------------------------------------------
+     Le même appel sert deux fois : les lignes non rattachées vont au bilan
+     (« hors registre »), et les lignes rattachées alimentent l'effectif, donc
+     les quotas, donc « Ma semaine ». Un seul aller-retour, une seule période.
+
+     La période est TOUJOURS la semaine du domaine — lundi 00 h 00 heure de
+     Paris jusqu'à maintenant — et jamais celle du sélecteur de la page Quota
+     en direct. Quelqu'un qui regarde les trente derniers jours ne doit pas
+     changer les quotas de toute l'équipe sans le vouloir. */
+  let qdVinsSemaine = new Map();
+
+  async function chargerQuotaSemaine() {
     if (typeof bcRows === 'undefined') return;
-    /* En démo il n'y a pas de Worker : on prend la même ligne non rattachée
-       que la page Quota, pour que la mention « hors registre » se voie. */
+    /* En démo il n'y a pas de Worker : on prend le même jeu que la page
+       Quota, pour que la mention « hors registre » se voie. */
     if (estDemo()) {
-      bcOrphelins = qdDemo().orphelines || [];
-      try { renderBilan(); } catch (e) {}
+      const d = qdDemo();
+      bcOrphelins = d.orphelines || [];
+      qdVinsSemaine = new Map((d.rattachees || []).map(r => [clefNom(r.nom), Number(r.vins) || 0]));
+      appliquerQuotaSemaine();
       return;
     }
     const A = window.MarloweAuth;
     if (!A || !A.apiBrut) return;
     const r = await A.apiBrut(`/api/quota?du=${qdLundi(0)}&au=${Date.now()}`);
-    /* Un Worker muet ne doit pas vider le bilan : on garde ce qu'on avait. */
+    /* Un Worker muet ne doit rien vider : on garde ce qu'on avait. */
     if (!r || !r.ok || !r.data || !Array.isArray(r.data.orphelines)) return;
     bcOrphelins = r.data.orphelines;
-    try { renderBilan(); } catch (e) {}
+    qdVinsSemaine = new Map((r.data.rattachees || [])
+      .map(x => [clefNom(x.nom), Number(x.vins) || 0]));
+    appliquerQuotaSemaine();
   }
+
+  /* Redessiner tout ce qui dépend de ces chiffres. L'effectif est recalculé
+     puis enregistré s'il a bougé : c'est une donnée partagée, pas un affichage
+     local — sans quoi chacun verrait un chiffre différent selon l'heure à
+     laquelle il a ouvert le panel. */
+  function appliquerQuotaSemaine() {
+    try { renderBilan(); } catch (e) {}
+    try { syncEffectifEtEnregistrer(true); } catch (e) {}
+    try { renderEffectifHead(); } catch (e) {}
+    try { if (typeof renderEffectif === 'function') renderEffectif(effectifData); } catch (e) {}
+    try { renderMaSemaine(); } catch (e) {}
+    try { renderEligibilite(); } catch (e) {}
+    try { renderQuotas3(); } catch (e) {}
+  }
+
+
 
   function rebuildBcRows() {
     if (typeof bcRows === 'undefined') return;
@@ -4952,7 +5007,7 @@ window.onload = function(){
     renderBilan();
     /* Les ventes des partants arrivent du Worker, donc après coup : le bilan
        se redessine tout seul quand elles tombent. */
-    chargerOrphelinsBilan();
+    chargerQuotaSemaine();
     renderWeekHistory();
     renderHistorique();
     renderCloture();
@@ -9448,7 +9503,7 @@ window.onload = function(){
       renderQuotaDirect();
       /* La ligne quitte les non rattachées : elle doit aussi quitter le
          bilan, où elle figurait en « hors registre ». */
-      chargerOrphelinsBilan();
+      chargerQuotaSemaine();
     }
   });
 
@@ -9483,6 +9538,7 @@ window.onload = function(){
     renderVitrine, renderCatalogues, appliquerAccesService, renderAvertissements, compteAvertissements,
     openInvoiceDoc, ouvrirFacturation, ouvrirFacturesRecues, prochainNumero, renderRegles, importerListeRH, analyserListeRH, modifierEmploye, estFormatRegistre,
     synchroniserEffectif, syncEffectifEtEnregistrer, renderMagasin, renderCommandes, renderStock, renderMagRecap, renderFormBon,
+    chargerQuotaSemaine,
     renderComRunner, testerDiscord, renderQuotaService, renderPrimeRecrutement,
     renderTombola, ticketsDe, renderEntretien, renderDocuments,
     railConstruire, railSynchroniser, allerA,
