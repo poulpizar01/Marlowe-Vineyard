@@ -2171,14 +2171,23 @@ window.onload = function(){
      se devine pas.
      ========================================================================== */
 
-  /* Les trois grades du parcours de production et leur enchaînement. Indexés
-     par clé normalisée : le registre écrit « Ouvrier viticole », les primes
+  /* Les grades suivis dans l'effectif, et leur enchaînement. Indexés par clé
+     normalisée : le registre écrit « Ouvrier viticole », les primes
      « Ouvrier Viticole ». Les quotas n'y figurent plus — ils se règlent dans
-     Administration ▸ Règles du domaine et se lisent par quotaDuGrade(). */
+     Administration ▸ Règles du domaine et se lisent par quotaDuGrade().
+
+     Vendeur et Vendeuse s'y ajoutent sans faire partie du parcours de
+     production : ils n'ont ni grade au-dessus ni grade en dessous, et leur
+     quota de vins vaut zéro tant qu'on ne leur en donne pas un dans les
+     Règles — ce sont des postes qui pointent, pas des postes qui produisent.
+     Ils apparaissent dans l'effectif pour qu'on les VOIE, ce qui n'était pas
+     le cas : la page ne montrait que les trois grades du vignoble. */
   const GRADE_PROD = {
     'saisonnier':       { grade: 'Saisonnier',       next: 'Ouvrier Viticole', final: false },
     'ouvrier viticole': { grade: 'Ouvrier Viticole', next: 'Chef de Culture',  final: false },
     'chef de culture':  { grade: 'Chef de Culture',  next: null,               final: true  },
+    'vendeur':          { grade: 'Vendeur',          next: null,               final: true  },
+    'vendeuse':         { grade: 'Vendeuse',         next: null,               final: true  },
   };
 
   function synchroniserEffectif() {
@@ -5868,6 +5877,7 @@ window.onload = function(){
 
   const reglages = {
     quotaServiceH: 0,       /* heures de service attendues par semaine, 0 = pas de quota */
+    quotasHeures: {},       /* exceptions par grade ; absent = la valeur générale ci-dessus */
     primeRecrutMontant: 0,  /* prime de BIENVENUE, versée à une recrue de fin de semaine */
     primeRecrutQuota: 0,    /* vins minimum pour y avoir droit */
     primeParRecrutement: undefined, /* prime versée au RECRUTEUR, par personne amenée */
@@ -5944,6 +5954,29 @@ window.onload = function(){
   }
   window.mvSalaireGrade = salaireDuGrade;
 
+  /* Le quota d'HEURES d'un grade — à ne pas confondre avec le quota de vins.
+     -------------------------------------------------------------------------
+     Un seul chiffre valait pour tout le monde : « les postes qui pointent »
+     partageaient la même barre, alors qu'un responsable runner et un vendeur
+     ne doivent pas les mêmes heures au domaine.
+
+     La grille des Règles ne porte que les EXCEPTIONS : un grade laissé à la
+     valeur générale n'y est pas enregistré. Deux réglages qui disent la même
+     chose finissent toujours par se contredire — ici, le général reste le
+     général, et la grille ne contient que ce qui s'en écarte. */
+  function quotaHeuresDuGrade(grade) {
+    const table = (reglages && reglages.quotasHeures) || {};
+    const g = String(grade || '').trim();
+    const lire = t => {
+      if (t[g] !== undefined) return Number(t[g]) || 0;
+      const k = Object.keys(t).find(x => x.toLowerCase() === g.toLowerCase());
+      return k === undefined ? undefined : (Number(t[k]) || 0);
+    };
+    const v = lire(table);
+    return Math.max(0, v === undefined ? (Number(reglages.quotaServiceH) || 0) : v);
+  }
+  window.mvQuotaHeuresGrade = quotaHeuresDuGrade;
+
   const h2m = h => Math.round((Number(h) || 0) * 60);
   const m2h = m => `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}`;
 
@@ -5961,7 +5994,10 @@ window.onload = function(){
     if (!panel) return;
 
     let box = $('mvQuotaService');
-    const attendu = h2m(reglages.quotaServiceH);
+    /* La barre porte sur le grade de la personne connectée, pas sur un chiffre
+       unique valable pour tout le domaine. */
+    const f = ficheDeSession();
+    const attendu = h2m(quotaHeuresDuGrade(f ? f.poste : ''));
 
     if (!attendu) { if (box) box.remove(); return; }
 
@@ -5978,7 +6014,7 @@ window.onload = function(){
 
     box.innerHTML = `
       <div class="mv-qs-top">
-        <span class="mv-qs-l">Quota de service</span>
+        <span class="mv-qs-l">Quota de service${f && f.poste ? ` · ${esc(f.poste)}` : ''}</span>
         <span class="mv-qs-v ${ok ? 'ok' : ''}">${m2h(fait)} / ${m2h(attendu)}</span>
       </div>
       <div class="mv-qs-bar"><i style="width:${pct}%" class="${ok ? 'ok' : ''}"></i></div>
@@ -6096,6 +6132,22 @@ window.onload = function(){
           <label class="mv-lab">Heures par semaine
             <input type="number" id="mvRegQuotaS" min="0" max="60" step="0.5" value="${reglages.quotaServiceH}">
           </label>
+        </div>
+      </div>
+
+      <div class="mv-vit-sec">
+        <h4>Quota d'heures par grade — les exceptions</h4>
+        <p class="mv-hint" style="margin:0 0 12px;">Le chiffre ci-dessus vaut pour tous les postes qui
+          pointent. Cette grille ne sert qu'à ceux qui s'en écartent : un <b>responsable runner</b> et un
+          vendeur ne doivent pas les mêmes heures au domaine. Un grade laissé à la valeur générale
+          n'est pas enregistré — deux réglages qui disent la même chose finissent toujours par se
+          contredire. <b>0</b> dispense le grade de tout quota d'heures.</p>
+        <div class="mv-sal-grille">
+          ${GRADES_PRIME.map(g => `
+            <label class="mv-lab mv-sal-l">${esc(g)}
+              <input type="number" min="0" max="60" step="0.5" data-qheures="${esc(g)}"
+                data-init="${quotaHeuresDuGrade(g)}" value="${quotaHeuresDuGrade(g)}">
+            </label>`).join('')}
         </div>
       </div>
 
@@ -6243,6 +6295,31 @@ window.onload = function(){
     });
     reglages.quotas = quotas;
 
+    /* Les heures : la grille ne garde que les EXCEPTIONS, et « exception »
+       veut dire « champ que l'on a touché ».
+       -----------------------------------------------------------------------
+       Comparer bêtement à la valeur générale ne suffisait pas, et l'essai l'a
+       montré : en changeant le général de 10 à 15 sans toucher la grille —
+       qui affichait encore 10 partout — les seize grades devenaient d'un coup
+       des exceptions à 10, et le chiffre général ne commandait plus rien.
+
+       Chaque champ retient donc la valeur qu'il portait au rendu. Non touché,
+       il conserve son état d'avant : exception s'il en était une, rien sinon.
+       Touché, il devient une exception — sauf s'il rejoint le général, auquel
+       cas il cesse d'en être une. */
+    const general = Math.max(0, Number(reglages.quotaServiceH) || 0);
+    const ancien = (reglages.quotasHeures && typeof reglages.quotasHeures === 'object')
+      ? reglages.quotasHeures : {};
+    const heures = {};
+    document.querySelectorAll('[data-qheures]').forEach(el => {
+      const g = el.dataset.qheures;
+      const v = Math.max(0, Number(el.value) || 0);
+      const rendu = Math.max(0, Number(el.dataset.init) || 0);
+      if (v !== rendu) { if (v !== general) heures[g] = v; }
+      else if (ancien[g] !== undefined) heures[g] = Math.max(0, Number(ancien[g]) || 0);
+    });
+    reglages.quotasHeures = heures;
+
     let fichesTouchees = 0;
     if (typeof effectifData !== 'undefined' && Array.isArray(effectifData)) {
       effectifData.forEach(f => {
@@ -6276,6 +6353,11 @@ window.onload = function(){
        croirait que le réglage n'a pas pris. */
     if (typeof window.mvRenderPrimes === 'function') window.mvRenderPrimes();
     if (typeof renderBilan === 'function') renderBilan();
+    renderQuotaService();
+    /* Le formulaire se redessine : sans ça, la grille garderait les valeurs
+       d'avant en mémoire de rendu, et l'enregistrement suivant les relirait
+       comme si elles venaient d'être choisies. */
+    renderReglages();
     remplirCartesGrades();
     if (typeof renderQuotaDirect === 'function' && $('qdBody')) renderQuotaDirect();
     const ok = $('mvRegSaved');
