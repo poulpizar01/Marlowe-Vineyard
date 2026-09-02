@@ -430,8 +430,17 @@
       }
 
       /* Accès permanent par identifiant Discord, puis par rôle. */
+      /* Les noms de rôles se comparent normalisés, exactement comme le fait le
+         serveur : « Patron 👑 » et « Patron » sont le même rôle, et le panel
+         ne doit pas dire l'inverse de ce que le serveur décidera. L'égalité
+         reste stricte sur la forme normalisée — « Sous-Patron » n'ouvre rien. */
+      const clefRole = n => String(n || '').toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, ' ').trim();
+      const attendus = CONFIG.PATRON_ROLES.map(clefRole);
+
       s.isOwner  = CONFIG.OWNER_IDS.includes(String(s.user.id));
-      s.isPatron = s.isOwner || s.roles.some(r => CONFIG.PATRON_ROLES.includes(r));
+      s.isPatron = s.isOwner || s.roles.some(r => attendus.includes(clefRole(r)));
       return s;
     },
 

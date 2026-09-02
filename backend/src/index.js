@@ -27,7 +27,7 @@ const DISCORD = 'https://discord.com/api/v10';
    correction serveur n'a rien changé, on la lit.
 
    À tenir en phase avec version.json à chaque déploiement. */
-const VERSION = '1.44.0';
+const VERSION = '1.45.0';
 const SESSION_TTL = 60 * 60 * 24 * 7;   // 7 jours
 const STATE_TTL   = 600;                // 10 minutes
 
@@ -221,8 +221,31 @@ function bearer(request) {
   return h.startsWith('Bearer ') ? h.slice(7) : null;
 }
 
+/* Le nom d'un rôle, ramené à sa forme comparable.
+   ---------------------------------------------------------------------------
+   PATRON_ROLES est tapé à la main dans wrangler.toml ; le nom du rôle, lui,
+   vit sur Discord et s'écrit comme on veut. « Patron », « PATRON », « Patron
+   👑 », « Co-Patron » contre « Co Patron » : quatre façons de désigner le même
+   rôle, et une comparaison caractère par caractère n'en reconnaissait qu'une.
+   Le patron du domaine se retrouvait alors sans les droits du patron, sans que
+   rien ne dise pourquoi.
+
+   On compare donc des formes normalisées — minuscules, sans accents, sans
+   emoji ni ponctuation — mais toujours en ÉGALITÉ, jamais en « contient » :
+   un rôle « Sous-Patron » ne doit pas ouvrir les portes du patron. */
+function clefRole(nom) {
+  return String(nom || '').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
 function patronRoles(env) {
   return (env.PATRON_ROLES || 'Patron,Co-Patron').split(',').map(s => s.trim()).filter(Boolean);
+}
+
+function estRolePatron(env, nom) {
+  const k = clefRole(nom);
+  return !!k && patronRoles(env).some(r => clefRole(r) === k);
 }
 
 function ownerIds(env) {
@@ -506,7 +529,7 @@ async function currentSession(request, env, jetonExplicite) {
     user:  { id: stored.id, name: (member && member.nick) || stored.name, avatar: stored.avatar },
     roles,
     isOwner,
-    isPatron: isOwner || roles.some(r => patronRoles(env).includes(r)),
+    isPatron: isOwner || roles.some(r => estRolePatron(env, r)),
   };
 }
 
@@ -2073,9 +2096,11 @@ async function handleLogs(request, env) {
        ce refus-ci, faute de savoir ce qui avait été refusé. Le serveur le dit
        désormais lui-même, et nomme la condition exacte. */
     if (!s.isPatron) return json(env, { error: 'forbidden', detail:
-      'Relancer la lecture du salon est réservé au patron. Votre session est vue '
-      + `par le serveur comme : ${s.roles.length ? s.roles.join(', ') : 'aucun rôle'}`
-      + `${s.isOwner ? ' (accès développeur)' : ''}.` }, 403);
+      'Relancer la lecture du salon est réservé au patron. Le serveur attend '
+      + `l'un de ces rôles : ${patronRoles(env).join(', ')}. `
+      + `Il vous en voit ${s.roles.length ? s.roles.length + ' : ' + s.roles.join(', ') : 'aucun'}. `
+      + `Un rôle absent de cette liste alors que vous l'avez sur Discord est un rôle « géré » `
+      + `par une intégration — le panel les écarte — ou un rôle que l'application ne voit pas.` }, 403);
     return json(env, await lireLogs(env));
   }
   const etat = await base(env).get('logs:etat', 'json');
