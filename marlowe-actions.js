@@ -276,7 +276,9 @@
      reste — direction, responsables, magasin — retombait sur « clay » et
      « terrain », donc sur le mauvais sceau et le mauvais filtre. */
   const DEPT_BY_POSTE = {
-    'Patron': 'direction', 'Co-Patron': 'direction', 'Responsable Général': 'direction',
+    'Patron': 'direction', 'Co-Patron': 'direction',
+    /* Ancien libellé conservé : les fiches déjà saisies le portent encore. */
+    'Responsable Général': 'direction', 'Resp. des Responsables Runner': 'direction',
     'DRH': 'direction', 'Resp. Commercial': 'direction', 'Resp. Magasin': 'direction',
     'Resp. Runner': 'direction',
     'RH': 'direction', 'Commercial': 'direction',
@@ -286,7 +288,8 @@
   };
 
   const TIER_BY_POSTE = {
-    'Patron': 'gold', 'Co-Patron': 'gold', 'Responsable Général': 'gold',
+    'Patron': 'gold', 'Co-Patron': 'gold',
+    'Responsable Général': 'gold', 'Resp. des Responsables Runner': 'gold',
     'DRH': 'gold', 'Resp. Commercial': 'silver', 'Resp. Magasin': 'silver',
     'Resp. Runner': 'silver',
     'RH': 'silver', 'Commercial': 'silver',
@@ -463,7 +466,18 @@
   const POSTE_SYNONYMES = {
     'patron': 'Patron',
     'co patron': 'Co-Patron',
-    'resp general': 'Responsable Général', 'resp generale': 'Responsable Général',
+    /* L'ancien intitulé « Responsable Général » laissait croire que ce poste
+       encadrait tout le domaine. Il n'encadre que les responsables runner :
+       il est renommé, et toutes les anciennes écritures retombent dessus
+       pour que les fiches déjà saisies ne deviennent pas des postes
+       fantômes. « directeur des responsables runners » est l'orthographe
+       du rôle Discord — au pluriel, que clefPoste ne rapproche pas du
+       singulier. */
+    'resp general': 'Resp. des Responsables Runner', 'resp generale': 'Resp. des Responsables Runner',
+    'resp des responsables runner': 'Resp. des Responsables Runner',
+    'resp des responsables runners': 'Resp. des Responsables Runner',
+    'directeur des responsables runner': 'Resp. des Responsables Runner',
+    'directeur des responsables runners': 'Resp. des Responsables Runner',
     'drh': 'DRH',
     'resp commercial': 'Resp. Commercial', 'resp commerciale': 'Resp. Commercial',
     'resp magasin': 'Resp. Magasin',
@@ -712,7 +726,7 @@
   window.estIdDiscord = estIdDiscord;
 
   const POSTES_CANON = [
-    'Patron', 'Co-Patron', 'Responsable Général', 'DRH',
+    'Patron', 'Co-Patron', 'Resp. des Responsables Runner', 'DRH',
     'Resp. Commercial', 'Resp. Magasin', 'Resp. Runner',
     'RH', 'Commercial', 'Assistant(e) magasin', 'Vendeur', 'Vendeuse', 'Runner',
     'Chef de culture', 'Ouvrier viticole', 'Saisonnier',
@@ -6030,7 +6044,7 @@ window.onload = function(){
     /* ressources humaines */
     'RH', 'DRH', 'Resp. RH', 'Responsable RH',
     /* la direction pointe aussi — et le patron passe de toute façon */
-    'Responsable Général', 'Resp. Général', 'Patron', 'Co-Patron',
+    'Resp. des Responsables Runner', 'Responsable Général', 'Resp. Général', 'Patron', 'Co-Patron',
   ];
 
   /* Comparaison indulgente : « Resp. Magasin », « resp magasin » et
@@ -6062,7 +6076,7 @@ window.onload = function(){
      ========================================================================== */
   const POSTES_VOIR_AUTRUI = [
     'Patron', 'Co-Patron', 'Co Patron',
-    'Responsable Général', 'Resp. Général',
+    'Resp. des Responsables Runner', 'Responsable Général', 'Resp. Général',
     'DRH', 'Resp. RH', 'Responsable RH',
     'RH', 'Ressource Humaine', 'Ressources Humaines', 'Ressource humaines',
   ].map(clefPoste);
@@ -6070,7 +6084,7 @@ window.onload = function(){
   /* « Au-dessus du Vendeur » : la direction et les responsables. */
   const POSTES_ENCADREMENT = [
     'Patron', 'Co-Patron', 'Co Patron',
-    'Responsable Général', 'Resp. Général',
+    'Resp. des Responsables Runner', 'Responsable Général', 'Resp. Général',
     'DRH', 'Resp. RH', 'Responsable RH',
     'Resp. Commercial', 'Responsable Commercial',
     'Resp. Magasin', 'Responsable Magasin',
@@ -7534,6 +7548,7 @@ window.onload = function(){
 
   const TICKETS_PAR_GRADE = {
     'patron': 0, 'co patron': 0, 'resp generale': 0, 'resp general': 0,
+    'resp des responsables runner': 0, 'resp des responsables runners': 0,
     'drh': 0, 'rh': 0, 'saisonnier': 0,
     'resp commercial': 2, 'resp commerciale': 2, 'resp evenementiel': 2,
     'resp magasin': 2, 'resp runner': 2,

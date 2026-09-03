@@ -989,7 +989,11 @@
             <div class="field"><label>Prénom Nom</label><input type="text" id="newEmpName" placeholder="Prénom Nom"></div>
             <div class="field"><label>Poste</label><select id="newEmpPoste">
               <optgroup label="Direction">
-                <option>Patron</option><option>Co-Patron</option><option>Responsable Général</option>
+                <option>Patron</option><option>Co-Patron</option>
+                <!-- Renommé : ce poste encadre les responsables runner, pas tout le
+                     domaine. Les fiches déjà saisies en « Responsable Général »
+                     continuent d'être reconnues (voir POSTE_SYNONYMES). -->
+                <option>Resp. des Responsables Runner</option>
               </optgroup>
               <optgroup label="Responsables">
                 <option>DRH</option><option>Resp. Commercial</option><option>Resp. Magasin</option><option>Resp. Runner</option>

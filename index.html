@@ -725,12 +725,13 @@
       </div>
     </div>
 
-    <div class="org-connector"></div>
-    <div class="org-solo">
-      <div class="org-card lead" data-poste="Responsable Général">
-        <div class="role">Responsable Général</div><div class="who" data-names>—</div>
-      </div>
-    </div>
+    <!-- Il y avait ici un encadré « Responsable Général » posé entre la
+         direction et TOUS les pôles, ce qui le faisait lire comme le
+         supérieur de chacun d'eux. C'est faux : ce poste encadre les
+         responsables runner, et eux seuls. Il est donc redescendu en tête
+         de la branche « runner », au même niveau que les autres chefs de
+         pôle — un organigramme qui ment sur une hiérarchie est pire qu'un
+         organigramme qui n'en montre aucune. -->
 
     <div class="org-connector"></div>
     <div class="org-tier" style="margin:0 0 6px;">Responsables &amp; pôles</div>
@@ -758,10 +759,27 @@
           <div class="org-pill" data-poste="Vendeur|Vendeuse"><span class="pill-role">Vendeur · Vendeuse</span><span class="pill-names" data-names>—</span></div>
         </div>
       </div>
+      <!-- La branche runner compte un niveau de plus que les autres : le
+           responsable des responsables runner, puis les responsables runner,
+           puis les runners.
+
+           Le data-poste liste plusieurs orthographes parce que le nom du
+           poste est saisi à la main dans les fiches RH et écrit autrement sur
+           le Discord (« Directeur Des Responsables-Runners »). La comparaison
+           ignore la casse, les accents et la ponctuation, mais PAS le « s »
+           de « Runners » — d'où le singulier et le pluriel tous les deux.
+           « Responsable Général » reste dans la liste : c'est ainsi que la
+           fiche est libellée aujourd'hui, et le nom doit continuer de
+           s'afficher tant qu'elle n'a pas été renommée. -->
       <div class="org-branch">
-        <div class="org-card" data-poste="Resp. Runner"><div class="role">Resp. Runner</div><div class="who" data-names>—</div></div>
+        <div class="org-card"
+             data-poste="Responsable des Responsables Runner|Directeur des Responsables Runners|Directeur des Responsables Runner|Responsable Général">
+          <div class="role">Resp. des Responsables Runner</div><div class="who" data-names>—</div>
+        </div>
         <div class="org-down">↓</div>
         <div class="org-sub">
+          <div class="org-pill" data-poste="Resp. Runner"><span class="pill-role">Resp. Runner</span><span class="pill-names" data-names>—</span></div>
+          <div class="org-down" style="padding:2px 0;">↓</div>
           <div class="org-pill" data-poste="Runner"><span class="pill-role">Runner</span><span class="pill-names" data-names>—</span></div>
         </div>
       </div>
