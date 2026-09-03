@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Source de la bannière Discord</title>
+<!--
+  ============================================================================
+  LA SOURCE DE LA BANNIÈRE — img/banniere.png
+  ----------------------------------------------------------------------------
+  Ce fichier n'est PAS servi aux visiteurs : c'est le gabarit qui a servi à
+  fabriquer l'image d'aperçu affichée par Discord quand on partage le lien du
+  domaine. Il est gardé dans le dépôt pour que la bannière puisse être refaite
+  à l'identique — changer une couleur ou une phrase, et régénérer — plutôt que
+  d'avoir un PNG dont plus personne ne sait d'où il vient.
+
+  Il reprend volontairement les polices, les couleurs et le blason de la page
+  d'accueil : une bannière qui ressemble à une autre marque que la sienne
+  travaille contre le site qu'elle annonce.
+
+  Pour la régénérer : voir img/README-banniere.md
+  ============================================================================
+-->
+<link rel="stylesheet" href="../fonts/polices.css">
+<style>
+  /* Les couleurs sont celles d'index.html, reprises telles quelles. */
+  :root{
+    --text:#F3EFE4; --muted:#9FB0A2;
+    --gold:#D9B872; --gold-soft:#B89858; --gold-line:rgba(217,184,114,.35);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{width:1200px;height:630px;overflow:hidden;}
+  body{
+    font-family:'Inter',system-ui,sans-serif;
+    color:var(--text);
+    /* Le même ciel que la page d'accueil : un halo chaud en haut à droite,
+       puis la descente du vert profond vers le brun des coteaux. */
+    background:
+      radial-gradient(ellipse 900px 520px at 74% 4%, rgba(217,184,114,.16), transparent 62%),
+      linear-gradient(165deg, #0B140F 0%, #132A1D 46%, #1B3A26 100%);
+    position:relative;
+  }
+
+  /* La ligne de crête, en bas, comme sur le site.
+     Premier essai à 55 % d'opacité : sur fond vert sombre, elle ne se lisait
+     plus comme des coteaux mais comme une tache plus claire en bas à gauche.
+     Elle est maintenant pleinement opaque, avec un liseré doré très ténu sur
+     l'arête — c'est lui qui donne la silhouette. */
+  .ridge{position:absolute;left:0;right:0;bottom:0;height:210px;}
+  .ridge svg{display:block;width:100%;height:100%;}
+
+  /* Un liseré doré en haut : sur Discord, la bannière est posée sur un fond
+     sombre presque identique au sien. Sans cette ligne, l'image n'a plus de
+     bord et se fond dans le message. */
+  .liseré{position:absolute;top:0;left:0;right:0;height:4px;
+    background:linear-gradient(90deg,transparent,#D9B872 22%,#E8C989 50%,#D9B872 78%,transparent);}
+
+  .scene{position:relative;height:100%;display:grid;
+    grid-template-columns:1fr 400px;align-items:center;gap:56px;
+    padding:64px 68px;}
+
+  /* --- Colonne de gauche --- */
+  .badge{display:inline-flex;align-items:center;gap:11px;
+    border:1px solid var(--gold-line);border-radius:999px;
+    padding:9px 20px;font-size:16px;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--gold);font-weight:500;}
+  .pastille{width:8px;height:8px;border-radius:99px;background:var(--gold);
+    box-shadow:0 0 12px rgba(217,184,114,.8);}
+
+  h1{font-family:'Fraunces',Georgia,serif;font-weight:600;
+    font-size:74px;line-height:1.02;letter-spacing:-.015em;margin:26px 0 0;}
+  .tagline{font-family:'Fraunces',Georgia,serif;font-style:italic;font-weight:500;
+    font-size:37px;line-height:1.25;color:var(--gold);margin-top:14px;}
+
+  .trait{width:120px;height:1px;background:var(--gold-line);margin:30px 0 22px;}
+
+  .stats{display:flex;gap:46px;}
+  .stat .n{font-family:'Fraunces',Georgia,serif;font-weight:600;font-size:31px;
+    line-height:1;color:var(--text);}
+  .stat .l{font-size:12.5px;letter-spacing:.13em;text-transform:uppercase;
+    color:var(--muted);margin-top:7px;}
+
+  /* --- Colonne de droite : le blason, repris d'index.html --- */
+  .crest{width:400px;height:480px;
+    filter:drop-shadow(0 24px 46px rgba(0,0,0,.5));}
+  .crest svg{display:block;width:100%;height:100%;}
+</style>
+</head>
+<body>
+
+<div class="liseré"></div>
+
+<div class="ridge" aria-hidden="true">
+  <svg viewBox="0 0 1200 220" preserveAspectRatio="none">
+    <path d="M0 150 C 180 96 300 128 460 108 C 640 86 760 132 920 112 C 1050 96 1130 122 1200 110 L1200 220 L0 220 Z"
+          fill="#0C1A12"/>
+    <path d="M0 150 C 180 96 300 128 460 108 C 640 86 760 132 920 112 C 1050 96 1130 122 1200 110"
+          fill="none" stroke="#D9B872" stroke-width="1.2" opacity=".30"/>
+    <path d="M0 178 C 200 140 340 164 520 148 C 700 132 840 168 1010 152 C 1110 143 1160 158 1200 152 L1200 220 L0 220 Z"
+          fill="#060C08"/>
+    <path d="M0 178 C 200 140 340 164 520 148 C 700 132 840 168 1010 152 C 1110 143 1160 158 1200 152"
+          fill="none" stroke="#D9B872" stroke-width="1" opacity=".18"/>
+  </svg>
+</div>
+
+<div class="scene">
+  <div>
+    <span class="badge"><span class="pastille"></span>FlashbackFA · Tongva Hills</span>
+    <h1>Marlowe Vineyard</h1>
+    <p class="tagline">Là où chaque bouteille<br>raconte une histoire.</p>
+    <div class="trait"></div>
+    <div class="stats">
+      <div class="stat"><div class="n">1957</div><div class="l">Année de fondation</div></div>
+      <div class="stat"><div class="n">24 h</div><div class="l">Livraison San Andreas</div></div>
+      <div class="stat"><div class="n">N°1</div><div class="l">Domaine de l'État</div></div>
+    </div>
+  </div>
+
+  <div class="crest">
+    <!-- Le blason d'index.html, à l'identique. -->
+    <svg viewBox="0 0 400 480" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="8" y="8" width="384" height="464" rx="18" fill="#132A1D" stroke="#D9B872" stroke-width="1.5"/>
+      <rect x="22" y="22" width="356" height="436" rx="10" fill="none" stroke="#8E7C4E" stroke-width="1"/>
+      <path d="M60 60 Q80 40 110 55 M340 60 Q320 40 290 55 M60 420 Q80 440 110 425 M340 420 Q320 440 290 425"
+            stroke="#D9B872" stroke-width="1.2" fill="none" opacity=".7"/>
+      <g transform="translate(200,150)">
+        <path d="M0 -40C-14 -18 -14 8 0 30C14 8 14 -18 0 -40Z" fill="#D9B872" opacity=".9"/>
+        <circle cx="-22" cy="26" r="7" fill="#D9B872"/><circle cx="0" cy="38" r="7" fill="#D9B872"/><circle cx="22" cy="26" r="7" fill="#D9B872"/>
+        <circle cx="-14" cy="46" r="7" fill="#D9B872"/><circle cx="14" cy="46" r="7" fill="#D9B872"/>
+        <circle cx="0" cy="58" r="7" fill="#D9B872"/>
+      </g>
+      <text x="200" y="255" text-anchor="middle" font-family="Fraunces, serif" font-weight="600" font-size="30" fill="#F3EFE4" letter-spacing="2">MARLOWE</text>
+      <text x="200" y="288" text-anchor="middle" font-family="Fraunces, serif" font-style="italic" font-weight="500" font-size="22" fill="#D9B872" letter-spacing="6">VINEYARD</text>
+      <line x1="90" y1="310" x2="310" y2="310" stroke="#8E7C4E" stroke-width="1"/>
+      <text x="200" y="335" text-anchor="middle" font-family="Inter" font-size="10.5" fill="#9FB0A2" letter-spacing="3">TONGVA HILLS · SAN ANDREAS</text>
+    </svg>
+  </div>
+</div>
+
+</body>
+</html>

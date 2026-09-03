@@ -5,6 +5,52 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Marlowe Vineyard — Là où chaque bouteille raconte une histoire</title>
 <link rel="icon" type="image/png" href="favicon.png">
+
+<!-- ==========================================================================
+     L'APERÇU DES LIENS PARTAGÉS (Open Graph)
+     --------------------------------------------------------------------------
+     Sans ces balises, un lien collé dans Discord reste une ligne bleue nue.
+     Avec elles, Discord affiche un encadré : la bannière, le titre, la phrase
+     de présentation, et un liseré à la couleur du domaine.
+
+     ⚠️ TROIS PIÈGES, dans l'ordre où on les rencontre :
+
+     1. og:image DOIT être une adresse ABSOLUE. Discord ne va pas chercher un
+        chemin relatif : il l'ignore en silence et n'affiche aucune image.
+
+     2. Ces adresses changent avec le domaine. Le jour du passage sur le VPS,
+        les quatre lignes marquées « ADRESSE » ci-dessous sont à mettre à jour
+        — sinon l'aperçu continuera de pointer vers l'ancien site, qui finira
+        par ne plus répondre.
+
+     3. Discord GARDE EN CACHE l'aperçu d'une adresse, plusieurs heures. Après
+        une modification, recoller le même lien réaffiche l'ancienne version.
+        Pour forcer : coller le lien suivi de « ?v=2 » (puis v=3, etc.).
+
+     La bannière fait 1200 × 630 — le format que Discord affiche en grand. Sa
+     source est dans img/_banniere-source.html, pour pouvoir la refaire.
+     ========================================================================== -->
+<meta property="og:type"        content="website">
+<meta property="og:site_name"   content="Marlowe Vineyard">
+<meta property="og:locale"      content="fr_FR">
+<meta property="og:title"       content="Marlowe Vineyard — Domaine viticole">
+<meta property="og:description" content="Depuis les coteaux de Tongva Hills, le domaine Marlowe cultive, vinifie et livre les plus grands crus de l'État. De la vigne au verre, tout se fait chez nous.">
+<!-- ADRESSE --> <meta property="og:url"   content="https://poulpizar01.github.io/Marlowe-Vineyard/">
+<!-- ADRESSE --> <meta property="og:image" content="https://poulpizar01.github.io/Marlowe-Vineyard/img/banniere.png">
+<meta property="og:image:width"  content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt"    content="Marlowe Vineyard — domaine viticole de Tongva Hills, San Andreas.">
+
+<meta name="twitter:card"  content="summary_large_image">
+<meta name="twitter:title" content="Marlowe Vineyard — Domaine viticole">
+<meta name="twitter:description" content="De la vigne au verre, tout se fait chez nous. Tongva Hills, San Andreas.">
+<!-- ADRESSE --> <meta name="twitter:image" content="https://poulpizar01.github.io/Marlowe-Vineyard/img/banniere.png">
+
+<!-- C'est cette couleur que Discord peint en liseré à gauche de l'encadré.
+     L'or du domaine, pour que l'aperçu soit reconnaissable d'un coup d'œil. -->
+<meta name="theme-color" content="#D9B872">
+<meta name="description" content="Domaine viticole Marlowe Vineyard — Tongva Hills, San Andreas. Catalogue, livraison 24 h, recrutement.">
+
 <link rel="stylesheet" href="fonts/polices.css">
 
 
