@@ -209,6 +209,38 @@
   /* ==========================================================================
      3. STOCKAGE  —  localStorage en démo, API en production
      ========================================================================== */
+
+  /* --------------------------------------------------------------------------
+     mvDire — dire quelque chose sans geler le jeu
+     --------------------------------------------------------------------------
+     alert() gèle entièrement la CEF, le Chromium embarqué de FiveM dans lequel
+     le panel s'affiche en jeu : le joueur doit tuer le jeu pour s'en sortir.
+     On passe donc par la modale de marlowe-actions.js.
+
+     Ce fichier est chargé AVANT lui, d'où le passage par window et le repli :
+     si la modale n'existe pas encore, on écrit un bandeau minimal plutôt que
+     de perdre le message. Jamais alert(), même en secours.
+     -------------------------------------------------------------------------- */
+  function mvDire(texte) {
+    const A = window.MarloweActions;
+    if (A && A.avertirTexte) return A.avertirTexte(texte);
+    let b = document.querySelector('.mv-dire');
+    if (!b) {
+      b = document.createElement('div');
+      b.className = 'mv-dire';
+      b.style.cssText = 'position:fixed;left:50%;top:22px;transform:translateX(-50%);z-index:99999;'
+        + 'max-width:min(560px,92vw);background:#26231E;border:1px solid #8E7C4E;color:#EDE3CF;'
+        + 'padding:14px 18px;border-radius:12px;font:13px/1.6 Inter,system-ui,sans-serif;'
+        + 'white-space:pre-line;box-shadow:0 18px 50px rgba(0,0,0,.55);cursor:pointer;';
+      b.addEventListener('click', () => b.remove());
+      document.body.appendChild(b);
+    }
+    b.textContent = String(texte == null ? '' : texte);
+    clearTimeout(b._h);
+    b._h = setTimeout(() => b.remove(), 9000);
+    return Promise.resolve(true);
+  }
+
   const LS_SESSION = 'mv.session';
   const LS_PERMS   = 'mv.permissions';
   const LS_TOKEN   = 'mv.token';
@@ -1510,7 +1542,7 @@
     acces.querySelector('#mvApplyRoles').addEventListener('click', async () => {
       const chosen = [...pick.querySelectorAll('[data-role].on')].map(c => c.dataset.role);
       if (!chosen.length) {
-        alert('Gardez au moins un rôle, sinon le tableau des accès sera vide.');
+        mvDire('Gardez au moins un rôle, sinon le tableau des accès sera vide.');
         return;
       }
       try {
@@ -1520,7 +1552,7 @@
         await Store.setSettings({ visibleRoles: chosen });
         location.reload();
       } catch (e) {
-        alert("Impossible d'enregistrer : " + e.message);
+        mvDire("Impossible d'enregistrer : " + e.message);
       }
     });
 
@@ -1599,7 +1631,7 @@
         tag.classList.add('on');
         setTimeout(() => tag.classList.remove('on'), 1800);
       } catch (e) {
-        alert("Impossible d'enregistrer : " + e.message);
+        mvDire("Impossible d'enregistrer : " + e.message);
       }
     });
 
@@ -1633,7 +1665,7 @@
         tag.classList.add('on');
         setTimeout(() => tag.classList.remove('on'), 1800);
       } catch (e) {
-        alert("Impossible d'enregistrer : " + e.message);
+        mvDire("Impossible d'enregistrer : " + e.message);
       }
     });
 
@@ -1674,7 +1706,7 @@
         tag.classList.add('on');
         setTimeout(() => tag.classList.remove('on'), 1800);
       } catch (e) {
-        alert("Impossible d'enregistrer : " + e.message);
+        mvDire("Impossible d'enregistrer : " + e.message);
       }
     });
 

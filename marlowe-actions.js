@@ -121,6 +121,55 @@
     return new Promise(r => { resolver = r; });
   }
 
+  /* ------------------------------------------------------------------------
+     avertir() — le remplaçant d'avertirTexte()
+     ------------------------------------------------------------------------
+     avertirTexte() ne pose pas qu'un problème d'esthétique. Dans l'ordinateur en jeu,
+     le panel s'affiche dans une iframe rendue par CEF, le Chromium embarqué de
+     FiveM : un dialogue natif y GÈLE tout le jeu, et le joueur doit forcer la
+     fermeture de FiveM. Un message d'erreur qui oblige à tuer le jeu est pire
+     que l'erreur qu'il annonce.
+
+     Pourquoi une modale plutôt qu'un toast : ces messages-là portent des
+     instructions — un mot de passe qu'on ne relira plus, six lignes de
+     diagnostic, la marche à suivre après un envoi Discord raté. Un bandeau qui
+     s'efface au bout de deux secondes les perdrait. Le toast reste pour les
+     confirmations courtes ; la modale, pour ce qui doit être lu.
+
+     Elle rend une promesse, comme confirmAction : `await avertir(...)` permet
+     d'attendre la lecture avant d'enchaîner, sans jamais bloquer le rendu.
+     ------------------------------------------------------------------------ */
+  function avertir(title, message) {
+    ensureDialog();
+    dlg.querySelector('.mv-dlg').innerHTML = `
+      <h3>${esc(title)}</h3><p>${esc(message)}</p>
+      <div class="mv-dlg-btns">
+        <button data-yes class="go">J'ai compris</button>
+      </div>`;
+    dlg.style.display = 'flex';
+    dlg.querySelector('[data-yes]').onclick = () => close(true);
+    return new Promise(r => { resolver = r; });
+  }
+
+  /* Le remplaçant direct d'alert(), qui ne prenait qu'un texte.
+     -------------------------------------------------------------------------
+     Ces messages étaient écrits pour un dialogue natif : une première ligne
+     qui annonce, une ligne vide, puis le détail. On garde cette structure —
+     la première ligne devient le titre, le reste le corps. Rien à réécrire, et
+     la modale se lit mieux que le bandeau gris du navigateur.
+
+     Si la première ligne est longue, c'est que le message n'a pas cet
+     enchaînement : on met alors un titre neutre et on affiche tout. */
+  function avertirTexte(texte) {
+    const brut = String(texte == null ? '' : texte);
+    const coupe = brut.indexOf('\n\n');
+    const tete = coupe > 0 ? brut.slice(0, coupe).trim() : '';
+    if (tete && tete.length <= 70 && !tete.includes('\n')) {
+      return avertir(tete.replace(/[.:]$/, ''), brut.slice(coupe + 2).trim());
+    }
+    return avertir('Information', brut);
+  }
+
   /* Formulaire. champs = [{key, label, value, type, options}]
      Renvoie un objet {key: valeur} ou null si annulé. */
   function askForm(title, fields, message) {
@@ -862,7 +911,7 @@
     const { fiches, rejets, postesInconnus } = analyserListeRH(texte);
     if (!fiches.length) {
       d.style.maxWidth = '';
-      alert("Aucune fiche n'a pu être lue.\n\nVérifiez que les colonnes sont séparées par des tabulations "
+      avertirTexte("Aucune fiche n'a pu être lue.\n\nVérifiez que les colonnes sont séparées par des tabulations "
           + "— c'est ce que produit une copie depuis un tableur.");
       return;
     }
@@ -5396,10 +5445,26 @@ window.onload = function(){
 
   function cfgAuth() { return (window.MarloweAuth && window.MarloweAuth.CONFIG) || {}; }
 
-  /* Seule cette adresse est acceptée par le serveur : c'est la valeur de
-     SITE_URL côté Worker. Ouvrir le panel ailleurs fait échouer tous les
-     appels réseau, pas seulement l'envoi Discord. */
-  const SITE_ATTENDU = 'https://poulpizar01.github.io';
+  /* Les adresses acceptées par le serveur — au PLURIEL depuis le déménagement.
+     ---------------------------------------------------------------------------
+     C'était une seule chaîne, celle de SITE_URL côté Worker. Le jour où le
+     domaine a changé, cette constante est restée sur l'ancienne adresse : le
+     panel, ouvert sur la nouvelle, se serait mis à afficher « le serveur
+     n'accepte que poulpizar01.github.io » et à conseiller de pousser sur
+     GitHub — un conseil faux, sur une panne qui n'existait pas.
+
+     Elle doit refléter SITE_URLS du Worker. Les deux listes vivent à deux
+     endroits différents, donc elles peuvent diverger : c'est pour ça que la
+     page de diagnostic affiche les deux et dit laquelle est en cause.
+
+     ⚠️ À la fin du déménagement, retirer l'ancienne adresse ICI et dans
+     wrangler.toml — dans cet ordre, jamais l'inverse. */
+  const SITE_ATTENDUES = [
+    'https://marlowe-vineyard.fbfa.fr',
+    'https://poulpizar01.github.io',
+  ];
+  const SITE_ATTENDU = SITE_ATTENDUES[0];
+  const adresseConnue = o => SITE_ATTENDUES.includes(String(o || ''));
 
   function jeton() {
     try { return JSON.parse(localStorage.getItem('mv.token') || 'null'); } catch (e) { return null; }
@@ -5660,7 +5725,7 @@ window.onload = function(){
       sauverVitrine('Vitrine publiée');
 
       if (mauvais.length) {
-        alert("Le reste a bien été enregistré, mais le lien du catalogue "
+        avertirTexte("Le reste a bien été enregistré, mais le lien du catalogue "
           + mauvais.join(' et ') + " n'a pas été reconnu.\n\n"
           + "Services acceptés :\n"
           + "  · Canva          https://www.canva.com/design/…\n"
@@ -5735,7 +5800,7 @@ window.onload = function(){
         sauverVitrine('Pages du catalogue ajoutées');
       }
     } catch (err) {
-      alert('Dépôt impossible : ' + (err.message || err));
+      toast('Dépôt impossible : ' + (err.message || err));
     } finally {
       occupe(btn, false);
       input.value = '';
@@ -7444,7 +7509,8 @@ window.onload = function(){
       const ii = +b.dataset.ii;
       const it = rub.items[ii];
       if (!it) return;
-      if (!confirm(`Retirer « ${it.titre || 'ce document'} » de ${rub.titre} ?`)) return;
+      if (!await confirmAction('Retirer un document',
+        `« ${it.titre || 'ce document'} » sera retiré de ${rub.titre}.`, 'Retirer')) return;
       rub.items.splice(ii, 1);
       D().note(`a retiré un document de ${rub.titre}`);
       D().save('entretien');
@@ -7458,7 +7524,8 @@ window.onload = function(){
     if (quoi === 'bas'  && ri < kit.length - 1)  { [kit[ri + 1], kit[ri]] = [kit[ri], kit[ri + 1]]; D().save('entretien'); return; }
 
     if (quoi === 'suppr') {
-      if (!confirm(`Supprimer la rubrique « ${rub.titre} » et ses ${rub.items.length} document(s) ?`)) return;
+      if (!await confirmAction('Supprimer la rubrique',
+        `« ${rub.titre} » et ses ${rub.items.length} document(s) seront supprimés.`, true)) return;
       kit.splice(ri, 1);
       D().note(`a supprimé la rubrique d'entretien « ${rub.titre} »`);
       D().save('entretien');
@@ -7518,7 +7585,7 @@ window.onload = function(){
           D().save('entretien');
           toast('Visuels ajoutés.');
         } catch (err) {
-          alert("Le visuel n'a pas pu être déposé : " + err.message);
+          toast("Le visuel n'a pas pu être déposé : " + err.message);
           D().save('entretien');
         }
       };
@@ -9029,7 +9096,7 @@ window.onload = function(){
       if (res.ok) { toast('Demande envoyée sur Discord.'); return; }
 
       if (res.status === 503 && data.error === 'webhook_invalide') {
-        alert("Le salon Discord est relié, mais l'adresse enregistrée n'en est pas une.\n\n"
+        avertirTexte("Le salon Discord est relié, mais l'adresse enregistrée n'en est pas une.\n\n"
             + "Depuis le dossier backend :\n\n"
             + "    npx wrangler secret put DISCORD_WEBHOOK\n\n"
             + "Au prompt, RIEN ne s'affiche pendant que vous collez : c'est normal, "
@@ -9038,7 +9105,7 @@ window.onload = function(){
         return;
       }
       if (res.status === 503) {
-        alert("Le salon Discord n'est pas encore relié.\n\n"
+        avertirTexte("Le salon Discord n'est pas encore relié.\n\n"
             + "Le patron doit créer un webhook dans le salon des runners "
             + "(Modifier le salon ▸ Intégrations ▸ Webhooks ▸ Nouveau webhook), "
             + "puis l'enregistrer côté serveur avec :\n\n"
@@ -9053,23 +9120,21 @@ window.onload = function(){
          qui l'a bloquée : le serveur n'autorise que l'adresse publique du site,
          et le panel a été ouvert depuis un fichier local. Le dire évite de
          chercher du côté de Discord, qui n'y est pour rien. */
-      const attendu = (() => { try { return new URL(cfg.API_BASE).origin && SITE_ATTENDU; }
-                               catch (err) { return SITE_ATTENDU; } })();
       const ici = location.origin;
       console.warn('[Marlowe] envoi Discord bloqué :', e);
 
-      if (ici !== attendu) {
-        alert("La demande est bien inscrite dans le fil, mais elle n'a pas pu partir sur Discord.\n\n"
+      if (!adresseConnue(ici)) {
+        avertirTexte("La demande est bien inscrite dans le fil, mais elle n'a pas pu partir sur Discord.\n\n"
             + `Ce panel est ouvert depuis :  ${ici || 'un fichier local'}\n`
-            + `Le serveur n'accepte que :    ${attendu}\n\n`
-            + "Le navigateur bloque donc l'appel avant qu'il ne parte. Testez depuis le site en ligne "
-            + "(poussez vos fichiers sur GitHub), pas depuis le fichier ouvert sur votre ordinateur.");
+            + `Le serveur n'accepte que :    ${SITE_ATTENDUES.join('\n                             ')}\n\n`
+            + "Le navigateur bloque donc l'appel avant qu'il ne parte. Ouvrez le panel depuis "
+            + "l'une de ces adresses, pas depuis un fichier posé sur votre ordinateur.");
         return;
       }
       /* Les deux voies ont échoué depuis la bonne adresse : ce n'est plus une
          question d'origine, c'est que quelque chose entre le navigateur et
          Cloudflare coupe l'appel. Le bouton de diagnostic le nomme. */
-      alert("La demande est inscrite dans le fil, mais elle n'a pas pu partir sur Discord.\n\n"
+      avertirTexte("La demande est inscrite dans le fil, mais elle n'a pas pu partir sur Discord.\n\n"
           + "L'appel n'est même pas sorti du navigateur — ni par la voie normale, ni par la voie de repli.\n"
           + "C'est presque toujours une extension (bloqueur de publicité, antivirus, filtre DNS) ou le\n"
           + "réseau qui coupe les adresses en .workers.dev.\n\n"
@@ -9326,12 +9391,12 @@ window.onload = function(){
     try {
       const d = await apiInvites('PUT', { action: 'creer', nom: r.nom, mdp: r.mdp, pages: [], ro: [] });
       await chargerInvites();
-      alert(`Accès créé.\n\nCode : ${d.code}\nMot de passe : ${r.mdp}\n\n`
+      avertirTexte(`Accès créé.\n\nCode : ${d.code}\nMot de passe : ${r.mdp}\n\n`
           + `Transmettez les deux à ${r.nom}. Le mot de passe n'est pas conservé en clair : `
           + `s'il est perdu, il faudra en générer un nouveau.\n\n`
           + `Pensez maintenant à cocher les pages auxquelles il a droit — pour l'instant il n'en voit aucune.`);
       D().note(`a créé un accès extérieur pour ${r.nom}`);
-    } catch (e) { alert('Création impossible : ' + e.message); }
+    } catch (e) { toast('Création impossible : ' + e.message); }
   }
 
   async function pagesInvite(code) {
@@ -9367,7 +9432,7 @@ window.onload = function(){
       D().note(`a modifié les accès de ${inv.nom}`);
       await chargerInvites();
       toast('Accès mis à jour.');
-    } catch (e) { alert('Enregistrement impossible : ' + e.message); }
+    } catch (e) { toast('Enregistrement impossible : ' + e.message); }
   }
 
   /* Une variante d'askForm qui accepte du HTML libre : la matrice de pages ne
@@ -9422,26 +9487,28 @@ window.onload = function(){
       if (!r) return;
       try {
         await apiInvites('PUT', { action: 'mdp', code, mdp: r.mdp });
-        alert(`Nouveau mot de passe pour ${inv ? inv.nom : code} :\n\n${r.mdp}\n\nNotez-le, il ne sera plus relisible.`);
+        avertirTexte(`Nouveau mot de passe pour ${inv ? inv.nom : code} :\n\n${r.mdp}\n\nNotez-le, il ne sera plus relisible.`);
         D().note(`a changé le mot de passe de l'accès ${code}`);
-      } catch (err) { alert('Impossible : ' + err.message); }
+      } catch (err) { toast('Impossible : ' + err.message); }
       return;
     }
 
     if (quoi === 'basculer') {
       try { await apiInvites('PUT', { action: 'basculer', code }); await chargerInvites(); }
-      catch (err) { alert('Impossible : ' + err.message); }
+      catch (err) { toast('Impossible : ' + err.message); }
       return;
     }
 
     if (quoi === 'supprimer') {
-      if (!confirm(`Supprimer définitivement l'accès de ${inv ? inv.nom : code} ?`)) return;
+      if (!await confirmAction("Supprimer l'accès extérieur",
+        `L'accès de ${inv ? inv.nom : code} sera supprimé définitivement. `
+        + 'Son code et son mot de passe cesseront de fonctionner immédiatement.', true)) return;
       try {
         await apiInvites('PUT', { action: 'supprimer', code });
         D().note(`a supprimé l'accès extérieur ${code}`);
         await chargerInvites();
         toast('Accès supprimé.');
-      } catch (err) { alert('Impossible : ' + err.message); }
+      } catch (err) { toast('Impossible : ' + err.message); }
     }
   });
 
@@ -9458,8 +9525,9 @@ window.onload = function(){
     const dire = (t, v) => L.push(`${t.padEnd(26, '.')} ${v}`);
 
     dire('Adresse du panel', location.origin || 'fichier local');
-    dire('Adresse attendue', SITE_ATTENDU);
-    dire('Concordance', location.origin === SITE_ATTENDU ? 'oui' : 'NON — le navigateur bloquera tout');
+    dire('Adresses acceptées', SITE_ATTENDUES.join(' · '));
+    dire('Concordance', adresseConnue(location.origin)
+      ? 'oui' : 'NON — le navigateur bloquera tout');
     dire('Mode', cfg.MODE || '—');
     dire('Adresse du serveur', cfg.API_BASE || '—');
     dire('Jeton de session', tok ? 'présent' : 'ABSENT — reconnectez-vous');
@@ -9475,7 +9543,7 @@ window.onload = function(){
       dire('', "Une extension de navigateur (bloqueur de pubs, filtre DNS)");
       dire('', "bloque souvent les adresses en .workers.dev. Réessayez en");
       dire('', "navigation privée, extensions désactivées.");
-      alert(L.join('\n'));
+      avertirTexte(L.join('\n'));
       return;
     }
 
@@ -9603,7 +9671,7 @@ window.onload = function(){
       dire('>>> MESSAGE EXACT', String(brut).slice(0, 400));
     }
 
-    alert(L.join('\n'));
+    avertirTexte(L.join('\n'));
     console.log('[Marlowe] diagnostic Discord\n' + L.join('\n'));
   }
 
@@ -10214,6 +10282,10 @@ window.onload = function(){
     /* `toast` sort d'ici pour que le bouton de prise de service, qui vit dans
        gestion.html, puisse dire pourquoi il refuse au lieu de ne rien faire. */
     toast, renderServiceEnCours, servicesEnCours,
+    /* Exportés pour marlowe-auth.js, chargé avant ce fichier : il s'en sert
+       pour dire les choses sans alert(), qui gèle le jeu en NUI. */
+    avertir, avertirTexte, confirmAction,
+    askForm,
     renderTombola, ticketsDe, renderEntretien, renderDocuments,
     railConstruire, railSynchroniser, allerA,
     totalPrimeRecrutement, primeParRecrutement, primeRecruteurTotale,

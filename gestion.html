@@ -19,8 +19,8 @@
 <meta property="og:locale"      content="fr_FR">
 <meta property="og:title"       content="Marlowe Vineyard — Espace membre">
 <meta property="og:description" content="Le panel du domaine : quotas, primes, planning, magasin. Réservé aux employés — connexion par Discord.">
-<!-- ADRESSE --> <meta property="og:url"   content="https://poulpizar01.github.io/Marlowe-Vineyard/gestion.html">
-<!-- ADRESSE --> <meta property="og:image" content="https://poulpizar01.github.io/Marlowe-Vineyard/img/banniere.png">
+<!-- ADRESSE --> <meta property="og:url"   content="https://marlowe-vineyard.fbfa.fr/gestion.html">
+<!-- ADRESSE --> <meta property="og:image" content="https://marlowe-vineyard.fbfa.fr/img/banniere.png">
 <meta property="og:image:width"  content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
@@ -3184,14 +3184,22 @@ document.querySelectorAll('.canva-carousel').forEach(c => {
   });
 });
 
+/* Trois prompt() enchaînés : ils gèlent la CEF du jeu, et ils obligeaient à
+   répondre à trois fenêtres l'une après l'autre sans pouvoir revenir en
+   arrière. Un seul formulaire fait les deux mieux — et askForm() vit dans
+   marlowe-actions.js, d'où le passage par window. */
 document.querySelectorAll('[data-add-slide]').forEach(btn => {
-  btn.addEventListener('click', () => {
+  btn.addEventListener('click', async () => {
     const key = btn.dataset.addSlide;
-    const title = prompt('Titre du slide ?');
-    if(!title) return;
-    const embedUrl = prompt('Lien d\'intégration Canva (URL "embed", optionnel) ?') || null;
-    const desc = prompt('Description courte ?') || '';
-    catalogueSlides[key].push({title, desc, embedUrl});
+    const A = window.MarloweActions;
+    if (!A || !A.askForm) return;
+    const r = await A.askForm('Ajouter une diapositive', [
+      { key: 'title',    label: 'Titre' },
+      { key: 'desc',     label: 'Description courte' },
+      { key: 'embedUrl', label: 'Lien d\'intégration Canva (facultatif)' },
+    ], 'Le lien Canva doit être une adresse « embed ». Laissez-le vide si la diapositive n\'en a pas.');
+    if (!r || !r.title) return;
+    catalogueSlides[key].push({ title: r.title, desc: r.desc || '', embedUrl: r.embedUrl || null });
     catalogueIndex[key] = catalogueSlides[key].length - 1;
     renderCatalogue(key);
   });
