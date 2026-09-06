@@ -5495,7 +5495,10 @@ window.onload = function(){
   async function envoyerFichier(file) {
     const cfg = cfgAuth();
     const tok = jeton();
-    if (!cfg.API_BASE || !tok) throw new Error('connectez-vous au panel avant de déposer un visuel');
+    /* On ne teste QUE le jeton : une API_BASE vide n'est pas une absence de
+       configuration, c'est « l'API est sur la même origine que le panel ».
+       Les confondre bloquerait le dépôt de visuel sur le futur montage. */
+    if (!tok) throw new Error('connectez-vous au panel avant de déposer un visuel');
 
     const blob = await reduireImage(file);
     const res = await fetch(cfg.API_BASE + '/api/upload', {
@@ -9306,7 +9309,8 @@ window.onload = function(){
   async function apiInvites(methode, corps) {
     const cfg = cfgAuth();
     const tok = jeton();
-    if (!cfg.API_BASE || !tok) throw new Error('connectez-vous au panel');
+    /* Voir plus haut : API_BASE vide = même origine, pas « non configuré ». */
+    if (!tok) throw new Error('connectez-vous au panel');
     const res = await fetch(cfg.API_BASE + '/api/invites', {
       method: methode,
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tok },
@@ -9529,7 +9533,7 @@ window.onload = function(){
     dire('Concordance', adresseConnue(location.origin)
       ? 'oui' : 'NON — le navigateur bloquera tout');
     dire('Mode', cfg.MODE || '—');
-    dire('Adresse du serveur', cfg.API_BASE || '—');
+    dire('Adresse du serveur', cfg.API_BASE || 'la même que le panel (même origine)');
     dire('Jeton de session', tok ? 'présent' : 'ABSENT — reconnectez-vous');
 
     /* 1. le serveur répond-il tout court ? */

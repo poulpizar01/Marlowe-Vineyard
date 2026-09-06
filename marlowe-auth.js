@@ -62,7 +62,15 @@
        choisir « Patron » et entrer dans le panel.                            */
     MODE: 'discord',
 
-    /* Adresse du backend Cloudflare Worker. */
+    /* Adresse du backend.
+       ---------------------------------------------------------------------
+       Une chaîne VIDE est une valeur légitime, et ce sera la bonne le jour où
+       l'API tournera sur la même machine que le site : les appels deviennent
+       « /api/… », donc de même origine. Ce jour-là, CORS disparaît entièrement
+       — plus de liste blanche à tenir, plus de requête préalable, et plus la
+       panne classique « ça marche en curl mais pas dans le navigateur ».
+       Il n'y aura rien d'autre à changer : tout le panel construit ses appels
+       par concaténation, et '' + '/api/data' vaut '/api/data'. */
     API_BASE: 'https://marlowe-api.marlowe-vineyard.workers.dev',
 
     /* Rôles Discord qui donnent les pleins pouvoirs (accès à tout +

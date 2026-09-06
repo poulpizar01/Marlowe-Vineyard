@@ -60,8 +60,10 @@ change de type selon le point d'entrée), clé sur `discord_id` et jamais sur
 `sub`, et **aucune création de compte** — un joueur inconnu de notre registre
 est refusé avec la marche à suivre.
 
-Il nous reste à honorer `?next=` avec validation stricte du chemin relatif, ce
-que nous ferons une fois l'hébergement décidé.
+`?next=` est également honoré, avec validation stricte : chemin relatif
+uniquement, refus de `//hôte`, de l'antislash, des caractères de contrôle et
+de nos propres routes de passage — 32 vérifications sur ce seul point, pour ne
+pas transformer l'endpoint en redirection ouverte.
 
 **L'URL publique de l'endpoint vous sera donnée dès que nous serons hébergés
 chez vous** — la donner maintenant ne servirait à rien puisqu'elle ne pourrait
