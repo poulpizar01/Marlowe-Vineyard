@@ -3677,6 +3677,10 @@ const tombolaParticipants = [];
 </script>
 <script src="marlowe-data.js"></script>
 <script src="marlowe-actions.js"></script>
+<!-- L'intégration à l'ordinateur en jeu. Ne charge les scripts de l'opérateur
+     QUE si le panel est réellement dans une iframe : sur le web public ils ne
+     servent à rien, et un script tiers a accès au jeton de session. -->
+<script src="marlowe-folkos.js"></script>
 <!-- Habille les listes déroulantes : un <select> ouvert est dessiné par
      Windows, pas par la page, et aucune règle CSS ne l'atteint. -->
 <script src="marlowe-liste.js"></script>
