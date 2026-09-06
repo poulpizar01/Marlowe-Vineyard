@@ -107,7 +107,7 @@
 
   /* « Émilio » doit se trouver en tapant « emilio ». */
   const norme = s => String(s == null ? '' : s)
-    .toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    .normalize('NFKD').toLowerCase().replace(/[\u0300-\u036f]/g, '');
 
   const echap = s => String(s == null ? '' : s).replace(/[&<>"']/g,
     c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

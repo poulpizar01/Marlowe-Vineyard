@@ -1523,8 +1523,8 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
   /* Deux personnes peuvent écrire « Résp. Magasin », « resp magasin »
      ou « Resp. Magasin  ». On compare donc sur une forme neutre :
      minuscules, sans accents, sans ponctuation.                      */
-  const clef = s => String(s || '').toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  const clef = s => String(s || '').normalize('NFKD').toLowerCase()
+    .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, ' ').trim();
 
   function poser(membres){

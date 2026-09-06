@@ -270,7 +270,7 @@
   /* Enlève emojis, séparateurs et accents pour comparer sur le fond. */
   function normalizeRole(name) {
     return String(name)
-      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .normalize('NFKD').replace(/[̀-ͯ]/g, '')
       .toLowerCase()
       .replace(/[^a-z ]+/g, ' ')
       .replace(/\s+/g, ' ')
@@ -297,9 +297,13 @@
      décider d'un droit.
      ------------------------------------------------------------------------ */
   function clefRole(nom) {
-    return String(nom || '').toLowerCase()
-      .normalize('NFD').replace(/[̀-ͯ]/g, '')
-      .replace(/[^a-z0-9]+/g, ' ').trim();
+    /* ⚠️ NFKD, pas NFD : un rôle écrit en police fantaisie est fait d'autres
+       caractères Unicode, que NFD laisse intacts et que le filtre efface
+       tous — la clé devient vide. Le repli garantit qu'une clé vide ne peut
+       pas se produire et donc qu'un rôle exotique n'en rejoigne un autre. */
+    const base = String(nom || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    const k = base.replace(/[^a-z0-9]+/g, ' ').trim();
+    return k || base.replace(/\s+/g, ' ').trim();
   }
 
   function estRolePatronNom(nom) {

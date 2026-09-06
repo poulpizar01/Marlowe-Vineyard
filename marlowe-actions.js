@@ -697,8 +697,8 @@
     'nom', 'noms', 'employe', 'employes', 'membre', 'membres', 'name', 'joueur',
     'total', 'totaux', 'total general', 'totaux generaux', 'somme', 'cumul',
   ]);
-  const clefLigne = x => String(x == null ? '' : x).toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  const clefLigne = x => String(x == null ? '' : x)
+    .normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
     .replace(/[^a-z ]+/g, ' ').replace(/\s+/g, ' ').trim();
 
   function analyserListeRH(texte) {
@@ -5849,9 +5849,18 @@ window.onload = function(){
   /* Comparaison de noms indulgente : la session porte le pseudo Discord, le
      registre le nom RP. Accents, casse et espaces multiples ne doivent pas
      empêcher un employé de retrouver sa fiche. */
-  const clefNom = t => String(t || '').toLowerCase()
-    .normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z0-9]+/g, ' ').trim();
+  /* ⚠️ NFKD, pas NFD. Un pseudo écrit en police fantaisie (« 𝕷𝖎𝖛𝖎𝖆 𝕮𝖔𝖑𝖊 »)
+     est composé d'AUTRES caractères Unicode : NFD ne les décompose pas,
+     toLowerCase() ne les change pas, et le filtre [^a-z0-9] les effaçait tous
+     — la clé devenait vide et la personne ne retrouvait jamais sa fiche.
+     NFKD les ramène sur l'alphabet latin. Le repli final évite qu'un nom
+     entièrement hors alphabet latin donne une clé vide, car deux clés vides
+     sont égales : deux personnes différentes deviendraient la même. */
+  const clefNom = t => {
+    const base = String(t || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    const k = base.replace(/[^a-z0-9]+/g, ' ').trim();
+    return k || base.replace(/\s+/g, ' ').trim();
+  };
 
   /* Le sélecteur de « Ma semaine » n'était ouvert qu'au patron. La direction
      et les ressources humaines en ont l'usage tout autant : c'est à elles
@@ -6117,8 +6126,8 @@ window.onload = function(){
 
   /* Comparaison indulgente : « Resp. Magasin », « resp magasin » et
      « Responsable magasin » doivent tomber sur la même case. */
-  const clefPoste = t => String(t || '').toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  const clefPoste = t => String(t || '').normalize('NFKD').toLowerCase()
+    .replace(/[\u0300-\u036f]/g, '')
     .replace(/^resp(onsable)?\b\.?/, 'resp')
     .replace(/[^a-z0-9]+/g, ' ').trim();
 
@@ -7150,8 +7159,8 @@ window.onload = function(){
   };
 
   function railSlug(titre) {
-    const k = String(titre || '').toLowerCase()
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    const k = String(titre || '').normalize('NFKD').toLowerCase()
+      .replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9]+/g, ' ').trim();
     if (k.startsWith('rh')) return 'rh';
     if (k.startsWith('commerce')) return 'commerce';
@@ -8898,15 +8907,27 @@ window.onload = function(){
     };
 
     const ouverts = [], oublies = [];
+    /* Ce panneau annonce QUI est en service, pas combien de lignes traînent.
+       Une même personne peut avoir plusieurs lignes ouvertes — c'était le cas
+       tant que sa clé de nom sortait vide : le bouton ne se retournait jamais
+       et chaque clic en ouvrait une de plus. On ne garde que la plus ancienne,
+       celle qui porte l'heure réelle de la prise de service. Sinon le compteur
+       annonçait « 4 en service » pour une seule personne. */
+    const parPersonne = new Map();
     lignes.forEach(s => {
       if (!s || s.end || !s.nom) return;
+      const k = clefNom(s.nom);
       const min = minutesDepuis(s.date, s.start);
-      const fiche = roster.find(f => clefNom(f.name) === clefNom(s.nom));
-      const item = {
+      const vu = parPersonne.get(k);
+      if (vu && !(min !== null && vu.minutes !== null && min > vu.minutes)) return;
+      const fiche = roster.find(f => clefNom(f.name) === k);
+      parPersonne.set(k, {
         nom: s.nom, poste: fiche ? fiche.poste : '', depuis: s.start,
         date: s.date, minutes: min,
-      };
-      if (min !== null && min > SERVICE_OUBLI_MIN) oublies.push(item);
+      });
+    });
+    parPersonne.forEach(item => {
+      if (item.minutes !== null && item.minutes > SERVICE_OUBLI_MIN) oublies.push(item);
       else ouverts.push(item);
     });
     ouverts.sort((a, b) => (b.minutes || 0) - (a.minutes || 0));

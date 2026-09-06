@@ -27,7 +27,7 @@ const DISCORD = 'https://discord.com/api/v10';
    correction serveur n'a rien changé, on la lit.
 
    À tenir en phase avec version.json à chaque déploiement. */
-const VERSION = '1.46.0';
+const VERSION = '1.47.0';
 const SESSION_TTL = 60 * 60 * 24 * 7;   // 7 jours
 const STATE_TTL   = 600;                // 10 minutes
 
@@ -300,9 +300,12 @@ function bearer(request) {
    emoji ni ponctuation — mais toujours en ÉGALITÉ, jamais en « contient » :
    un rôle « Sous-Patron » ne doit pas ouvrir les portes du patron. */
 function clefRole(nom) {
-  return String(nom || '').toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, ' ').trim();
+  /* \u26a0\ufe0f NFKD, pas NFD \u2014 voir clefNom() plus bas. Doit rester identique, au
+     caract\u00e8re pr\u00e8s, \u00e0 clefRole() du panel : sinon le panel afficherait une
+     chose et le serveur en d\u00e9ciderait une autre. */
+  const base = String(nom || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const k = base.replace(/[^a-z0-9]+/g, ' ').trim();
+  return k || base.replace(/\s+/g, ' ').trim();
 }
 
 function patronRoles(env) {
@@ -1983,9 +1986,14 @@ function nombreFr(x) {
    personne ; c'est tout ce que cette fonction promet. Le reste — les surnoms,
    les noms changés en cours de route — passe par les alias. */
 function clefNom(x) {
-  return String(x || '')
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  /* \u26a0\ufe0f NFKD, pas NFD : un pseudo en police fantaisie (\u00ab \ud835\udd77\ud835\udd8e\ud835\udd9b\ud835\udd8e\ud835\udd86 \ud835\udd6e\ud835\udd94\ud835\udd91\ud835\udd8a \u00bb) est
+     fait d'autres caract\u00e8res Unicode, que NFD ne touche pas. Le filtre les
+     effa\u00e7ait tous et la cl\u00e9 devenait vide. Repli si elle l'est quand m\u00eame \u2014
+     deux cl\u00e9s vides sont \u00e9gales, et deux personnes ne doivent jamais l'\u00eatre.
+     Doit rester identique \u00e0 clefNom() du panel. */
+  const base = String(x || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const k = base.replace(/[^a-z0-9]+/g, ' ').trim();
+  return k || base.replace(/\s+/g, ' ').trim();
 }
 
 /* Un message Discord → une vente, ou null.

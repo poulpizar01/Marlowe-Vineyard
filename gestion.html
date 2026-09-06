@@ -2135,8 +2135,8 @@ const DASH_PAS_UN_EMPLOYE = new Set([
 ]);
 
 function dashClef(x){
-  return String(x == null ? '' : x).toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  return String(x == null ? '' : x)
+    .normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
     .replace(/[^a-z ]+/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
@@ -3571,10 +3571,24 @@ function durationStr(mins){ return `${Math.floor(mins / 60)}h${pad2(mins % 60)}`
    affichées à part plutôt que comptées au hasard, et disparaîtront d'elles-
    mêmes à la clôture du lundi, qui remet les heures à zéro.
    -------------------------------------------------------------------------- */
+/* ⚠️ NFKD, pas NFD — la différence n'est pas cosmétique.
+   Un pseudo Discord écrit dans une police fantaisie (« 𝕷𝖎𝖛𝖎𝖆 𝕮𝖔𝖑𝖊 ») n'est
+   pas du texte décoré : ce sont d'AUTRES caractères Unicode. NFD ne les
+   touche pas, toLowerCase() non plus, et le filtre [^a-z0-9] les effaçait
+   tous — la clé devenait VIDE. Conséquence vécue : la personne pouvait
+   prendre son service (la ligne partait bien avec son nom) mais ne se
+   retrouvait jamais elle-même, donc le bouton restait sur « Prise de
+   service » et chaque clic ouvrait une ligne de plus, sans jamais pouvoir
+   les fermer. NFKD ramène ces caractères sur l'alphabet latin.
+   Le repli en fin de fonction couvre le reste : un nom entièrement hors
+   alphabet latin (emoji, CJK) donnerait encore une clé vide, et deux clés
+   vides sont égales — deux personnes différentes deviendraient la même. */
 function serviceClef(t){
-  return String(t || '').toLowerCase()
-    .normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z0-9]+/g, ' ').trim();
+  const base = String(t || '')
+    .normalize('NFKD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase();
+  const k = base.replace(/[^a-z0-9]+/g, ' ').trim();
+  return k || base.replace(/\s+/g, ' ').trim();
 }
 function serviceMonNom(){
   const s = window.MarloweSession;
@@ -3589,8 +3603,22 @@ function serviceMiens(){
    bouton — pas une variable de page. Avant, un simple rechargement remettait
    le bouton sur « Prise de service » alors que la ligne restait ouverte : le
    clic suivant ouvrait donc une DEUXIÈME ligne, et les heures doublaient. */
+function serviceOuverts(){
+  return serviceMiens().filter(s => !s.end);
+}
+/* Le PLUS ANCIEN service ouvert, s'il y en a un. Le plus ancien et pas le
+   dernier : quand plusieurs lignes traînent, c'est la première qui porte
+   l'heure réelle de la prise de service. */
 function serviceOuvert(){
-  return serviceMiens().find(s => !s.end) || null;
+  const ouverts = serviceOuverts();
+  if(!ouverts.length) return null;
+  /* Le tri se fait sur AAAAMMJJHHMM : « 06/09/2026 » se compare mal tel quel
+     — le 06/09 passerait avant le 31/08. */
+  const rang = s => {
+    const [j, m, a] = String(s.date || '').split('/');
+    return `${a || ''}${m || ''}${j || ''}${String(s.start || '').replace(':', '')}`;
+  };
+  return ouverts.slice().sort((a, b) => rang(a).localeCompare(rang(b)))[0];
 }
 
 function renderServiceHistory(){
@@ -3645,6 +3673,12 @@ document.getElementById('serviceBtn').addEventListener('click', () => {
     serviceHistory.push({ nom, date: todayFR(), start: nowHM(), end: null });
   } else {
     ouvert.end = nowHM();
+    /* Ménage des doublons laissés par le bug de clé vide : tant que la
+       personne ne se reconnaissait pas, chaque clic ouvrait une ligne de
+       plus. On ne les supprime pas — on les solde à leur propre heure de
+       début, donc 0h00. Elles restent visibles dans l'historique, et elles
+       ne gonflent le total de personne. */
+    serviceOuverts().forEach(s => { if(s !== ouvert) s.end = s.start; });
   }
   renderServiceHistory();
 
