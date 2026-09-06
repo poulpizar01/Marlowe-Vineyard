@@ -6102,27 +6102,26 @@ window.onload = function(){
   window.renderMaSemaine = renderMaSemaine;
 
 /* ==========================================================================
-   PRISE DE SERVICE — réservée aux postes qui pointent
+   PRISE DE SERVICE — ouverte à tout le domaine
    --------------------------------------------------------------------------
-   Un saisonnier, un ouvrier viticole, un chef de culture ne pointent pas : leur
-   semaine se mesure en vins, pas en heures — c'est le quota qui les juge.
-   Le pointage concerne la vente, le commerce, le magasin, les RH et la
-   direction, dont le travail ne se compte pas en production.
-   ========================================================================== */
+   Il y avait ici une liste de postes autorisés à pointer, écrite en dur. Elle
+   avait deux défauts, et le second est celui qui l'a condamnée :
 
-  const POSTES_SERVICE = [
-    /* vente */
-    'Vendeur', 'Vendeuse',
-    /* commerce */
-    'Commercial', 'Resp. Commercial', 'Responsable Commercial',
-    /* magasin */
-    'Assistant(e) magasin', 'Assistant magasin', 'Assistante magasin',
-    'Resp. Magasin', 'Responsable Magasin',
-    /* ressources humaines */
-    'RH', 'DRH', 'Resp. RH', 'Responsable RH',
-    /* la direction pointe aussi — et le patron passe de toute façon */
-    'Resp. des Responsables Runner', 'Responsable Général', 'Resp. Général', 'Patron', 'Co-Patron',
-  ];
+     · les runners n'y figuraient pas du tout — ni Runner, ni Resp. Runner.
+       Un responsable runner ne voyait donc simplement pas le panneau, alors
+       que « En service maintenant », dans Com Runner, existe précisément pour
+       montrer qui est de garde ;
+
+     · et surtout, elle disait la même chose que les Réglages, en moins bien.
+       Le quota d'heures se règle DÉJÀ grade par grade dans Réglages. Deux
+       endroits qui décident du même sujet finissent toujours par se
+       contredire : un poste pouvait se voir fixer un quota d'heures et se
+       voir refuser le bouton pour le remplir.
+
+   Décision : tout le monde peut prendre son service. Ce qui distingue les
+   postes, c'est le quota d'heures des Réglages — un grade à 0 n'a pas de
+   barre à remplir, il garde simplement la possibilité de pointer.
+   ========================================================================== */
 
   /* Comparaison indulgente : « Resp. Magasin », « resp magasin » et
      « Responsable magasin » doivent tomber sur la même case. */
@@ -6131,7 +6130,6 @@ window.onload = function(){
     .replace(/^resp(onsable)?\b\.?/, 'resp')
     .replace(/[^a-z0-9]+/g, ' ').trim();
 
-  const SERVICE_OK = POSTES_SERVICE.map(clefPoste);
 
   /* ==========================================================================
      Consulter la fiche de quelqu'un d'autre
@@ -6184,17 +6182,11 @@ window.onload = function(){
     return !!(f && admis.includes(clefPoste(f.poste)));
   }
 
+  /* Le panneau de pointage est ouvert à tout le domaine — voir la note en tête
+     de section. La fonction reste, parce qu'elle nomme l'intention et que
+     c'est ici qu'une restriction se remettrait, à un seul endroit. */
   function peutPointer() {
-    const s = window.MarloweSession;
-    if (!s) return true;                       /* hors connexion : on n'entrave rien */
-    if (s.isPatron || s.isOwner) return true;  /* la direction voit tout */
-
-    if ((s.roles || []).some(r => SERVICE_OK.includes(clefPoste(r)))) return true;
-
-    const moi = clefPoste(s.name);
-    const fiche = (typeof rhRosterData !== 'undefined' ? rhRosterData : [])
-      .find(e => clefPoste(e.name) === moi);
-    return !!(fiche && SERVICE_OK.includes(clefPoste(fiche.poste)));
+    return true;
   }
 
   function appliquerAccesService() {

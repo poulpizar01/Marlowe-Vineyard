@@ -43,8 +43,14 @@ for (const [nom, motif] of [
   ['les sceaux',         "'Resp. des Responsables Runner': 'gold'"],
 ]) T(nom, SRC.includes(motif), motif);
 
+/* Deux listes de droits, et non plus trois : POSTES_SERVICE — qui disait qui
+   avait le droit de pointer — a été supprimée en 1.86.0. Elle contredisait les
+   Réglages, où le quota d'heures se fixe déjà grade par grade, et elle oubliait
+   les runners. Le pointage est désormais ouvert à tout le domaine. */
 const nDroits = (SRC.match(/'Resp\. des Responsables Runner', 'Responsable Général'/g) || []).length;
-T('les trois listes de droits le connaissent', nDroits === 3, nDroits);
+T('les deux listes de droits le connaissent', nDroits === 2, nDroits);
+T('la liste des postes autorisés à pointer a bien disparu',
+  !SRC.includes('POSTES_SERVICE') && !SRC.includes('SERVICE_OK'));
 T('l\'ancien libellé est conservé partout où une fiche peut encore le porter',
   SRC.includes("'Responsable Général': 'direction'") && SRC.includes("'Responsable Général': 'gold'"));
 
