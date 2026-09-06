@@ -27,7 +27,7 @@ const DISCORD = 'https://discord.com/api/v10';
    correction serveur n'a rien changé, on la lit.
 
    À tenir en phase avec version.json à chaque déploiement. */
-const VERSION = '1.45.0';
+const VERSION = '1.46.0';
 const SESSION_TTL = 60 * 60 * 24 * 7;   // 7 jours
 const STATE_TTL   = 600;                // 10 minutes
 
@@ -35,16 +35,76 @@ const STATE_TTL   = 600;                // 10 minutes
    Utilitaires
    --------------------------------------------------------------------------- */
 
-function allowedOrigin(env) {
-  try { return new URL(env.SITE_URL).origin; } catch (e) { return '*'; }
+/* --------------------------------------------------------------------------
+   LES ORIGINES AUTORISÉES — plusieurs, le temps d'un déménagement
+   --------------------------------------------------------------------------
+   Une seule origine était déduite de SITE_URL. Ça marche tant que le panel ne
+   bouge pas, mais ça pose un piège au moment d'un changement d'adresse : à la
+   seconde où SITE_URL change, l'ANCIENNE adresse cesse d'être autorisée et
+   tout le monde qui l'a encore ouverte se retrouve devant un panel qui ne
+   charge plus rien — sans message clair, parce qu'un refus CORS ne dit jamais
+   pourquoi. Et l'inverse est vrai si on déploie avant que le DNS ne réponde.
+
+   SITE_URLS lève ce piège : on autorise l'ancienne ET la nouvelle pendant la
+   migration, on retire l'ancienne quand tout le monde est passé. SITE_URL
+   reste l'adresse PRINCIPALE — celle vers laquelle on renvoie après une
+   connexion —, les autres ne servent qu'à autoriser l'appel.
+   -------------------------------------------------------------------------- */
+function originesAutorisees(env) {
+  const brut = [env.SITE_URL, ...String(env.SITE_URLS || '').split(',')];
+  const out = [];
+  for (const u of brut) {
+    const t = String(u || '').trim();
+    if (!t) continue;
+    try { out.push(new URL(t).origin); } catch (e) { /* entrée illisible : ignorée */ }
+  }
+  return [...new Set(out)];
 }
 
-function corsHeaders(env) {
+/* On renvoie l'origine DEMANDÉE quand elle est dans la liste, pas la liste
+   entière : l'en-tête CORS n'accepte qu'une seule valeur, et renvoyer autre
+   chose que l'origine de l'appelant revient à ne rien autoriser du tout. */
+function allowedOrigin(env, request) {
+  const liste = originesAutorisees(env);
+  const demandee = request && request.headers ? request.headers.get('Origin') : null;
+  if (demandee && liste.includes(demandee)) return demandee;
+  return liste[0] || '*';
+}
+
+/* --------------------------------------------------------------------------
+   Poser la bonne origine sur la réponse, au tout dernier moment
+   --------------------------------------------------------------------------
+   json() est appelé à plus de cent endroits, sans la requête sous la main.
+   Plutôt que de la faire passer partout — cent occasions de se tromper — on
+   corrige l'en-tête UNE fois, à la sortie, là où la requête est forcément
+   connue.
+
+   Une variable de module qui retiendrait « l'origine en cours » serait plus
+   courte et FAUSSE : un Worker traite plusieurs requêtes en parallèle dans le
+   même isolat, et deux appels qui s'entrelacent sur un await se voleraient
+   leur origine. Le bug ne se verrait qu'en charge, donc jamais en test.
+   -------------------------------------------------------------------------- */
+function ajusterCors(reponse, request, env) {
+  const bonne = allowedOrigin(env, request);
+  const actuelle = reponse.headers.get('Access-Control-Allow-Origin');
+  if (!actuelle || actuelle === bonne) return reponse;
+  /* Les en-têtes d'une Response sont figés : on en refait une. Le corps est
+     transmis tel quel, sans être relu — pas de copie en mémoire. */
+  const h = new Headers(reponse.headers);
+  h.set('Access-Control-Allow-Origin', bonne);
+  h.set('Vary', 'Origin');
+  return new Response(reponse.body, { status: reponse.status, headers: h });
+}
+
+function corsHeaders(env, request) {
   return {
-    'Access-Control-Allow-Origin': allowedOrigin(env),
+    'Access-Control-Allow-Origin': allowedOrigin(env, request),
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
     'Access-Control-Max-Age': '86400',
+    /* Vary: Origin est OBLIGATOIRE dès qu'on répond selon l'appelant. Sans
+       lui, un cache placé devant servirait à l'un la réponse taillée pour
+       l'autre, et l'accès casserait de façon parfaitement aléatoire. */
     'Vary': 'Origin',
   };
 }
@@ -57,7 +117,13 @@ function json(env, data, status = 200) {
 }
 
 /* Page d'erreur lisible (le membre arrive ici depuis Discord, pas en fetch) */
-function errorPage(title, message, env) {
+/* `statut` par défaut à 403 : c'était la seule valeur possible avant, et
+   toutes les pages d'erreur existantes doivent continuer de la rendre.
+   Il devient réglable pour une raison précise : « FolkOS ne répond pas »
+   n'est PAS un refus. Un 403 dit « vos identifiants sont mauvais, cessez
+   d'insister », là où il faudrait dire « réessayez plus tard ». La nuance
+   compte le jour où quelqu'un surveille ces codes. */
+function errorPage(title, message, env, statut = 403) {
   const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title>
 <style>
@@ -76,7 +142,7 @@ function errorPage(title, message, env) {
   <div class="crest">MV</div><h1>${title}</h1><p>${message}</p>
   <a href="${env.SITE_URL}">Retour au site</a>
 </div></body></html>`;
-  return new Response(html, { status: 403, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+  return new Response(html, { status: statut, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 }
 
 /* ---------------------------------------------------------------------------
@@ -471,6 +537,126 @@ async function handleCallback(request, env, url) {
     id:     me.id,
     name:   (member && member.nick) || me.global_name || me.username,
     avatar: me.avatar ? `https://cdn.discordapp.com/avatars/${me.id}/${me.avatar}.png?size=64` : null,
+  }), { expirationTtl: SESSION_TTL });
+
+  const dest = env.SITE_URL.replace(/\/+$/, '') + '/gestion.html#token=' + sid;
+  return Response.redirect(dest, 302);
+}
+
+/* ==========================================================================
+   GET /api/folkos?folkos_ticket=…  —  connexion par le SSO du serveur de jeu
+   --------------------------------------------------------------------------
+   Le joueur clique « Se connecter avec FolkOS » depuis le jeu. FolkOS le
+   renvoie ici avec un TICKET à usage unique, valable environ 90 secondes.
+
+   La règle absolue, et elle vient de leur documentation autant que du bon
+   sens : ON NE FAIT JAMAIS CONFIANCE AU TICKET. Il arrive par l'URL, donc par
+   le navigateur, donc de n'importe qui. On l'échange contre une identité
+   auprès de FolkOS, serveur à serveur, avec notre secret — et c'est la
+   RÉPONSE de FolkOS, elle seule, qui dit qui est là.
+
+   Ce que cette route ne fait PAS, volontairement :
+
+     · elle ne crée aucun compte. Un SSO dit « cette personne est bien
+       untel » ; il ne dit pas « untel a le droit d'entrer au domaine ». Un
+       joueur inconnu du registre est refusé, poliment. Sans cette règle,
+       n'importe quel joueur du serveur entrerait dans le panel RH ;
+
+     · elle ne décide d'aucun droit. Les permissions restent adossées aux
+       RÔLES DISCORD, relus à chaque appel comme pour une connexion normale.
+       C'est possible parce que la fiche du registre porte l'identifiant
+       Discord de l'employé : le SSO nous donne QUI, le Discord donne QUOI.
+
+   La session délivrée est exactement la même que par la voie Discord — même
+   forme, même durée, même jeton dans l'URL de retour. Une seule sorte de
+   session à comprendre, et donc à sécuriser.
+   ========================================================================== */
+async function handleFolkos(request, env, url) {
+  for (const cle of ['FOLKOS_ID_BASE', 'FOLKOS_CLIENT_ID', 'FOLKOS_CLIENT_SECRET']) {
+    if (!env[cle]) {
+      return errorPage('Connexion FolkOS indisponible',
+        `Le domaine n'a pas encore été configuré pour FolkOS (${cle} manquant). `
+        + 'Prévenez le développeur du site.', env);
+    }
+  }
+
+  const ticket = url.searchParams.get('folkos_ticket');
+  if (!ticket) {
+    return errorPage('Connexion refusée',
+      "Aucun ticket n'a été transmis. Relancez la connexion depuis le jeu.", env);
+  }
+
+  /* L'échange. On borne le temps d'attente : un SSO qui ne répond pas doit
+     donner une page lisible en quelques secondes, pas une roue qui tourne. */
+  let data;
+  try {
+    const r = await fetch(String(env.FOLKOS_ID_BASE).replace(/\/+$/, '') + '/sso/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_id:     env.FOLKOS_CLIENT_ID,
+        client_secret: env.FOLKOS_CLIENT_SECRET,
+        token:         ticket,
+      }),
+      signal: AbortSignal.timeout(8000),
+    });
+    data = await r.json().catch(() => null);
+    if (!r.ok || !data || data.valid !== true || !data.identity) {
+      return errorPage('Connexion refusée',
+        "FolkOS n'a pas reconnu ce ticket. Ils ne sont valables qu'une minute et demie, "
+        + 'et une seule fois : relancez la connexion depuis le jeu.', env);
+    }
+  } catch (e) {
+    return errorPage('FolkOS injoignable',
+      "Le service de connexion du serveur n'a pas répondu. Réessayez dans un instant, "
+      + 'ou passez par la connexion Discord habituelle.', env, 502);
+  }
+
+  const identite = data.identity || {};
+  /* unique_id est un ENTIER côté FolkOS. Notre registre ne manipule que du
+     texte : on convertit ici, une fois, plutôt que de comparer un nombre à
+     une chaîne quelque part plus bas — comparaison qui échoue en silence. */
+  const discordId = identite.discord_id ? String(identite.discord_id) : '';
+  const uniqueId  = (identite.unique_id === 0 || identite.unique_id)
+    ? String(identite.unique_id) : '';
+
+  /* On cherche la fiche. L'identifiant Discord d'abord : c'est le seul lien
+     que le registre porte déjà, et c'est lui qui fera fonctionner les droits
+     ensuite. `unique_id` sert de second recours pour le jour où le registre
+     le stockera — la fiche peut le ranger dans son champ `uid`. */
+  const donnees = await base(env).get('data', 'json') || {};
+  const roster = Array.isArray(donnees.rhRoster) ? donnees.rhRoster : [];
+  const fiche = roster.find(f => f && discordId && String(f.discord || '') === discordId)
+    || (uniqueId ? roster.find(f => f && String(f.uid || '') === uniqueId) : null);
+
+  const proprietaire = discordId && ownerIds(env).includes(discordId);
+
+  if (!fiche && !proprietaire) {
+    return errorPage('Accès réservé au personnel',
+      "Votre compte est bien reconnu par le serveur, mais aucune fiche du domaine ne lui "
+      + "correspond. Si vous venez d'être recruté, demandez aux ressources humaines "
+      + "d'inscrire votre identifiant Discord sur votre fiche — c'est lui qui fait le lien.",
+      env);
+  }
+
+  /* Sans identifiant Discord, on ne pourra relire aucun rôle : la personne
+     entrerait sans aucun droit et ne comprendrait pas pourquoi. Mieux vaut le
+     dire tout de suite, et nommer le remède. */
+  if (!discordId) {
+    return errorPage('Identifiant Discord manquant',
+      "FolkOS ne nous transmet pas votre identifiant Discord, et c'est lui qui porte vos "
+      + 'droits dans le panel. Passez par la connexion Discord habituelle.', env);
+  }
+
+  /* Le nom affiché : celui du registre s'il existe — c'est le nom RP que tout
+     le panel utilise —, sinon celui que donne FolkOS. */
+  const nom = (fiche && fiche.name)
+    || [identite.given_name, identite.family_name].filter(Boolean).join(' ').trim()
+    || identite.name || 'Employé';
+
+  const sid = crypto.randomUUID();
+  await base(env).put('sess:' + sid, JSON.stringify({
+    id: discordId, name: nom, avatar: null, via: 'folkos',
   }), { expirationTtl: SESSION_TTL });
 
   const dest = env.SITE_URL.replace(/\/+$/, '') + '/gestion.html#token=' + sid;
@@ -2583,6 +2769,10 @@ export default {
   },
 
   async fetch(request, env, ctx) {
+    return ajusterCors(await this.repondre(request, env, ctx), request, env);
+  },
+
+  async repondre(request, env, ctx) {
     const url = new URL(request.url);
 
     if (request.method === 'OPTIONS') {
@@ -2632,6 +2822,7 @@ export default {
         });
         case '/api/login':       return await handleLogin(request, env, url);
         case '/api/callback':    return await handleCallback(request, env, url);
+        case '/api/folkos':      return await handleFolkos(request, env, url);
         case '/api/me':          return await handleMe(request, env);
         case '/api/roles':       return await handleRoles(request, env);
         case '/api/permissions': return await handlePermissions(request, env);

@@ -11,7 +11,23 @@ compatibility_date = "2026-01-01"
 DISCORD_GUILD_ID = "932301610128912414"
 
 # Adresse publique du site, SANS slash final.
+# C'est l'adresse PRINCIPALE : celle vers laquelle on renvoie après une
+# connexion. Le jour de la bascule sur le nouveau domaine, c'est cette ligne
+# qu'il faut changer — mais SEULEMENT une fois que le DNS répond, sinon les
+# connexions repartent vers une adresse qui n'existe pas encore.
 SITE_URL = "https://poulpizar01.github.io/Marlowe-Vineyard"
+
+# Les autres adresses autorisées à appeler l'API, séparées par des virgules.
+# ---------------------------------------------------------------------------
+# Elles existent pour le déménagement. Sans elles, changer SITE_URL retirait
+# à la seconde l'autorisation de l'ANCIENNE adresse : tous ceux qui l'avaient
+# encore ouverte se retrouvaient devant un panel qui ne charge plus rien, sans
+# message clair — un refus CORS ne dit jamais pourquoi.
+#
+# Pendant la migration, les deux sont autorisées. Une fois tout le monde passé
+# sur le nouveau domaine, retirer l'ancienne d'ici : une origine autorisée
+# qui ne sert plus est une porte laissée ouverte pour rien.
+SITE_URLS = "https://poulpizar01.github.io,https://marlowe-vineyard.fbfa.fr"
 
 # Rôles Discord qui donnent les pleins pouvoirs, séparés par des virgules.
 PATRON_ROLES = "Patron,Co-Patron"
@@ -26,6 +42,26 @@ OWNER_IDS = "826526979204841482,186397473374208000"
 # il retient celui où l'identifiant Discord de l'employé a une permission
 # posée à son nom. Clic droit sur la catégorie ▸ « Copier l'identifiant ».
 DISCORD_TICKET_CATEGORIES = "1489223949790216303,1489222452495122484,1490079726038024222,1489223226931417208,1490802701846577202"
+
+# ---------------------------------------------------------------------------
+# FolkOS — le SSO du serveur de jeu (« Se connecter avec FolkOS »)
+# ---------------------------------------------------------------------------
+# Le joueur arrive depuis le jeu avec un ticket à usage unique, valable ~90 s.
+# Le Worker l'échange contre une identité auprès de FolkOS, serveur à serveur.
+#
+# L'adresse à donner à l'hébergeur, une fois déployé :
+#     https://marlowe-api.marlowe-vineyard.workers.dev/api/folkos
+#
+# ⚠️ Ces deux valeurs ne sont PAS des secrets et peuvent rester ici. Le
+#    CLIENT SECRET, lui, ne doit JAMAIS figurer dans ce fichier : il est dans
+#    le dépôt GitHub, qui est public. Il se pose une seule fois, en aveugle :
+#        npx wrangler secret put FOLKOS_CLIENT_SECRET
+#    (la commande demande la valeur sans l'afficher ni l'enregistrer nulle part)
+#
+# Laisser vide = la route répond une page « connexion FolkOS indisponible »
+# et rien d'autre ne change : la connexion Discord continue de fonctionner.
+FOLKOS_ID_BASE = ""
+FOLKOS_CLIENT_ID = ""
 
 # Salon Discord où le webhook du serveur de jeu écrit les ventes.
 # Le Worker le relit tout seul toutes les deux minutes (voir [triggers] plus
