@@ -84,4 +84,193 @@
   });
 
   charger('fbfa-bridge.js');
+
+  /* =========================================================================
+     LES LIENS QUI S'OUVRENT « DANS UN NOUVEL ONGLET »
+     -------------------------------------------------------------------------
+     Dans l'ordinateur en jeu, il n'y a pas d'onglets. window.open() ne fait
+     rien, target="_blank" ne fait rien, et le téléchargement d'un fichier ne
+     fait rien non plus. Le pire, dans les trois cas, c'est le SILENCE : le
+     joueur clique, il ne se passe rien, et il croit que le panel est cassé.
+
+     Quatorze liens du site sont dans ce cas — les invitations Discord, le site
+     du réseau, les justificatifs de factures, le PDF du kit d'entretien, le
+     catalogue « en grand ».
+
+     On ne les réécrit pas un par un : on intercepte le clic, ici, et
+     uniquement quand le panel est encadré. Sur le web, ce fichier est sorti
+     depuis longtemps (voir le retour anticipé plus haut) et les liens
+     fonctionnent exactement comme avant.
+
+     Deux cas :
+       · une image  → on la montre, ici, dans la page. C'est même mieux qu'un
+                      onglet : le joueur ne perd pas sa place ;
+       · autre chose → on montre l'adresse, en clair et copiable, pour qu'il
+                      puisse l'ouvrir sur son vrai navigateur.
+     ========================================================================= */
+
+  var EST_IMAGE = /\.(png|jpe?g|gif|webp|avif|bmp|svg)(\?|#|$)/i;
+
+  var boite = null;
+
+  function fermer() {
+    if (!boite) return;
+    if (boite.parentNode) boite.parentNode.removeChild(boite);
+    boite = null;
+  }
+
+  function css(el, regles) {
+    for (var k in regles) if (Object.prototype.hasOwnProperty.call(regles, k)) {
+      el.style[k] = regles[k];
+    }
+    return el;
+  }
+
+  function bouton(texte, principal) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = texte;
+    css(b, {
+      font: '600 13px/1 system-ui, -apple-system, "Segoe UI", sans-serif',
+      padding: '10px 18px', borderRadius: '999px', cursor: 'pointer',
+      border: principal ? '1px solid #D9B872' : '1px solid rgba(255,255,255,.22)',
+      background: principal ? '#D9B872' : 'transparent',
+      color: principal ? '#0B140F' : '#F3EFE4',
+    });
+    return b;
+  }
+
+  function ouvrirBoite(titre, message, url, image) {
+    fermer();
+
+    boite = css(document.createElement('div'), {
+      position: 'fixed', inset: '0', zIndex: '2147483647',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: '24px', background: 'rgba(6,9,14,.82)',
+    });
+    boite.addEventListener('click', function (e) { if (e.target === boite) fermer(); });
+
+    var carte = css(document.createElement('div'), {
+      maxWidth: '620px', width: '100%', maxHeight: '86vh', overflow: 'auto',
+      background: '#0F141C', border: '1px solid rgba(217,184,114,.35)',
+      borderRadius: '14px', padding: '26px 26px 22px',
+      boxShadow: '0 24px 70px rgba(0,0,0,.6)',
+      font: '14px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif',
+      color: '#F3EFE4',
+    });
+
+    var h = css(document.createElement('div'), {
+      font: '500 19px/1.25 Georgia, "Times New Roman", serif',
+      marginBottom: '10px', color: '#F3EFE4',
+    });
+    h.textContent = titre;
+    carte.appendChild(h);
+
+    var p = css(document.createElement('p'), {
+      margin: '0 0 16px', color: '#A3ADBB', fontSize: '13.5px',
+    });
+    p.textContent = message;
+    carte.appendChild(p);
+
+    if (image) {
+      var img = css(document.createElement('img'), {
+        display: 'block', maxWidth: '100%', maxHeight: '54vh',
+        margin: '0 auto 16px', borderRadius: '10px',
+        border: '1px solid rgba(255,255,255,.10)',
+      });
+      img.alt = '';
+      img.src = url;
+      img.onerror = function () {
+        img.style.display = 'none';
+        p.textContent = "L'image n'a pas pu être chargée. Voici son adresse :";
+      };
+      carte.appendChild(img);
+    }
+
+    var champ = css(document.createElement('input'), {
+      width: '100%', padding: '10px 12px', borderRadius: '8px',
+      border: '1px solid rgba(255,255,255,.16)', background: '#080B0F',
+      color: '#F3EFE4', font: '12.5px/1.4 ui-monospace, Consolas, monospace',
+      marginBottom: '16px',
+    });
+    champ.type = 'text';
+    champ.readOnly = true;
+    champ.value = url;
+    champ.addEventListener('focus', function () { champ.select(); });
+    carte.appendChild(champ);
+
+    var pied = css(document.createElement('div'), {
+      display: 'flex', gap: '10px', justifyContent: 'flex-end', flexWrap: 'wrap',
+    });
+    var copier = bouton("Copier l'adresse", true);
+    copier.addEventListener('click', function () {
+      var fait = false;
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(url);
+          fait = true;
+        }
+      } catch (e) { fait = false; }
+      if (!fait) {
+        /* Le presse-papiers moderne exige un contexte sûr et une permission ;
+           dans un cadre en jeu, il n'est pas garanti. On retombe sur la
+           sélection, qui marche partout, et on le DIT au lieu de laisser
+           croire que c'est copié. */
+        champ.focus(); champ.select();
+        try { fait = document.execCommand('copy'); } catch (e2) { fait = false; }
+      }
+      copier.textContent = fait ? 'Copié ✓' : 'Sélectionné — Ctrl+C';
+    });
+    var fermerB = bouton('Fermer', false);
+    fermerB.addEventListener('click', fermer);
+    pied.appendChild(copier);
+    pied.appendChild(fermerB);
+    carte.appendChild(pied);
+
+    boite.appendChild(carte);
+    document.body.appendChild(boite);
+    champ.focus();
+  }
+
+  /* Échap ferme NOTRE fenêtre, et s'arrête là : sans ce stopPropagation, le
+     même Échap serait vu par fbfa-game.js, qui fermerait l'ordinateur en jeu
+     par-dessus le marché. */
+  document.addEventListener('keydown', function (e) {
+    if (!boite || e.key !== 'Escape') return;
+    e.preventDefault();
+    e.stopPropagation();
+    fermer();
+  }, true);
+
+  document.addEventListener('click', function (e) {
+    var a = e.target && e.target.closest ? e.target.closest('a') : null;
+    if (!a) return;
+
+    var telecharge = a.hasAttribute('download');
+    if (a.target !== '_blank' && !telecharge) return;
+
+    var url = a.href;
+    /* Un lien sans adresse, ou une ancre interne : rien à intercepter. */
+    if (!url || url.charAt(0) === '#') return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (telecharge) {
+      return ouvrirBoite(
+        'Téléchargement impossible en jeu',
+        "L'ordinateur du jeu n'enregistre pas de fichier. Copiez l'adresse et "
+        + 'ouvrez-la depuis votre navigateur habituel pour récupérer le document.',
+        url, false);
+    }
+    if (EST_IMAGE.test(url) || url.indexOf('data:image/') === 0) {
+      return ouvrirBoite('Aperçu',
+        'Le voici sans quitter le panel — en jeu, il n’y a pas de nouvel onglet.',
+        url, true);
+    }
+    ouvrirBoite('Ce lien s’ouvre hors du jeu',
+      "L'ordinateur du jeu n'a pas d'onglets. Copiez l'adresse et ouvrez-la "
+      + 'depuis votre navigateur, ou sur votre téléphone.',
+      url, false);
+  }, true);
 })();

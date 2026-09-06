@@ -60,17 +60,25 @@
      ========================================================== */
   :root{
     color-scheme:dark;
+    /* ⚠️ Aucune de ces couleurs n'est verte, et c'est volontaire.
+       Douze jetons de cette palette étaient bâtis sur du vert — le fond, les
+       cartes, les surfaces, les voiles, les vitres, jusqu'au gris du texte
+       secondaire. D'où le « je vois tout vert » des visiteurs : ce n'était pas
+       une impression, c'était la page. La base est maintenant une ardoise
+       chaude, neutre, qui laisse la couleur au ciel et à l'or. Le vert n'a pas
+       disparu du domaine : il est retourné là où il veut dire quelque chose,
+       les vignes et le sceau du grade Saisonnier. */
     --page:
       radial-gradient(ellipse 1200px 700px at 78% 8%, rgba(217,184,114,.10), transparent 60%),
-      linear-gradient(165deg, #0B140F 0%, #132A1D 48%, #1B3A26 100%);
+      linear-gradient(165deg, #090D13 0%, #10151E 48%, #161C27 100%);
     --text:#F3EFE4;
-    --muted:#9FB0A2;
+    --muted:#A3ADBB;
 
     --gold:#D9B872;
     --gold-soft:#B89858;
     --gold-btn:#D9B872;
     --gold-btn-hi:#E8C989;
-    --on-gold:#0B140F;
+    --on-gold:#090D13;
 
     --line:rgba(255,255,255,.10);
     --line-2:rgba(255,255,255,.22);
@@ -78,20 +86,40 @@
     --gold-line-2:rgba(217,184,114,.45);
     --gold-tint:rgba(217,184,114,.06);
 
-    --card:#152B1E;
-    --card-2:#1D3123;
-    --surface:linear-gradient(160deg,#16241C,#0E1712);
-    --glass:rgba(11,20,15,.6);
-    --glass-2:rgba(11,20,15,.9);
+    /* Les cartes sont désormais LÉGÈREMENT translucides : le massif se devine
+       derrière, très assombri. C'est ce qui empêche le bas de page de
+       redevenir un mur — d'une couleur ou d'une autre. */
+    --card:rgba(20,26,35,.72);
+    --card-2:rgba(28,35,46,.78);
+    --surface:linear-gradient(160deg,rgba(24,31,41,.82),rgba(13,17,24,.88));
+    --glass:rgba(9,13,19,.62);
+    --glass-2:rgba(9,13,19,.9);
     --dot:rgba(255,255,255,.18);
     --speck:rgba(217,184,114,.30);
     --shadow:0 20px 50px rgba(0,0,0,.5);
     --card-shadow:none;
-    --veil:linear-gradient(165deg, rgba(9,17,12,.92) 0%, rgba(15,34,23,.90) 45%, rgba(11,24,16,.94) 100%);
-    --veil-min:.34;
-    --page-solid:#0B140F;
-    --scrim:linear-gradient(100deg, rgba(7,14,10,.86) 0%, rgba(7,14,10,.72) 32%, rgba(7,14,10,.22) 62%, rgba(7,14,10,0) 82%);
-    --vignette:radial-gradient(ellipse 120% 92% at 50% 42%, transparent 38%, rgba(0,0,0,.42) 100%);
+    /* Le voile monte au défilement mais ne ferme jamais complètement :
+       il plafonne autour de 90 %, donc la crête reste devinable sous le
+       contenu au lieu d'être remplacée par un aplat. */
+    --veil:linear-gradient(165deg, rgba(7,10,15,.90) 0%, rgba(11,16,24,.86) 45%, rgba(7,10,15,.92) 100%);
+    /* ⚠️ Ce chiffre était réglé pour l'ANCIENNE scène — un lever de soleil très
+       clair, qu'il fallait beaucoup assombrir pour lire le texte par-dessus.
+       Le ciel qui suit l'heure est déjà sombre en haut : le même voile
+       l'éteignait entièrement, on ne voyait plus ni soleil ni crête. */
+    --veil-min:.10;
+    --page-solid:#090D13;
+    /* Le voile latéral s'arrête maintenant à 66 % et non à 82 % : il couvrait
+       encore 45 % du ciel au milieu de la page, et c'est lui — pas le voile
+       général — qui transformait le soleil de midi en disque gris. Il garde
+       toute sa force là où il sert, derrière le texte d'accueil. */
+    /* Ce voile ne sert qu'à UNE chose : garder le titre lisible sur le ciel.
+       Il était écrit en dégradé horizontal, donc il couvrait toute la hauteur
+       de la page sur sa moitié gauche — et il éteignait le soleil du matin,
+       qui est bas et à gauche. Il est maintenant une tache centrée sur le
+       texte : fort là où il y a des mots, absent partout ailleurs. */
+    --scrim:radial-gradient(ellipse 64% 78% at 6% 42%,
+      rgba(6,9,14,.90) 0%, rgba(6,9,14,.70) 40%, rgba(6,9,14,.24) 70%, rgba(6,9,14,0) 88%);
+    --vignette:radial-gradient(ellipse 122% 94% at 50% 44%, transparent 44%, rgba(0,0,0,.30) 100%);
 
     --g1:#8FBF8F;  /* Saisonnier */
     --g2:#D9B872;  /* Ouvrier viticole */
@@ -183,7 +211,7 @@
 
   .news-stage{position:relative;width:100%;max-width:400px;}
   .news-frame{width:100%;aspect-ratio:4/5;max-height:min(64vh,540px);position:relative;
-    border-radius:16px;overflow:hidden;background:#080F0B;
+    border-radius:16px;overflow:hidden;background:#080B0F;
     box-shadow:0 0 0 1px var(--gold-line), 0 34px 74px rgba(0,0,0,.5);}
   .news-frame.is-crest{border:none;background:none;box-shadow:none;overflow:visible;
     aspect-ratio:auto;max-height:none;}
@@ -344,21 +372,63 @@
      canvas. Aucune image n'est chargée, ce qui vaut à la page 800 Ko de moins
      que les photos qu'elle remplace, et un rendu net sur n'importe quel écran.
      La scène vit d'elle-même ET suit la souris. */
+  /* Le ciel n'est plus écrit ici : il est POSÉ PAR LE SCRIPT à partir de
+     l'heure qu'il est. Ce dégradé n'est donc qu'un repli — celui d'une fin de
+     journée — pour la fraction de seconde avant que le script parle, et pour
+     le cas où il ne parlerait pas. */
   .bg-scene{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;
-    background:linear-gradient(180deg,#2A1E3C 0%,#5E3A4C 22%,#8E5350 42%,
-      #C9834F 64%,#EBBB72 84%,#F4DBA0 100%);}
+    background:linear-gradient(180deg,#141A38 0%,#2A3560 26%,#8A5566 58%,
+      #C9834F 80%,#E39A5E 100%);}
   .bg-move{position:absolute;inset:-7%;will-change:transform;
     transition:transform .5s cubic-bezier(.22,.61,.36,1);}
 
   /* Placé de façon à ce que le disque affleure entre le texte et l'encart
      des nouveautés : plus à droite il disparaissait entièrement derrière. */
-  .bg-sun{position:absolute;left:50%;bottom:22%;width:min(32vw,360px);aspect-ratio:1;border-radius:50%;
-    background:radial-gradient(circle,#FFF6D6 0%,#FFD97A 42%,rgba(255,200,90,.35) 62%,rgba(255,190,80,0) 74%);
+  /* Le soleil est un point d'ancrage vide, que le script déplace sur l'arc du
+     jour ; le halo et le disque pendent dessous. Deux pièces et non une :
+     un simple dégradé flou ne fait pas un soleil, il fait une tache. C'est le
+     bord franc du disque qui donne l'astre — et à midi, sans lui, on ne voit
+     plus rien du tout. */
+  .bg-sun{position:absolute;left:50%;top:60%;width:0;height:0;
+    transition:left 2s linear, top 2s linear, opacity 2s linear;}
+  .bg-halo{position:absolute;left:0;top:0;width:min(44vw,520px);aspect-ratio:1;border-radius:50%;
+    margin-left:calc(min(44vw,520px) / -2);margin-top:calc(min(44vw,520px) / -2);
+    background:radial-gradient(circle,rgba(255,214,138,.34) 0%,rgba(255,200,110,.16) 26%,
+      rgba(255,190,90,.06) 46%,rgba(255,190,80,0) 68%);
     animation:souffle 18s ease-in-out infinite alternate;}
-  @keyframes souffle{from{transform:translateY(2.4%) scale(.95);opacity:.9;}
-                     to  {transform:translateY(-1.6%) scale(1.05);opacity:1;}}
+  .bg-disc{position:absolute;left:0;top:0;width:min(6.4vw,78px);aspect-ratio:1;border-radius:50%;
+    margin-left:calc(min(6.4vw,78px) / -2);margin-top:calc(min(6.4vw,78px) / -2);
+    background:radial-gradient(circle,#FFFBEC 0%,#FFFBEC 58%,#FFE9A8 100%);
+    box-shadow:0 0 60px 14px rgba(255,220,150,.55);}
+  @keyframes souffle{from{transform:scale(.95);opacity:.9;}
+                     to  {transform:scale(1.06);opacity:1;}}
+  /* Sur téléphone, le voile de lisibilité est vertical et couvre tout : un
+     grand disque clair y devient une tache grise au lieu d'un soleil. On le
+     réduit — un point de lumière tient mieux sous un voile qu'une surface. */
+  @media(max-width:980px){
+    .bg-disc{width:min(9vw,42px);margin-left:calc(min(9vw,42px) / -2);
+      margin-top:calc(min(9vw,42px) / -2);}
+    .bg-halo{width:min(70vw,420px);margin-left:calc(min(70vw,420px) / -2);
+      margin-top:calc(min(70vw,420px) / -2);}
+  }
 
-  .bg-ridge{position:absolute;left:0;right:0;bottom:0;height:52%;}
+  /* La nuit. Elles ne coûtent rien : c'est un fond, pas cent éléments. */
+  .bg-stars{position:absolute;inset:0;opacity:0;transition:opacity 2s linear;
+    background-image:
+      radial-gradient(1.4px 1.4px at 12% 14%,#fff,transparent),
+      radial-gradient(1.1px 1.1px at 27% 7%,#fff,transparent),
+      radial-gradient(1px 1px at 41% 19%,#fff,transparent),
+      radial-gradient(1.5px 1.5px at 58% 10%,#fff,transparent),
+      radial-gradient(1px 1px at 71% 23%,#fff,transparent),
+      radial-gradient(1.3px 1.3px at 86% 13%,#fff,transparent),
+      radial-gradient(1px 1px at 19% 31%,#fff,transparent),
+      radial-gradient(1.1px 1.1px at 49% 35%,#fff,transparent),
+      radial-gradient(1px 1px at 79% 38%,#fff,transparent),
+      radial-gradient(1.2px 1.2px at 34% 5%,#fff,transparent),
+      radial-gradient(1px 1px at 64% 29%,#fff,transparent),
+      radial-gradient(1.3px 1.3px at 93% 32%,#fff,transparent);}
+
+  .bg-ridge{position:absolute;left:0;right:0;bottom:0;height:64%;}
   .bg-ridge svg{width:100%;height:100%;display:block;}
 
   /* Les grains sont dessinés sur un canvas : une centaine de petits éléments
@@ -367,18 +437,30 @@
 
   /* Le voile s'épaissit au fil du défilement : la scène est presque nue en haut
      de page, et entièrement calmée dès qu'on entre dans le contenu. */
-  .bg-veil{position:absolute;inset:0;background:var(--veil);opacity:var(--veil-o,1);}
+  /* La valeur de repli vaut le voile MINIMUM, pas le maximum : sans le script,
+     l'ancienne valeur (1) éteignait la scène qu'on venait de rendre visible.
+     Le mode « animations réduites », plus bas, la force à 1 de son côté. */
+  .bg-veil{position:absolute;inset:0;background:var(--veil);opacity:var(--veil-o,.10);}
   .bg-vignette{position:absolute;inset:0;background:var(--vignette);}
 
   /* Entrée : le fond s'ouvre au chargement plutôt que d'apparaître d'un bloc. */
   .bg-scene{opacity:0;transition:opacity 1.6s ease;}
   .bg-scene.pret{opacity:1;}
+  /* Sans JavaScript, « pret » n'est jamais posé et le fond restait invisible :
+     la page se retrouvait nue. Le repli — un ciel de fin de journée écrit en
+     CSS — s'affiche alors tel quel. Il ne suivra pas l'heure, mais il existe. */
+  .sans-js .bg-scene{opacity:1;}
 
   @media(prefers-reduced-motion:reduce){
     .bg-move{transition:none;}
-    .bg-sun{animation:none;}
+    .bg-sun{transition:none;}
+    .bg-halo{animation:none;}
+    .bg-stars{transition:none;}
     .bg-scene{transition:none;}
-    .bg-veil{opacity:1 !important;}
+    /* « Animations réduites » veut dire « n'anime pas », pas « cache l'image ».
+       Le voile ne suivant plus le défilement, on le fige à une valeur moyenne :
+       assez pour lire partout, assez peu pour que la scène existe encore. */
+    .bg-veil{opacity:.55 !important;}
   }
 
   /* Deux voiles locaux, posés dans la scène fixe plutôt qu'en pseudo-éléments :
@@ -503,7 +585,7 @@
   .expect li b{color:var(--text);font-weight:600;}
 
   /* panneau Discord : volontairement sombre dans les deux thèmes */
-  .discord-panel{background:#12251A;border:1px solid rgba(217,184,114,.28);border-radius:18px;
+  .discord-panel{background:rgba(22,29,38,.80);border:1px solid rgba(217,184,114,.28);border-radius:18px;
     padding:40px 34px;text-align:center;box-shadow:var(--shadow);}
   .discord-panel .dico{color:#D9B872;margin-bottom:20px;}
   .discord-panel .dico svg{width:46px;height:auto;}
@@ -601,14 +683,24 @@
   </svg>
 </template>
 
+<noscript><style>.bg-scene{opacity:1 !important;}</style></noscript>
 <div class="bg-scene" id="bgScene" aria-hidden="true">
+  <div class="bg-stars" id="bgStars"></div>
   <div class="bg-move" id="bgMove">
-    <div class="bg-sun"></div>
+    <div class="bg-sun" id="bgSun">
+      <div class="bg-halo" id="bgHalo"></div>
+      <div class="bg-disc" id="bgDisc"></div>
+    </div>
+    <!-- Quatre lignes de crête, de la plus lointaine à la plus proche. C'est
+         l'écart de teinte entre elles qui fabrique la distance : la plus
+         lointaine est TOUJOURS la plus pâle, jamais l'inverse. Les couleurs
+         sont posées par le script, selon la hauteur du soleil. -->
     <div class="bg-ridge">
-      <svg viewBox="0 0 1200 220" preserveAspectRatio="none">
-        <path d="M0,118 C180,72 320,138 500,110 C680,82 820,38 1000,78 C1100,100 1150,94 1200,102 L1200,220 L0,220 Z" fill="#7A4A38" opacity=".85"/>
-        <path d="M0,162 C200,130 380,184 580,162 C780,140 960,108 1200,146 L1200,220 L0,220 Z" fill="#412C2A"/>
-        <path d="M0,198 C240,180 480,210 760,194 C960,182 1080,174 1200,186 L1200,220 L0,220 Z" fill="#20171A"/>
+      <svg viewBox="0 0 1200 300" preserveAspectRatio="none">
+        <path id="bgR1" fill="#2A3E52" d="M0,300 L0,150 L52,124 L96,140 L150,76 L196,108 L238,90 L296,26 L332,64 L370,48 L414,90 L462,68 L516,108 L560,88 L606,118 L652,58 L690,96 L736,76 L788,120 L840,100 L892,132 L944,110 L998,136 L1056,116 L1112,142 L1200,126 L1200,300 Z"/>
+        <path id="bgR2" fill="#284038" d="M0,300 L0,196 L70,180 L128,194 L186,154 L240,178 L292,148 L350,170 L408,124 L452,146 L508,96 L548,68 L592,112 L642,146 L700,126 L756,158 L812,140 L870,166 L930,150 L988,176 L1050,160 L1112,182 L1200,170 L1200,300 Z"/>
+        <path id="bgR3" fill="#1A2C24" d="M0,300 L0,238 C110,228 190,212 300,204 C410,196 470,188 540,182 L580,178 L624,190 C700,208 770,222 850,228 C930,234 1010,230 1100,224 C1150,220 1180,224 1200,228 L1200,300 Z"/>
+        <path id="bgR4" fill="#0E1714" d="M0,300 L0,272 C140,262 250,270 370,264 C490,258 560,250 660,254 C780,258 880,268 990,266 C1090,264 1150,270 1200,274 L1200,300 Z"/>
       </svg>
     </div>
   </div>
@@ -1416,6 +1508,105 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
   const survolable = matchMedia('(hover: hover)').matches;
 
   scene.classList.add('pret');
+
+  /* ======================================================================
+     LE CIEL SUIT L'HEURE
+     ----------------------------------------------------------------------
+     Le fond n'est pas une animation : on lit l'heure UNE FOIS au chargement,
+     on pose une position, et plus rien ne tourne. C'est ce qui permet de
+     l'avoir aussi dans l'ordinateur en jeu sans lui coûter une seule image
+     par seconde. Un rafraîchissement toutes les dix minutes rattrape le cas
+     d'une page laissée ouverte au crépuscule — six appels par heure.
+     ====================================================================== */
+  const sun   = document.getElementById('bgSun');
+  const halo  = document.getElementById('bgHalo');
+  const disc  = document.getElementById('bgDisc');
+  const etoiles = document.getElementById('bgStars');
+  const cretes  = ['bgR1','bgR2','bgR3','bgR4'].map(i => document.getElementById(i));
+
+  /* Neuf moments réels du ciel ; tout le reste s'interpole entre eux. Choisir
+     neuf couleurs et deviner les autres donnait des ciels qui n'existent pas. */
+  const CIEL = [
+    { h: 0,   a:'#050A14', b:'#0A1424', c:'#101E2E' },
+    { h: 5,   a:'#0A1226', b:'#1E2447', c:'#43324E' },
+    { h: 6.5, a:'#1B2647', b:'#6B4463', c:'#D07B5C' },
+    { h: 8,   a:'#2E4A72', b:'#7C87A2', c:'#E8B387' },
+    { h: 11,  a:'#2C5D93', b:'#6E9CC4', c:'#BBD6E4' },
+    { h: 13,  a:'#25538A', b:'#5E93C2', c:'#AFCFE2' },
+    { h: 16,  a:'#2F5A88', b:'#8098B4', c:'#DCC49A' },
+    { h: 19,  a:'#2A3560', b:'#8A5566', c:'#E39A5E' },
+    { h: 20.5,a:'#141A38', b:'#4A2E4E', c:'#B05A45' },
+    { h: 22,  a:'#080E1C', b:'#0F1A2C', c:'#1A2436' },
+    { h: 24,  a:'#050A14', b:'#0A1424', c:'#101E2E' },
+  ];
+  const hx  = v => [parseInt(v.slice(1,3),16), parseInt(v.slice(3,5),16), parseInt(v.slice(5,7),16)];
+  const mix = (x, y, t) => '#' + hx(x).map((v,i) =>
+    Math.round(v + (hx(y)[i] - v) * t).toString(16).padStart(2,'0')).join('');
+
+  const LEVER = 6, COUCHER = 20;
+
+  function cielDuJour(){
+    const d = new Date();
+    const h = d.getHours() + d.getMinutes() / 60;
+
+    let c = CIEL[0];
+    for (let i = 0; i < CIEL.length - 1; i++){
+      const p = CIEL[i], q = CIEL[i+1];
+      if (h >= p.h && h <= q.h){
+        const t = (h - p.h) / (q.h - p.h);
+        c = { a: mix(p.a,q.a,t), b: mix(p.b,q.b,t), c: mix(p.c,q.c,t) };
+        break;
+      }
+    }
+    /* La bande chaude de l'horizon est ramenée à 54 % de la hauteur, pas tout
+       en bas : sous les crêtes, elle ne se voyait jamais. C'est là, juste
+       au-dessus de la ligne de montagne, qu'un lever ou un coucher se lit. */
+    scene.style.background =
+      `linear-gradient(180deg, ${c.a} 0%, ${c.b} 32%, ${c.c} 56%, ${c.c} 100%)`;
+
+    const t = (h - LEVER) / (COUCHER - LEVER);
+    const dehors = t < -0.05 || t > 1.05;
+    const clamp  = Math.min(1, Math.max(0, t));
+    const haut   = Math.sin(clamp * Math.PI);           /* 0 à l'horizon, 1 au zénith */
+
+    if (sun) sun.style.opacity = dehors ? 0 : 1;
+    if (etoiles) etoiles.style.opacity = dehors ? .8 : Math.max(0, .45 - haut * 1.8);
+
+    if (!dehors && sun){
+      /* L'arc reste dans la moitié droite : à gauche il passerait derrière le
+         titre, où le voile de lisibilité l'éteindrait de toute façon. */
+      sun.style.left = (22 + clamp * 66) + '%';
+      /* Le zénith s'arrête à 30 % et pas à 18 % : plus haut, le soleil entrait
+         dans la bande sombre posée sous la navigation et redevenait un disque
+         gris. Un midi qui ressemble à une pleine lune, c'était raté. */
+      sun.style.top  = (82 - haut * 52) + '%';
+      const chaud = 1 - haut;                            /* bas sur l'horizon = orange */
+      const coeur = mix('#FFFBEC', '#FFC98A', chaud * .9);
+      const bord  = mix('#FFE9A8', '#F0763A', chaud * .9);
+      if (disc){
+        disc.style.background = `radial-gradient(circle, ${coeur} 0%, ${coeur} 58%, ${bord} 100%)`;
+        disc.style.boxShadow  = `0 0 ${54 + chaud * 46}px ${14 + chaud * 14}px ${bord}A6,`
+                              + ` 0 0 ${140 + chaud * 60}px ${30}px ${bord}40`;
+      }
+      if (halo) halo.style.background =
+        `radial-gradient(circle, ${bord}52 0%, ${bord}24 26%, ${bord}0D 46%, transparent 68%)`;
+    }
+
+    /* Une montagne noire à midi, ça n'existe pas : les crêtes s'éclaircissent
+       avec le soleil et virent au bleu la nuit. La plus lointaine reste
+       toujours la plus pâle — c'est ça, et rien d'autre, qui fait la distance. */
+    const j = dehors ? 0 : haut;
+    const teintes = [
+      ['#1B2836', '#4E6F82'],
+      ['#101C2A', '#33544A'],
+      ['#0A1420', '#20362C'],
+      ['#050C12', '#111C17'],
+    ];
+    cretes.forEach((el, i) => { if (el) el.setAttribute('fill', mix(teintes[i][0], teintes[i][1], j)); });
+  }
+
+  cielDuJour();
+  setInterval(cielDuJour, 600000);
 
   /* --- Le voile suit le défilement -------------------------------------
      Quasi transparent en haut de page pour que la scène frappe, opaque dès
