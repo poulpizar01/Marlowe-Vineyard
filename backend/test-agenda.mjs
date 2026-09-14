@@ -79,8 +79,17 @@ function faireEnv(agenda, opts = {}) {
                 return null;
               },
               async run() {
+                /* La marque « déjà annoncé » se pose par INSERT IGNORE
+                   (casValeur) : la fausse base doit rendre affectedRows,
+                   sinon le rappel croit toujours qu'un autre l'a devancé. */
+                if (/INSERT IGNORE INTO kv/.test(sql)) {
+                  if (kv.has(args[0])) return { meta: { affectedRows: 0 } };
+                  kv.set(args[0], args[1]);
+                  return { meta: { affectedRows: 1 } };
+                }
                 if (/INSERT INTO kv/.test(sql)) kv.set(args[0], args[1]);
                 else if (/DELETE FROM kv/.test(sql)) kv.delete(args[0]);
+                return {};
               },
               async all() { return { results: [] }; },
             };

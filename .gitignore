@@ -54,6 +54,9 @@ package-lock.json
 Thumbs.db
 desktop.ini
 
+# Les copies temporaires que les bancs d'essai font de src/index.js.
+.essai-*.mjs
+
 # Les copies de sauvegarde laissées par les scripts.
 *.avant-mariadb
 *.bak

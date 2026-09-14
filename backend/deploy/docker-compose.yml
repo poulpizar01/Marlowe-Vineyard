@@ -10,31 +10,19 @@
 # le conteneur — ou suivez la voie sans Docker du README.md, sections 1 à 4,
 # qui ne suppose rien de l'hébergeur.
 #
-# ⚠️⚠️ UNE SEULE INSTANCE, UN SEUL PROCESSUS — CE N'EST PAS UNE PRÉFÉRENCE
+# UNE INSTANCE SUFFIT — PLUSIEURS SONT POSSIBLES DEPUIS LA 1.48.0
 # ----------------------------------------------------------------------------
-# Ne lancez PAS ce service en plusieurs exemplaires : pas de `--scale`, pas de
-# `replicas`, pas de deuxième conteneur sur la même base, pas de grappe
-# Node (`cluster`, pm2 en mode `-i`), pas de second `node src/server.js`
-# pointant sur la même base « pour dépanner ».
+# Avant, il ne fallait JAMAIS lancer ce service en plusieurs exemplaires : ce
+# qui empêchait deux enregistrements simultanés de s'écraser était une file
+# d'attente en mémoire, propre à chaque processus, et deux conteneurs
+# perdaient des données en silence.
 #
-# Pourquoi : plusieurs routes lisent un document entier, le modifient et le
-# réécrivent. Ce qui les empêche de s'écraser entre elles est une file
-# d'attente EN MÉMOIRE (`verrou()` dans src/index.js) — une Map JavaScript.
-# Deux processus ont chacun la leur et ne se voient pas : la protection
-# disparaît sans que rien ne le signale, et deux enregistrements simultanés
-# se perdent en silence, les deux personnes lisant « Enregistré ✓ ».
-#
-# Ce qui est protégé quoi qu'il arrive : la matrice des accès
-# (/api/permissions), arbitrée par la base elle-même (comparaison et écriture
-# dans une seule instruction SQL, voir casValeur dans src/index.js).
-#
-# Ce qui ne l'est PAS au-delà d'un processus : `data` (le registre RH, les
-# clients, la facturation…), `journal`, `settings`, `invites`, `alias`.
-#
-# Pour passer à plusieurs instances un jour, il faut d'abord donner à ces
-# documents-là le même traitement qu'à la matrice. Tant que ce n'est pas fait,
-# un seul exemplaire — c'est ce que ce fichier décrit, et il faut que ça le
-# reste. Voir AUDIT-PASSAGE-2.md, §7 ter.
+# Depuis la 1.48.0, l'arbitrage est tenu par la base elle-même (un verrou
+# nommé GET_LOCK, voir src/db.js) : il vaut pour tous les conteneurs branchés
+# sur la même base. Un « --scale marlowe-app=2 » ou un « replicas: » ne perd
+# donc plus rien — à condition que toutes les instances pointent sur le MÊME
+# marlowe-db. Ce qu'il faut savoir avant d'en lancer plusieurs :
+# backend/README.md, « Plusieurs instances ».
 #
 # Même montage que les projets voisins sur ce VPS (maja13, entre autres) :
 # une image pour l'app (site + API, voir backend/Dockerfile), une base
@@ -59,6 +47,14 @@ services:
       DB_PORT: "3306"
       DB_NAME: marlowe
       DB_USER: marlowe
+      # Obligatoire dans un conteneur : le proxy arrive par le réseau Docker,
+      # pas par 127.0.0.1. Prime sur un HOST laissé dans ../.env.
+      HOST: "0.0.0.0"
+    # Sans le Caddy partagé (VPS différent) : publiez le port sur la machine,
+    # EN LOCAL SEULEMENT, et mettez votre propre reverse proxy devant.
+    # Le premier nombre est le port côté machine, le second celui de PORT.
+    # ports:
+    #   - "127.0.0.1:8787:8787"
     depends_on:
       marlowe-db:
         condition: service_healthy
@@ -73,9 +69,11 @@ services:
     environment:
       MARIADB_DATABASE: marlowe
       MARIADB_USER: marlowe
-      # L'app se connecte avec le compte restreint ci-dessus, jamais en
-      # root — voir docs/A-TRANSMETTRE-AU-RESPONSABLE.md. Un mot de passe
-      # root aléatoire, jamais affiché ni conservé, suffit donc.
+      # L'app se connecte avec le compte marlowe ci-dessus, jamais en root.
+      # Créé par l'image avec tous les droits sur la base marlowe — il lui
+      # faut CREATE, le schéma s'applique au démarrage (voir ../README.md,
+      # §2). Un mot de passe root aléatoire, jamais affiché ni conservé,
+      # suffit donc.
       MARIADB_RANDOM_ROOT_PASSWORD: "yes"
     volumes:
       - marlowe-db:/var/lib/mysql

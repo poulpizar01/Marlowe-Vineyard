@@ -13,6 +13,8 @@
    Voir README.md pour le déploiement.
    ============================================================================ */
 
+import { readFileSync } from 'node:fs';
+
 const DISCORD = 'https://discord.com/api/v10';
 
 /* La version du Worker EN LIGNE.
@@ -26,8 +28,27 @@ const DISCORD = 'https://discord.com/api/v10';
    et la liste des routes que CETTE version connaît. Avant de conclure qu'une
    correction serveur n'a rien changé, on la lit.
 
-   À tenir en phase avec version.json à chaque déploiement. */
-const VERSION = '1.47.0';
+   Le numéro vient de package.json — UNE seule source. Il fut un temps où
+   package.json disait 2.0.0 pendant que cette route répondait 1.47.0 : deux
+   compteurs, dont un que personne ne lisait. Pour livrer une version, on
+   change le champ « version » de backend/package.json, et rien d'autre.
+
+   version.json, à la racine du dépôt, numérote le SITE (le panel servi au
+   navigateur) : c'est un autre objet, avec son propre rythme, et il n'a pas
+   à être égal à celui-ci.
+
+   Les bancs d'essai recopient ce fichier dans backend/, à côté de
+   package.json — d'où le second chemin essayé. */
+function lireVersionPaquet() {
+  for (const rel of ['../package.json', './package.json']) {
+    try {
+      const v = JSON.parse(readFileSync(new URL(rel, import.meta.url), 'utf8')).version;
+      if (v) return String(v);
+    } catch (e) { /* on essaie l'autre chemin */ }
+  }
+  return '0.0.0-inconnue';
+}
+const VERSION = lireVersionPaquet();
 const SESSION_TTL = 60 * 60 * 24 * 7;   // 7 jours
 const STATE_TTL   = 600;                // 10 minutes
 
@@ -199,23 +220,37 @@ function memSet(cle, val, ttlSecondes) {
    montait que d'un cran au lieu de deux : même les autres navigateurs ne
    voyaient pas qu'il s'était passé quelque chose.
 
-   La file ci-dessous fait passer ces sections l'une après l'autre. Elle vaut
-   pour CE processus : le montage prévu (backend/deploy/docker-compose.yml) en
-   fait tourner un seul, donc elle suffit. Le jour où l'API tournerait en
-   plusieurs exemplaires derrière un répartiteur, il faudrait un verrou porté
-   par la base elle-même (SELECT … FOR UPDATE) — c'est écrit dans AUDIT.md.
+   La file ci-dessous fait passer ces sections l'une après l'autre — dans CE
+   processus. Longtemps, c'était toute la protection : deux conteneurs, ou
+   deux `node src/server.js` sur la même base, avaient chacun leur file et
+   ne se voyaient pas ; la garantie tombait sans qu'aucun message ne le dise.
+
+   Depuis la 1.48.0, la garantie est portée par la BASE : quand env.DB expose
+   verrou() (src/db.js), la section s'exécute sous un verrou nommé GET_LOCK,
+   que MariaDB n'accorde qu'à une connexion à la fois quel que soit le
+   processus. Plusieurs instances derrière un répartiteur sont donc
+   possibles — voir backend/README.md, « Plusieurs instances ».
+
+   La file en mémoire reste devant, et ce n'est pas une survivance : chaque
+   attente sur GET_LOCK immobilise une connexion. Sans la file, dix requêtes
+   d'un même processus sur le même document en occuperaient dix, pour rien.
+   Avec elle, un processus n'en attend jamais qu'une par document.
+
+   Les bancs d'essai, dont la fausse base n'a pas de verrou(), retombent sur
+   la file seule — c'est le comportement d'avant, à l'identique.
    --------------------------------------------------------------------------- */
 const verrous = new Map();
 
-function verrou(nom, action) {
+function verrou(env, nom, action, opts) {
   const precedent = verrous.get(nom) || Promise.resolve();
   let liberer;
   const mien = new Promise(r => { liberer = r; });
   /* La file suivante attend MON tour, qu'il se termine bien ou mal. */
   verrous.set(nom, precedent.then(() => mien, () => mien));
+  const enBase = !!(env && env.DB && typeof env.DB.verrou === 'function');
   return precedent
     .catch(() => {})
-    .then(() => action())
+    .then(() => (enBase ? env.DB.verrou(nom, action, opts) : action()))
     .finally(() => liberer());
 }
 
@@ -302,13 +337,16 @@ function base(env) {
        Rend true si on a gagné, false sinon. `attendu` à null veut dire « la
        clé ne doit pas encore exister » : INSERT IGNORE ne crée la ligne que
        si personne ne l'a devancée. */
-    async casValeur(cle, attendu, nouveau) {
+    async casValeur(cle, attendu, nouveau, opts) {
       const texte = typeof nouveau === 'string' ? nouveau : JSON.stringify(nouveau);
 
       if (attendu === null || attendu === undefined) {
+        /* Une durée de vie, comme put() : la marque d'un rappel d'agenda se
+           pose ainsi, et n'a pas à rester pour toujours. */
+        const exp = (opts && opts.expirationTtl) ? Date.now() + opts.expirationTtl * 1000 : null;
         const r = await env.DB.prepare(
-          'INSERT IGNORE INTO kv (cle, val, exp) VALUES (?, ?, NULL)'
-        ).bind(cle, texte).run();
+          'INSERT IGNORE INTO kv (cle, val, exp) VALUES (?, ?, ?)'
+        ).bind(cle, texte, exp).run();
         return ((r && r.meta && r.meta.affectedRows) || 0) === 1;
       }
 
@@ -1216,7 +1254,7 @@ async function handlePermissions(request, env) {
        requêtes du même processus se marchent dessus pour rien. La garantie,
        c'est casValeur() — une seule instruction SQL qui compare et écrit, donc
        arbitrée par la BASE, commune à toutes les instances. */
-    return verrou('permissions', async () => {
+    return verrou(env, 'permissions', async () => {
       const brut = await base(env).get('permsmeta');
       const meta = analyserMetaPermissions(brut);
 
@@ -1247,7 +1285,7 @@ async function handlePermissions(request, env) {
 
       if (roEnvoye) {
         try {
-          await verrou('settings', async () => {
+          await verrou(env, 'settings', async () => {
             const reg = await base(env).get('settings', 'json') || {};
             reg.permsRO = pagesLectureSeule(roEnvoye);
             await base(env).put('settings', JSON.stringify(reg));
@@ -1452,7 +1490,7 @@ async function appendJournal(env, session, texte, keys) {
   /* Même lecture-modification-écriture que le document « data », donc même
      file d'attente : sans elle, deux actions simultanées se recouvraient et
      l'une des deux ne laissait aucune trace au journal. */
-  return verrou('journal', async () => {
+  return verrou(env, 'journal', async () => {
     const list = await base(env).get('journal', 'json') || [];
     list.unshift({
       at: new Date().toISOString(),
@@ -2048,7 +2086,7 @@ async function handleInvites(request, env) {
      plus dangereux des deux, parce qu'il réécrit la liste (pour noter la date
      de dernière connexion) et qu'il est PUBLIC — donc déclenchable à volonté
      par le porteur de l'accès qu'on est justement en train de retirer. */
-  return verrou('invites', async () => {
+  return verrou(env, 'invites', async () => {
     const invites = await lireInvites(env);
 
     if (action === 'creer') {
@@ -2166,7 +2204,7 @@ async function handleInviteLogin(request, env) {
      passe). Bâtir la session sur la liste d'avant aurait délivré les ANCIENS
      droits, et validé un mot de passe qu'on venait de changer. On refuse donc
      aussi si l'empreinte a bougé depuis qu'on l'a vérifiée. */
-  const frais = await verrou('invites', async () => {
+  const frais = await verrou(env, 'invites', async () => {
     const liste = await lireInvites(env);
     const cible = liste.find(x => x.code === code);
     if (!cible || cible.actif === false) return null;
@@ -2296,7 +2334,7 @@ async function handleSettings(request, env) {
        Deux écrans d'Administration enregistrés en même temps — les
        disponibilités d'un côté, la visibilité de l'agenda de l'autre — lisaient
        la même version et le second effaçait le réglage du premier. */
-    const sortie = await verrou('settings', async () => {
+    const sortie = await verrou(env, 'settings', async () => {
       const avant = await base(env).get('settings', 'json') || {};
       const fusion = Object.assign({}, avant, clean);
       await base(env).put('settings', JSON.stringify(fusion));
@@ -3010,7 +3048,7 @@ async function handleAlias(request, env) {
   const civil = String((body && body.civil) || '').trim();
   /* Même lecture-modification-écriture que partout ailleurs : deux
      rattachements faits en même temps s'écrasaient. */
-  const alias = await verrou('alias', async () => {
+  const alias = await verrou(env, 'alias', async () => {
     const table = await lireAlias(env);
     if (civil) table[cle] = civil; else delete table[cle];
     await base(env).put('alias', JSON.stringify(table));
@@ -3112,7 +3150,7 @@ async function handleData(request, env) {
        restent intactes. Deux personnes qui travaillent sur des pages
        différentes ne s'écrasent donc pas mutuellement — à condition que la
        relecture et la réécriture ne se chevauchent pas, d'où la file. */
-    const resultat = await verrou('data', async () => {
+    const resultat = await verrou(env, 'data', async () => {
       const current = await base(env).get('data', 'json') || {};
       for (const [k, v] of Object.entries(body)) {
         current[String(k).slice(0, 64)] = v;
@@ -3309,7 +3347,7 @@ async function handleAbsence(request, env) {
   /* Même file d'attente que /api/data : la déclaration relit et réécrit le
      document entier, et ne doit pas se croiser avec un enregistrement du
      panel — sinon l'un des deux disparaît sans un mot. */
-  const resultat = await verrou('data', async () => {
+  const resultat = await verrou(env, 'data', async () => {
     const data = await base(env).get('data', 'json') || {};
     const roster = Array.isArray(data.rhRoster) ? data.rhRoster : [];
 
@@ -3434,7 +3472,7 @@ async function handleLinterna(request, env) {
      double-clic envoie deux ajouts, et sans file les deux lisaient le même
      total d'avant — l'un des deux ajouts se perdait, alors que la réponse
      annonçait « ok » aux deux. */
-  const resultat = await verrou('data', async () => {
+  const resultat = await verrou(env, 'data', async () => {
     const data = await base(env).get('data', 'json') || {};
     const roster = Array.isArray(data.rhRoster) ? data.rhRoster : [];
 
@@ -3610,8 +3648,12 @@ async function rappelsAgenda(env) {
   let envoyes = 0;
   for (const e of cibles) {
     const cle = cleRappel(e);
-    if (await base(env).get(cle)) continue;
-    await base(env).put(cle, '1', { expirationTtl: 7 * 24 * 3600 });
+    /* La marque « déjà annoncé » est posée ET vérifiée en une seule
+       instruction (INSERT IGNORE, voir casValeur) : lire puis écrire en deux
+       temps laissait deux instances passer toutes les deux entre les deux, et
+       l'événement était annoncé deux fois dans le salon. Celle qui perd
+       l'échange passe son chemin. */
+    if (!(await base(env).casValeur(cle, null, '1', { expirationTtl: 7 * 24 * 3600 }))) continue;
 
     let ok = false;
     try {
@@ -3640,7 +3682,14 @@ export default {
      ici ne doit jamais faire tomber le Worker : elle est rangée dans
      logs:etat, et le panel l'affiche à la place des chiffres. */
   async scheduled(evenement, env, ctx) {
-    ctx.waitUntil((async () => {
+    /* Une instance à la fois. Chaque processus a son propre node-cron, donc
+       avec plusieurs instances la tâche se déclencherait partout à la même
+       minute : autant de lectures du salon Discord, et des rappels en
+       concurrence. Le verrou est pris SANS attente : si une autre instance
+       est déjà dessus, celle-ci passe son tour — le prochain passage est dans
+       deux minutes, et la lecture des logs comme les rappels rattrapent
+       d'eux-mêmes ce qu'ils auraient manqué. */
+    ctx.waitUntil(verrou(env, 'tache', async () => {
       try {
         await lireLogs(env);
       } catch (e) {
@@ -3658,7 +3707,12 @@ export default {
       try {
         await rappelsAgenda(env);
       } catch (e) { /* le passage suivant réessaiera, la fenêtre le permet */ }
-    })());
+    }, { attente: 0 }).catch(e => {
+      /* Place prise par une autre instance : rien à faire. Le corps ci-dessus
+         attrape déjà tout le reste, donc autre chose ici serait une surprise
+         — on la note, sans faire tomber le serveur. */
+      if (!(e && e.verrouOccupe)) console.error('[tache]', e);
+    }));
   },
 
   async fetch(request, env, ctx) {
@@ -3784,6 +3838,14 @@ export default {
           "L'API n'arrive pas à joindre la base de données. Vérifiez qu'elle est démarrée "
           + "et que DB_HOST, DB_PORT, DB_USER, DB_PASSWORD et DB_NAME sont corrects dans "
           + "backend/.env. Message technique : " + msg }, 503);
+      }
+      /* Le verrou d'un document (voir verrou() et db.js) n'a pas été obtenu
+         dans le délai : une autre instance écrit dessus depuis trop longtemps.
+         Rien n'a été écrit ici — le panel peut réessayer tel quel. */
+      if (e && e.verrouOccupe) {
+        return json(env, { error: 'occupe', document: e.document || null, detail:
+          msg + " Rien n'a été enregistré : réessayez dans quelques secondes. Si cela se "
+          + "répète, une instance du backend est peut-être bloquée — voir ses journaux." }, 503);
       }
       return json(env, { error: 'server_error', detail: msg }, 500);
     }

@@ -11,6 +11,10 @@ COPY backend/package*.json ./
 # trois dépendances de ce backend.
 RUN npm install --omit=dev
 COPY . /app
-ENV NODE_ENV=production PORT=8787
+# HOST=0.0.0.0 est obligatoire ici : dans un conteneur, le reverse proxy
+# arrive par le réseau Docker, pas par 127.0.0.1. Hors conteneur, le serveur
+# n'écoute que sur 127.0.0.1 (voir src/server.js). PORT reste modifiable
+# depuis .env ; EXPOSE n'est qu'une déclaration, il n'ouvre rien.
+ENV NODE_ENV=production PORT=8787 HOST=0.0.0.0
 EXPOSE 8787
 CMD ["node", "src/server.js"]

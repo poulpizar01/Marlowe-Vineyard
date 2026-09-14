@@ -18,7 +18,12 @@
      Quota affichait des totaux absurdes, sans la moindre erreur ;
 
    · deux enregistrements simultanés relisaient la même version du document et
-     l'un écrasait l'autre, en annonçant « Enregistré ✓ » aux deux personnes.
+     l'un écrasait l'autre, en annonçant « Enregistré ✓ » aux deux personnes ;
+
+   · et, depuis la 1.48.0, la même chose entre DEUX INSTANCES du backend :
+     la file d'attente en mémoire ne vaut que pour un processus, et c'est un
+     verrou GET_LOCK tenu par MariaDB qui arbitre entre plusieurs. Une
+     fausse base n'a pas de GET_LOCK.
 
    Aucune fausse base ne pouvait montrer ça. Celui-ci le peut.
 
@@ -79,10 +84,15 @@ await DB.prepare('DELETE FROM ventes').bind().run();
 const R_PATRON = '111111111111111111';
 const R_RH     = '222222222222222222';
 const STORAGE_TOKEN_ESSAI = 'FAUX-TOKEN-STORAGE';
+let ANNONCES = 0;   /* messages postés dans le salon d'agenda simulé */
 globalThis.fetch = async (url, opts = {}) => {
   const u = String(url);
   const J = (o, s = 200) => new Response(JSON.stringify(o),
     { status: s, headers: { 'Content-Type': 'application/json' } });
+  if (/\/channels\/\d+\/messages$/.test(u) && (opts.method || '').toUpperCase() === 'POST') {
+    ANNONCES++;
+    return J({ id: String(ANNONCES) });
+  }
   if (/\/guilds\/\d+\/roles$/.test(u)) return J([
     { id: R_PATRON, name: 'Patron', position: 10, managed: false },
     { id: R_RH,     name: 'RH',     position: 5,  managed: false },
@@ -347,9 +357,138 @@ console.log("\n— L'échange atomique du contrôle de version —");
       (await b.get('essai:cas')) === gagnant);
 }
 
+/* ======================================================================== */
+console.log('\n— Deux INSTANCES du backend sur la même base —');
+{
+  /* Une seconde copie du module, c'est un second processus : sa file
+     d'attente en mémoire (la Map `verrous`) lui est propre, exactement comme
+     celle d'un deuxième conteneur. Seule la base est commune. Tout ce qui
+     suit ne peut donc tenir que si l'arbitrage est porté par la base. */
+  const TMP2 = new URL('./.essai-mariadb-2.mjs', import.meta.url);
+  writeFileSync(TMP2, SRC + '\nexport { base };\n');
+  const W2 = (await import(TMP2.href)).default;
+  const appel2 = (chemin, opts = {}) =>
+    W2.fetch(new Request('https://exemple.test' + chemin, opts), env, ctx);
+  const dormir = ms => new Promise(r => setTimeout(r, ms));
+
+  /* 1. Le verrou lui-même. */
+  const ordre = [];
+  await Promise.all([
+    DB.verrou('essai', async () => { ordre.push('A entre'); await dormir(400); ordre.push('A sort'); }),
+    (async () => { await dormir(60); await DB.verrou('essai', async () => { ordre.push('B entre'); }); })(),
+  ]);
+  dit('le second entrant attend que le premier soit sorti',
+      ordre.join(' → ') === 'A entre → A sort → B entre', ordre);
+
+  let refus = null;
+  await Promise.all([
+    DB.verrou('essai', async () => { await dormir(1500); }),
+    (async () => {
+      await dormir(60);
+      try { await DB.verrou('essai', async () => {}, { attente: 1 }); } catch (e) { refus = e; }
+    })(),
+  ]);
+  dit("passé le délai d'attente, l'appel est refusé et le dit",
+      !!refus && refus.verrouOccupe === true && refus.document === 'essai', refus && refus.message);
+
+  let saute = false;
+  await Promise.all([
+    DB.verrou('essai', async () => { await dormir(400); }),
+    (async () => {
+      await dormir(60);
+      try { await DB.verrou('essai', async () => {}, { attente: 0 }); } catch (e) { saute = !!e.verrouOccupe; }
+    })(),
+  ]);
+  dit('sans attente, un appel trouve la place prise et passe son tour', saute);
+
+  const relache = await DB.verrou('essai', async () => 'rendu');
+  dit('une fois rendu, le verrou se reprend aussitôt et rend le résultat', relache === 'rendu');
+
+  /* 2. Deux enregistrements, un par instance, sur deux pages différentes. */
+  await DB.prepare('UPDATE kv SET val = ? WHERE cle = ?')
+    .bind(JSON.stringify({ rhRoster: [], clients: [] }), 'data').run();
+  await DB.prepare(
+    'INSERT INTO kv (cle, val, exp) VALUES (?, ?, NULL) ON DUPLICATE KEY UPDATE val = VALUES(val)'
+  ).bind('permissions', JSON.stringify({ rhemployes: ['RH'], facturation: ['RH'] })).run();
+  await DB.prepare('DELETE FROM kv WHERE cle = ?').bind('datameta').run();
+
+  await Promise.all([
+    appel('/api/data',  avec('S-PATRON', { method: 'PUT', body: JSON.stringify({ rhRoster: [{ id: 'A', name: 'Alice' }] }) })),
+    appel2('/api/data', avec('S-RH',     { method: 'PUT', body: JSON.stringify({ clients:  [{ id: 'B', nom: 'Bob' }] }) })),
+  ]);
+  const d2 = await lireData();
+  dit("instance 1 : l'enregistrement du registre a survécu",
+      Array.isArray(d2.rhRoster) && d2.rhRoster.length === 1, { rhRoster: d2.rhRoster });
+  dit("instance 2 : l'enregistrement des clients a survécu",
+      Array.isArray(d2.clients) && d2.clients.length === 1, { clients: d2.clients });
+  const meta2 = JSON.parse((await DB.prepare('SELECT val FROM kv WHERE cle = ?').bind('datameta').first()).val);
+  dit('la révision a monté de deux crans', meta2.rev === 2, { rev: meta2.rev });
+
+  /* 3. Une rafale de déclarations de récolte, réparties sur les deux
+        instances. Huit et non deux : deux écritures peuvent ne pas se
+        chevaucher par simple chance de calendrier, et le test passerait
+        alors même sans verrou — constaté par mutation. Huit à la fois, le
+        chevauchement est certain. */
+  await DB.prepare('UPDATE kv SET val = ? WHERE cle = ?')
+    .bind(JSON.stringify({ linterna: [] }), 'data').run();
+  await DB.prepare('DELETE FROM kv WHERE cle = ?').bind('journal').run();
+  const corpsRecolte = JSON.stringify({ raisins: 50, mode: 'ajout' });
+  const rafale = [];
+  for (let i = 0; i < 4; i++) {
+    rafale.push(appel('/api/linterna',  avec('S-RH', { method: 'POST', body: corpsRecolte })));
+    rafale.push(appel2('/api/linterna', avec('S-RH', { method: 'POST', body: corpsRecolte })));
+  }
+  const reponses = await Promise.all(rafale);
+  dit('les huit appels répondent 200', reponses.every(r => r.status === 200), reponses.map(r => r.status));
+  const d3 = await lireData();
+  dit('les huit ajouts, venus de deux instances, sont tous comptés (400)',
+      (d3.linterna[0] || {}).raisins === 400, d3.linterna);
+
+  /* 4. Le journal : huit actions, deux instances, huit traces. */
+  const journal = JSON.parse((await DB.prepare('SELECT val FROM kv WHERE cle = ?').bind('journal').first()).val);
+  dit('le journal garde les huit traces, aucune ne recouvre l\'autre',
+      Array.isArray(journal) && journal.length === 8, { traces: journal.length });
+
+  /* 5. Un rappel d'agenda, deux instances, une seule annonce. */
+  const dansTroisHeures = (() => {
+    const t = Date.now() + 3 * 3600 * 1000;
+    const p = new Date(t).toLocaleString('sv-SE', { timeZone: 'Europe/Paris' });
+    const [d, h] = p.split(' ');
+    const [aa, mm, jj] = d.split('-');
+    return { date: `${jj}/${mm}/${aa}`, heure: h.slice(0, 5) };
+  })();
+  await DB.prepare('UPDATE kv SET val = ? WHERE cle = ?').bind(JSON.stringify({
+    agenda: [{ title: 'Dégustation', vis: 'commercial', desc: 'client', heure_fin: '23:00', ...dansTroisHeures }],
+  }), 'data').run();
+  await DB.prepare('DELETE FROM kv WHERE cle LIKE ?').bind('agenda:rappel:%').run();
+  const envAgenda = { ...env, DISCORD_AGENDA_CHANNEL: '123456789012345678' };
+  ANNONCES = 0;
+  const attentes = [];
+  const ctxTache = { waitUntil(p) { attentes.push(Promise.resolve(p).catch(() => {})); } };
+  await Promise.all([W.scheduled(null, envAgenda, ctxTache), W2.scheduled(null, envAgenda, ctxTache)]);
+  await Promise.all(attentes);
+  dit("un événement à annoncer, deux instances : UNE annonce", ANNONCES === 1, { annonces: ANNONCES });
+
+  /* Et la marque est prise en une instruction : même sans le verrou de la
+     tâche, deux passages vraiment simultanés n'annoncent qu'une fois. */
+  await DB.prepare('DELETE FROM kv WHERE cle LIKE ?').bind('agenda:rappel:%').run();
+  ANNONCES = 0;
+  const b1 = MOD.base(envAgenda);
+  const [p1, p2] = await Promise.all([
+    b1.casValeur('agenda:rappel:essai', null, '1', { expirationTtl: 60 }),
+    b1.casValeur('agenda:rappel:essai', null, '1', { expirationTtl: 60 }),
+  ]);
+  dit('la marque de rappel ne se prend qu\'une fois, même à deux en même temps',
+      (p1 ? 1 : 0) + (p2 ? 1 : 0) === 1, { p1, p2 });
+  const ligneMarque = await DB.prepare('SELECT exp FROM kv WHERE cle = ?').bind('agenda:rappel:essai').first();
+  dit('… et elle porte bien une date de péremption', !!ligneMarque && Number(ligneMarque.exp) > Date.now());
+
+  unlinkSync(TMP2);
+}
+
 await DB.prepare('DELETE FROM kv').bind().run();
 await DB.prepare('DELETE FROM ventes').bind().run();
-await pool.end();
+await DB.fermer();
 unlinkSync(TMP);
 
 console.log(`\n${ok} vérification(s) passée(s), ${ko} en échec.`);

@@ -100,6 +100,13 @@ FLUSH PRIVILEGES;
 **Les tables se créent toutes seules** au premier démarrage du serveur (voir
 `schema.sql` et `src/db.js`) : il n'y a rien d'autre à jouer à la main.
 
+C'est pour ça que le compte a besoin du droit `CREATE` (d'où `GRANT ALL`
+ci-dessus) : le serveur rejoue `CREATE TABLE IF NOT EXISTS` à **chaque**
+démarrage, et MariaDB vérifie le droit avant de regarder si la table existe.
+Un compte limité à `SELECT, INSERT, UPDATE, DELETE` — comme le proposait
+une ancienne version de `docs/A-TRANSMETTRE-AU-RESPONSABLE.md` — fait
+échouer le démarrage, même sur une base déjà remplie.
+
 > **Un PDF de catalogue pèse jusqu'à 12 Mo.** Si un dépôt échoue avec une
 > erreur du type « packet too large », augmentez `max_allowed_packet` dans la
 > configuration MariaDB/MySQL (32M met une marge confortable).
@@ -163,8 +170,16 @@ Pour tester en local :
 npm start
 ```
 
-La console affiche `Marlowe API en écoute sur http://localhost:8787` (ou le
+La console affiche `Marlowe API en écoute sur http://127.0.0.1:8787` (ou le
 port choisi dans `.env`) une fois la base vérifiée.
+
+**Le serveur n'écoute que sur 127.0.0.1** : il n'est joignable que depuis la
+machine elle-même, donc par le reverse proxy décrit ci-dessous, jamais
+directement depuis Internet. `HOST=0.0.0.0` dans `.env` l'ouvre à toutes
+les interfaces — à ne faire que si le proxy tourne sur une autre machine, et
+alors c'est au pare-feu de fermer le port. (Dans Docker, le
+`docker-compose.yml` règle `HOST` tout seul, et ne publie aucun port sur
+la machine : c'est le proxy, sur le réseau Docker, qui joint le conteneur.)
 
 Pour un déploiement réel, il faut :
 
@@ -197,31 +212,14 @@ Pour un déploiement réel, il faut :
 2. **Un superviseur** qui relance le processus s'il plante ou au redémarrage
    du serveur — [pm2](https://pm2.keymetrics.io/) est le plus simple.
 
-   ⚠️ **UN SEUL PROCESSUS, UNE SEULE INSTANCE.** C'est une contrainte de
-   fonctionnement, pas un conseil de performance. Concrètement, il ne faut
-   **pas** :
-   - `pm2 start … -i 2` ou `-i max` (mode grappe) — **utilisez `pm2 start`
-     sans `-i`**, comme dans l'exemple ci-dessous ;
-   - `docker compose up --scale marlowe-app=2`, ni `replicas:` ;
-   - un second `node src/server.js` branché sur la même base, même
-     « juste pour dépanner » ;
-   - deux machines derrière un répartiteur.
-
-   **Pourquoi.** Plusieurs routes lisent un document entier, le modifient et
-   le réécrivent. Ce qui les empêche de s'écraser entre elles est une file
-   d'attente **en mémoire** (`verrou()` dans `src/index.js`). Deux processus
-   ont chacun la leur et ne se voient pas : la protection disparaît **sans
-   qu'aucun message ne le signale**, et deux enregistrements simultanés se
-   perdent en silence — les deux personnes lisant pourtant « Enregistré ✓ ».
-
-   | | Protégé entre plusieurs processus ? |
-   |---|---|
-   | La matrice des accès (`/api/permissions`) | **Oui** — arbitrée par la base (`casValeur`, une seule instruction SQL) |
-   | `data` (registre RH, clients, facturation…), `journal`, `settings`, `invites`, `alias` | **Non** — file en mémoire uniquement |
-
-   Pour passer à plusieurs instances un jour, il faut d'abord donner à ces
-   documents-là le même traitement qu'à la matrice. Détail et raisonnement :
-   `AUDIT-PASSAGE-2.md`, §7 ter.
+   **Une instance suffit, plusieurs sont possibles.** Jusqu'à la 1.47.0, il
+   fallait un seul processus, sans exception : ce qui empêchait deux
+   enregistrements simultanés de s'écraser était une file d'attente **en
+   mémoire**, propre à chaque processus, et deux instances perdaient des
+   données en silence. Depuis la 1.48.0, l'arbitrage est tenu par la **base**
+   (un verrou nommé `GET_LOCK`, voir `src/db.js`) : il vaut pour toutes les
+   instances branchées sur la même base MariaDB/MySQL. Voir « Plusieurs
+   instances » plus bas avant d'en lancer une deuxième.
 
    ```bash
    npm install -g pm2
@@ -258,6 +256,38 @@ Pour un déploiement réel, il faut :
 l'adresse collée dans les **Redirects** correspond bien à votre domaine réel
 suivi de `/api/callback`.
 
+### Plusieurs instances
+
+Une seule instance suffit largement au domaine, et c'est le montage le plus
+simple à tenir. Si vous en voulez plusieurs — `pm2 start -i 2`, un
+`--scale`, deux machines derrière un répartiteur — voici ce qui tient et ce
+qu'il faut savoir :
+
+- **Toutes les instances doivent parler à la même base.** C'est elle qui
+  arbitre : chaque section qui lit, modifie et réécrit un document (`data`,
+  `journal`, `settings`, `invites`, `alias`, la matrice des accès) le fait
+  sous un verrou nommé que MariaDB/MySQL n'accorde qu'à une connexion à la
+  fois. Une instance tuée en pleine écriture rend son verrou d'elle-même.
+- **La tâche périodique tourne sur une seule instance à la fois.** Chaque
+  processus a son propre déclencheur toutes les deux minutes ; celui qui
+  trouve la place prise passe son tour. Et la marque « déjà annoncé » d'un
+  rappel d'agenda est posée en une seule instruction : un événement n'est
+  jamais annoncé deux fois.
+- **Ce qu'une instance garde en mémoire ne vaut que pour elle** : le cache
+  des rôles Discord (quelques minutes), le cache de présence. Ce sont des
+  caches, pas des données ; rien ne se perd, une instance peut simplement
+  voir un rôle changé un peu plus tard qu'une autre.
+- **Les sessions sont en base**, pas en mémoire : le répartiteur n'a pas
+  besoin de coller une personne à une instance.
+- **Une écriture qui attend son tour plus de 15 secondes est refusée**, en
+  `503 { error: "occupe" }`, sans rien écrire. En temps normal une section
+  dure quelques dizaines de millisecondes ; ce refus signale une instance
+  bloquée, pas une charge normale.
+
+`test-mariadb.mjs` éprouve tout ça contre une vraie base, avec deux copies
+du serveur qui n'ont en commun que la base (voir « Lancer les bancs
+d'essai »).
+
 ---
 
 ## 5. Brancher le site
@@ -274,6 +304,29 @@ S'il fallait un jour séparer le site de l'API sur deux domaines, la seule
 ligne à changer serait `window.MARLOWE_API_BASE` dans `marlowe-config.js`.
 
 C'est fini — `gestion.html` demande une vraie connexion Discord.
+
+### Changer l'adresse du site
+
+Le serveur ne suppose aucune adresse : il reconstruit l'adresse de retour
+Discord et contrôle l'origine des écritures à partir de l'hôte **réel** par
+lequel la requête est arrivée. Changer de domaine demande donc trois choses,
+toutes hors du code :
+
+1. `SITE_URL` (et `SITE_URLS` le temps d'une bascule) dans `.env` ;
+2. le **Redirect** OAuth2 sur le portail développeur Discord (§1.3) ;
+3. l'entrée du reverse proxy.
+
+Et deux retouches dans le dépôt, sans effet sur le fonctionnement mais qui
+évitent un diagnostic trompeur et de mauvais aperçus de liens : la liste
+`SITE_ATTENDUES` de `marlowe-actions.js` et les balises `og:url` /
+`og:image` des trois pages HTML. Une commande fait les deux :
+
+```bash
+node scripts/changer-adresse.mjs https://nouvelle.adresse.fr            # pour de bon
+node scripts/changer-adresse.mjs https://nouvelle.adresse.fr --essai    # montre sans écrire
+```
+
+Elle ne touche jamais `.env`, et rappelle en sortie ce qui reste à faire.
 
 ---
 
@@ -319,6 +372,14 @@ curl -s <adresse du site>/api/version
 Le numéro doit être celui que vous venez de déployer. **Un correctif non
 redéployé se comporte exactement comme un correctif qui ne marche pas** —
 c'est la première chose à vérifier avant de chercher ailleurs.
+
+**D'où vient ce numéro.** C'est le champ `version` de `backend/package.json`,
+et rien d'autre : `/api/version` le lit à chaque démarrage. Pour livrer une
+version du backend, on change ce champ. Le `version.json` à la racine du
+dépôt numérote le **site** (le panel, servi au navigateur) — c'est un autre
+compteur, avec son propre rythme, et les deux n'ont pas à être égaux. Le
+mot « version 2.0 » employé plus haut désigne la génération Node.js du
+backend (par opposition à l'ancienne version Cloudflare), pas un numéro.
 
 ---
 
@@ -418,7 +479,91 @@ sauvegarde — hors de la portée de ce backend.
   des quotas, permissions…) n'a **pas changé** : seule la façon dont elle
   parle à la base de données et reçoit les requêtes HTTP a été adaptée.
 
-Si vous avez des données existantes sur l'ancienne base D1/KV à reprendre,
-elles peuvent être exportées avec `wrangler d1 export` / `wrangler kv key get`
-puis réimportées à la main dans MariaDB/MySQL — ce n'est pas fait
-automatiquement par ce backend, qui démarre avec une base vide.
+---
+
+## Reprendre les données d'une installation qui tourne déjà
+
+Ce backend démarre avec une base **vide** : il ne va chercher aucune donnée
+ailleurs. Tout ce que le panel a enregistré — registre RH, clients,
+facturation, réglages, matrice des accès, journal, ventes lues dans les logs —
+vit dans les deux tables `kv` et `ventes` de la base MariaDB de
+l'installation actuelle. Pour reprendre l'existant, il faut **un dump de
+cette base**, transmis par la personne qui administre la machine actuelle.
+
+Sur la machine actuelle (montage Docker de `deploy/docker-compose.yml`) :
+
+```bash
+cd /opt/marlowe
+MDP=$(grep '^DB_PASSWORD=' backend/.env | cut -d= -f2-)
+sudo docker exec -e MYSQL_PWD="$MDP" marlowe-db-1 \
+  mariadb-dump -u marlowe --single-transaction marlowe > marlowe-$(date +%F).sql
+tail -1 marlowe-*.sql                  # doit contenir « Dump completed »
+grep -c "CREATE TABLE" marlowe-*.sql   # 2 (kv et ventes)
+```
+
+(Sans Docker : `mariadb-dump -u marlowe -p --single-transaction marlowe`.)
+
+Sur la nouvelle machine, une fois la base et le compte créés (§2), avant ou
+après le premier démarrage du serveur — les deux marchent, `CREATE TABLE IF
+NOT EXISTS` ne se plaint pas d'une table déjà là :
+
+```bash
+mariadb -u marlowe -p marlowe < marlowe-AAAA-MM-JJ.sql
+```
+
+À savoir :
+
+- **Les images et PDF ne sont pas dans le dump.** Ils vivent sur le service
+  de stockage de l'opérateur (`STORAGE_BASE`), et le document `data` ne
+  contient que leurs adresses. Il faut donc reprendre le même
+  `STORAGE_TOKEN` — ou, en changeant de stockage, redéposer chaque fichier
+  et réécrire ses adresses dans `data`.
+- **Tout le monde se reconnecte une fois** : les sessions (`sess:…` dans
+  `kv`) sont liées au cookie posé sur l'ancien domaine.
+- **Le fichier du dump contient tout le registre du personnel** (identités,
+  téléphones, RIB). Il ne doit jamais approcher ce dépôt — `.gitignore`
+  refuse `*.sql` sous plusieurs noms, mais un `git add -f` passe outre.
+
+---
+
+## Lancer les bancs d'essai
+
+```bash
+cd backend
+npm test
+```
+
+Lance les 18 fichiers `test-*.mjs` du dépôt (six à la racine, qui rejouent
+des fonctions du panel extraites de `marlowe-actions.js` ; douze ici, qui
+appellent les routes du serveur avec un Discord et une base simulés), et
+résume à la fin. Aucune installation n'est nécessaire : ni `node_modules`,
+ni base, ni réseau.
+
+Un seul fichier fait exception : `test-mariadb.mjs` éprouve le serveur
+contre une **vraie** base. Sans variables `DB_*`, il le dit et sort sans
+échouer. Pour le lancer, donnez-lui une base de test **dédiée** — il efface
+les tables :
+
+```bash
+DB_HOST=127.0.0.1 DB_PORT=3306 DB_USER=marlowe DB_PASSWORD=… DB_NAME=marlowe_test node test-mariadb.mjs
+```
+
+Pas de base sous la main ? Une MariaDB jetable en Docker suffit, sans rien
+installer d'autre (il faut `npm install` dans `backend/` pour `mysql2`) :
+
+```bash
+docker run -d --name marlowe-essai -e MARIADB_ROOT_PASSWORD=jetable \
+  -e MARIADB_DATABASE=marlowe_test -e MARIADB_USER=marlowe -e MARIADB_PASSWORD=jetable \
+  -p 127.0.0.1:13306:3306 mariadb:10.11
+# quelques secondes plus tard :
+DB_HOST=127.0.0.1 DB_PORT=13306 DB_USER=marlowe DB_PASSWORD=jetable DB_NAME=marlowe_test node test-mariadb.mjs
+docker rm -f marlowe-essai
+```
+
+C'est ce banc-là qui prouve que deux instances du backend ne perdent rien :
+il fait tourner deux copies du serveur qui n'ont en commun que la base, et
+les fait écrire en rafale sur le même document. Sans le verrou en base, il
+échoue (vérifié en le désactivant) ; avec, il passe.
+
+Chaque fichier explique en tête ce qu'il vérifie et pourquoi il existe.
+Tous font foi : ils sont relancés à chaque livraison.

@@ -1,3 +1,16 @@
+> ## ⚠️ Document daté — une intervention précise, sur une machine précise
+>
+> Déroulé écrit le 11/09/2026 pour le VPS de l'équipe d'origine (`/opt/marlowe`,
+> Caddy partagé dans `/opt/vps-proxy`, dépôt `Poloveni/Marlow-Vineyard`).
+> Les commits `92a7fc0` et `06f7001` cités appartiennent à **cet autre dépôt**
+> et n'existent pas ici. Rien de ce qui suit ne s'applique à une nouvelle
+> installation.
+>
+> Ce qui garde de la valeur : la **section 2**, qui est la recette du dump de
+> la base avec ses trois contrôles — c'est ce fichier-là qu'il faut obtenir
+> pour reprendre les données (voir `backend/README.md`, « Reprendre les
+> données d'une installation qui tourne déjà »).
+
 # Mise à jour du serveur — déroulé d'intervention
 
 **Pour** : Nicolas

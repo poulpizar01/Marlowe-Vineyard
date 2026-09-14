@@ -81,18 +81,35 @@ async function appliquerSchema(pool) {
   }
 }
 
+/* Combien de temps une requête attend son tour sur un document avant d'y
+   renoncer (voir binding.verrou). Une écriture prend quelques dizaines de
+   millisecondes ; quinze secondes, c'est déjà le signe que quelque chose
+   ne va pas — et le panel préfère un refus net à une attente sans fin. */
+const VERROU_ATTENTE_S = 15;
+
 /* config = { host, port, user, password, database, connectionLimit? } */
 export async function creerBase(config) {
-  const pool = mysql.createPool({
+  const parametres = {
     host: config.host,
     port: config.port,
     user: config.user,
     password: config.password,
     database: config.database,
     waitForConnections: true,
-    connectionLimit: config.connectionLimit || 10,
     charset: 'utf8mb4',
-  });
+  };
+  const pool = mysql.createPool({ ...parametres, connectionLimit: config.connectionLimit || 10 });
+
+  /* Un second pool, petit, réservé aux verrous nommés (binding.verrou).
+     -----------------------------------------------------------------------
+     Un verrou GET_LOCK appartient à la CONNEXION qui l'a pris : elle doit
+     rester ouverte tant qu'on le tient, donc immobilisée pendant toute la
+     section protégée. Si ces connexions venaient du pool ordinaire, dix
+     requêtes en attente d'un même document en occuperaient les dix places,
+     et celle qui tient le verrou n'aurait plus de connexion pour faire ses
+     propres lectures et écritures : tout le monde s'attendrait. Deux pools,
+     et ce blocage-là devient impossible. */
+  const poolVerrous = mysql.createPool({ ...parametres, connectionLimit: config.verrousLimit || 8 });
 
   /* Un échec de connexion ici doit dire clairement QUOI vérifier — pas juste
      « ECONNREFUSED », qui ne dit rien à quelqu'un qui ne connaît pas MySQL. */
@@ -130,6 +147,64 @@ export async function creerBase(config) {
       } finally {
         connexion.release();
       }
+    },
+
+    /* Un verrou nommé, tenu par la BASE — donc commun à toutes les instances.
+       -----------------------------------------------------------------------
+       Plusieurs routes lisent un document entier, le modifient et le
+       réécrivent (data, journal, settings, invites, alias). Deux de ces
+       sections ne doivent jamais se chevaucher, sans quoi la seconde réécrit
+       par-dessus la première et un enregistrement disparaît en silence.
+       La file d'attente en mémoire d'index.js (verrou()) ne vaut que pour UN
+       processus : deux conteneurs, ou deux `node src/server.js` sur la même
+       base, ont chacun la leur et ne se voient pas.
+
+       GET_LOCK(nom, attente) est l'équivalent côté serveur : MariaDB comme
+       MySQL ne l'accordent qu'à une connexion à la fois, quel que soit le
+       processus qui la tient, et le rendent d'eux-mêmes si la connexion
+       tombe — un processus tué en pleine écriture ne bloque personne.
+       Le nom porte celui de la base : deux installations sur le même serveur
+       (une de test à côté de la vraie) ne se gênent pas.
+
+       Rend ce que rend `action`. Si le verrou n'est pas obtenu dans le délai,
+       lève une erreur marquée `verrouOccupe` — index.js la traduit en 503,
+       rien n'a été écrit. `opts.attente` en secondes ; 0 veut dire « si la
+       place est prise, ne pas attendre » (la tâche périodique s'en sert). */
+    async verrou(nom, action, opts) {
+      const attente = (opts && typeof opts.attente === 'number') ? opts.attente : VERROU_ATTENTE_S;
+      const nomSql = ('marlowe:' + config.database + ':' + nom).slice(0, 64);
+      const connexion = await poolVerrous.getConnection();
+      let tenu = false;
+      try {
+        const [lignes] = await connexion.query('SELECT GET_LOCK(?, ?) AS ok', [nomSql, attente]);
+        tenu = Number(lignes && lignes[0] && lignes[0].ok) === 1;
+        if (!tenu) {
+          const e = new Error(attente > 0
+            ? `Le document « ${nom} » est en cours d'écriture par une autre instance depuis plus de ${attente} s.`
+            : `Le document « ${nom} » est en cours d'écriture par une autre instance.`);
+          e.verrouOccupe = true;
+          e.document = nom;
+          throw e;
+        }
+        return await action();
+      } finally {
+        if (tenu) {
+          /* Si le RELEASE échoue, la connexion est détruite plutôt que rendue
+             au pool : le serveur libère alors le verrou de lui-même, et
+             personne ne récupère une connexion qui tiendrait encore un verrou
+             fantôme. */
+          try { await connexion.query('SELECT RELEASE_LOCK(?)', [nomSql]); connexion.release(); }
+          catch (e) { connexion.destroy(); }
+        } else {
+          connexion.release();
+        }
+      }
+    },
+
+    /* Ferme les deux pools proprement (arrêt du serveur, fin d'un banc
+       d'essai). */
+    async fermer() {
+      await Promise.allSettled([poolVerrous.end(), pool.end()]);
     },
   };
 

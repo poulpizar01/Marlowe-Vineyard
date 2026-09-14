@@ -1,3 +1,25 @@
+> ## ⚠️ Document périmé — conservé pour l'historique
+>
+> Écrit **avant** la migration hors de Cloudflare, pour un pack de migration
+> (`schema-mariadb.sql`, `scripts/1-exporter.mjs`, `2-importer.mjs`,
+> `4-verifier.mjs`, `test-pack.mjs`, `docs/nginx-tout-en-un.conf`…) qui
+> **n'est pas dans ce dépôt** et n'a plus d'objet : la migration a eu lieu.
+> Plusieurs affirmations ci-dessous sont fausses pour le code actuel :
+>
+> - le compte MariaDB **doit** avoir `CREATE` (le schéma s'applique au
+>   démarrage, voir `backend/README.md` §2) — pas de compte `marlowe_app`
+>   restreint ;
+> - la configuration est `backend/.env`, pas `api/.env` ;
+> - Node 18.17+ et trois dépendances, pas Node 20 et `mysql2` seul ;
+> - il n'y a plus de CORS ni de montage A : site et API partagent l'origine ;
+> - les images vivent sur le stockage de l'opérateur (`STORAGE_BASE`), pas
+>   dans un `IMAGES_DIR` ;
+> - le validateur FolkOS est joint en HTTPS sortant (`FOLKOS_ID_BASE`), sans
+>   contrainte de co-localisation.
+>
+> **La référence, c'est `backend/README.md`.** Ce qui reste juste ici : les
+> pièges Discord (Message Content Intent) et l'exigence `frame-ancestors`.
+
 # Marlowe Vineyard — ce qu'il faut prévoir sur le VPS
 
 Document court, à l'intention de la personne qui administre la machine.

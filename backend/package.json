@@ -1,6 +1,6 @@
 {
   "name": "marlowe-api",
-  "version": "2.0.0",
+  "version": "1.48.0",
   "type": "module",
   "private": true,
   "description": "Backend de connexion Discord du domaine Marlowe Vineyard — Node.js + MariaDB/MySQL",
@@ -9,7 +9,9 @@
   },
   "scripts": {
     "start": "node src/server.js",
-    "dev": "node --watch src/server.js"
+    "dev": "node --watch src/server.js",
+    "test": "node scripts/tests.mjs",
+    "adresse": "node scripts/changer-adresse.mjs"
   },
   "dependencies": {
     "dotenv": "^16.4.5",

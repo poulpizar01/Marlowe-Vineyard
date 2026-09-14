@@ -243,6 +243,16 @@ function creerCtx() {
 
 const PORT = Number(process.env.PORT || 8787);
 
+/* Adresse d'écoute. Par défaut 127.0.0.1 : le serveur n'est joignable que
+   depuis la machine elle-même — donc depuis le reverse proxy qui porte le
+   HTTPS, jamais depuis Internet, quel que soit l'état du pare-feu. Avant,
+   listen(PORT) sans adresse écoutait sur TOUTES les interfaces : sur un
+   hébergeur sans pare-feu, le port nu était public.
+   HOST=0.0.0.0 l'ouvre à toutes les interfaces. C'est obligatoire dans un
+   conteneur (le proxy y arrive par le réseau Docker, voir Dockerfile et
+   deploy/docker-compose.yml), et c'est la seule bonne raison de l'écrire. */
+const HOST = String(process.env.HOST || '127.0.0.1').trim();
+
 const serveur = http.createServer(async (requeteNode, resNode) => {
   try {
     const pathname = (requeteNode.url || '/').split('?')[0];
@@ -264,8 +274,8 @@ const serveur = http.createServer(async (requeteNode, resNode) => {
   }
 });
 
-serveur.listen(PORT, () => {
-  console.log(`Marlowe API en écoute sur http://localhost:${PORT}`);
+serveur.listen(PORT, HOST, () => {
+  console.log(`Marlowe API en écoute sur http://${HOST}:${PORT}`);
 });
 
 /* --------------------------------------------------------------------------
