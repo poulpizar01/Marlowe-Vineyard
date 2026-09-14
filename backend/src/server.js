@@ -63,9 +63,59 @@ const TYPES_MIME = {
    voir docs/A-TRANSMETTRE-AU-RESPONSABLE.md. Sans elle l'iframe reste
    blanche, sans le moindre message d'erreur. X-Frame-Options ne doit JAMAIS
    être posé : il contredirait frame-ancestors et bloquerait l'affichage même
-   quand la CSP est correcte. */
+   quand la CSP est correcte.
+
+   La liste des cadres autorisés vient de FRAME_ANCESTORS dans .env ; à
+   défaut, celle de l'opérateur FlashbackFA ci-dessous. Un autre opérateur,
+   un autre domaine de jeu : une ligne dans .env, rien dans le code. */
+const FRAME_ANCESTORS_DEFAUT =
+  "'self' https://*.fbfa.fr https://fbfa.fr https://cfx-nui-external-iframe nui://game nui:";
 const CSP_FRAME_ANCESTORS =
-  "frame-ancestors 'self' https://*.fbfa.fr https://fbfa.fr https://cfx-nui-external-iframe nui://game nui:";
+  'frame-ancestors ' + String(process.env.FRAME_ANCESTORS || FRAME_ANCESTORS_DEFAUT).trim();
+
+/* Les adresses du site telles que .env les donne (SITE_URL, puis SITE_URLS) —
+   le même calcul qu'originesAutorisees dans index.js. La première est
+   l'adresse principale. */
+function sitesConfigures() {
+  const brut = [process.env.SITE_URL, ...String(process.env.SITE_URLS || '').split(',')];
+  const out = [];
+  for (const u of brut) {
+    const t = String(u || '').trim();
+    if (!t) continue;
+    try { out.push(new URL(t).origin); } catch (e) { /* entrée illisible : ignorée */ }
+  }
+  return [...new Set(out)];
+}
+
+/* Ce que le serveur sait et que le panel doit savoir aussi.
+   ---------------------------------------------------------------------------
+   Le panel est un jeu de fichiers statiques : il ne lit pas .env. Longtemps,
+   il portait donc ses propres copies de l'adresse du site (SITE_ATTENDUES
+   dans marlowe-actions.js) et de l'hôte des scripts FolkOS (marlowe-folkos.js),
+   à retoucher à la main à chaque changement — et à oublier. Ici, le serveur
+   ajoute ces valeurs à la fin de marlowe-config.js au moment de le servir :
+   les scripts chargés après lui les trouvent dans window, et .env redevient
+   le seul endroit où une adresse s'écrit. Les valeurs écrites en dur dans les
+   fichiers ne servent plus que de repli, quand le panel est ouvert sans ce
+   serveur. */
+function configPanel() {
+  const folkos = String(process.env.FOLKOS_SCRIPTS_BASE || '').trim().replace(/\/+$/, '');
+  return '\n/* --- Ajouté par backend/src/server.js d\'après .env : ne s\'édite pas ici. --- */\n'
+    + 'window.MARLOWE_SITES = ' + JSON.stringify(sitesConfigures()) + ';\n'
+    + (folkos ? 'window.MARLOWE_FOLKOS_HOST = ' + JSON.stringify(folkos) + ';\n' : '');
+}
+
+/* Les balises og:url / og:image des pages doivent porter une adresse
+   ABSOLUE (Discord ignore un chemin relatif, sans un mot). Les lignes qui
+   les portent sont marquées <!-- ADRESSE --> dans le HTML ; on y remplace
+   l'origine écrite par SITE_URL au passage. Sans SITE_URL, la page part
+   telle quelle. */
+function adapterAdresses(html) {
+  const sites = sitesConfigures();
+  if (!sites.length) return html;
+  return html.split('\n').map(l => l.includes('<!-- ADRESSE -->')
+    ? l.replace(/https?:\/\/[^/"'\s>]+/g, sites[0]) : l).join('\n');
+}
 
 function poserEntetesCadre(resNode) {
   resNode.setHeader('Content-Security-Policy', CSP_FRAME_ANCESTORS);
@@ -111,7 +161,9 @@ async function servirStatique(pathname, resNode) {
   if (!chemin.startsWith(RACINE_SITE + path.sep)) return false; // pas de ../
 
   try {
-    const contenu = await readFile(chemin);
+    let contenu = await readFile(chemin);
+    if (ext === '.html') contenu = adapterAdresses(contenu.toString('utf8'));
+    else if (relatif.replace(/\\/g, '/') === '/marlowe-config.js') contenu = contenu.toString('utf8') + configPanel();
     poserEntetesCadre(resNode);
     resNode.statusCode = 200;
     resNode.setHeader('Content-Type', type);

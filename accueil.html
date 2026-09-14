@@ -18,10 +18,11 @@
      1. og:image DOIT être une adresse ABSOLUE. Discord ne va pas chercher un
         chemin relatif : il l'ignore en silence et n'affiche aucune image.
 
-     2. Ces adresses changent avec le domaine. Le jour du passage sur le VPS,
-        les quatre lignes marquées « ADRESSE » ci-dessous sont à mettre à jour
-        — sinon l'aperçu continuera de pointer vers l'ancien site, qui finira
-        par ne plus répondre.
+     2. Ces adresses changent avec le domaine. Les lignes marquées « ADRESSE »
+        ci-dessous sont réécrites par backend/src/server.js au moment de
+        servir la page, avec SITE_URL de backend/.env : ce qui est écrit ici
+        n'est qu'un repli. Ne retirez pas la marque, c'est elle qui désigne
+        les lignes à réécrire.
 
      3. Discord GARDE EN CACHE l'aperçu d'une adresse, plusieurs heures. Après
         une modification, recoller le même lien réaffiche l'ancienne version.

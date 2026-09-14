@@ -27,13 +27,15 @@
    jeu, ils ne sont jamais téléchargés — la surface d'exposition n'existe pas
    au lieu d'être seulement inutilisée.
 
-   ⚠️ L'hôte ci-dessous vient de leur documentation. S'il change, c'est ICI et
-   nulle part ailleurs.
+   L'hôte vient de FOLKOS_SCRIPTS_BASE dans backend/.env : le serveur le
+   communique via marlowe-config.js (window.MARLOWE_FOLKOS_HOST, chargé avant
+   ce fichier). Celui écrit en dur ci-dessous, tiré de la documentation de
+   l'opérateur, n'est que le repli quand .env ne dit rien.
    =========================================================================== */
 (function () {
   'use strict';
 
-  var HOTE = 'https://computer.game.fbfa.fr';
+  var HOTE = String(window.MARLOWE_FOLKOS_HOST || 'https://computer.game.fbfa.fr').replace(/\/+$/, '');
 
   /* Sommes-nous dans un cadre ? En jeu, la chaîne est
      nui://game → cfx-nui-external-iframe → l'hôte FolkOS → nous.

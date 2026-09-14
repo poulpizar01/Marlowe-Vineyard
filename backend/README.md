@@ -316,10 +316,21 @@ toutes hors du code :
 2. le **Redirect** OAuth2 sur le portail développeur Discord (§1.3) ;
 3. l'entrée du reverse proxy.
 
-Et deux retouches dans le dépôt, sans effet sur le fonctionnement mais qui
-évitent un diagnostic trompeur et de mauvais aperçus de liens : la liste
-`SITE_ATTENDUES` de `marlowe-actions.js` et les balises `og:url` /
-`og:image` des trois pages HTML. Une commande fait les deux :
+Rien dans les fichiers du dépôt : le serveur communique `SITE_URL` au panel
+en servant les pages (liste des adresses acceptées de la page de
+diagnostic, balises `og:url` / `og:image` des aperçus de liens). Le port
+est libre de la même façon : `PORT` dans `.env`, et l'entrée du proxy qui
+pointe dessus.
+
+Deux autres adresses se règlent au même endroit, avec une valeur par défaut
+qui convient à l'opérateur FlashbackFA : `FRAME_ANCESTORS` (qui a le droit
+d'afficher le site dans un cadre, l'ordinateur en jeu) et
+`FOLKOS_SCRIPTS_BASE` (l'hôte des scripts clavier et barre d'adresse de ce
+cadre). Voir `.env.example`.
+
+Facultatif : pour que les valeurs de repli écrites dans le dépôt suivent
+elles aussi (utiles seulement si le panel est ouvert sans ce serveur), une
+commande les met à jour :
 
 ```bash
 node scripts/changer-adresse.mjs https://nouvelle.adresse.fr            # pour de bon

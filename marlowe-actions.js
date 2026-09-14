@@ -5552,23 +5552,20 @@ window.onload = function(){
 
   function cfgAuth() { return (window.MarloweAuth && window.MarloweAuth.CONFIG) || {}; }
 
-  /* Les adresses acceptées — plus de GitHub Pages, une seule adresse : celle
-     du domaine du domaine viticole, servie par le backend qui sert aussi ce
-     fichier (même origine, voir marlowe-config.js).
+  /* Les adresses acceptées : celles de SITE_URL / SITE_URLS côté backend.
+     Le serveur les ajoute à marlowe-config.js en le servant
+     (window.MARLOWE_SITES, voir backend/src/server.js) : une seule source,
+     .env, et cette liste suit d'elle-même. Elle n'alimente que la page de
+     diagnostic et un message d'erreur — la vraie décision est prise côté
+     serveur (exigerOrigine dans backend/src/index.js).
 
-     Elle doit refléter SITE_URLS côté backend (voir backend/.env.example).
-     Les deux listes vivent à deux endroits différents, donc elles peuvent
-     diverger : c'est pour ça que la page de diagnostic affiche celle-ci et
-     dit si elle est en cause.
-
-     Si le site doit un jour répondre sur DEUX adresses en même temps — le
-     temps d'un déménagement de domaine, ou pendant un essai sur une adresse
-     provisoire —, ajoutez-la ici ET dans SITE_URLS côté backend. Les deux
-     ensemble : l'oubli de la seconde fait perdre le cookie de session, et
-     l'utilisateur revient à l'écran de connexion sans aucun message. */
-  const SITE_ATTENDUES = [
+     La liste écrite en dur ci-dessous n'est qu'un repli, pour un panel
+     ouvert sans ce serveur (copie statique, fichier local). */
+  const SITE_ATTENDUES_DEFAUT = [
     'https://marlowe-vineyard.fbfa.fr',
   ];
+  const SITE_ATTENDUES = (Array.isArray(window.MARLOWE_SITES) && window.MARLOWE_SITES.length)
+    ? window.MARLOWE_SITES.slice() : SITE_ATTENDUES_DEFAUT;
   const SITE_ATTENDU = SITE_ATTENDUES[0];
   const adresseConnue = o => SITE_ATTENDUES.includes(String(o || ''));
 

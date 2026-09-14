@@ -70,7 +70,7 @@ function ecrire(f, contenu, avant) {
       qu'on en déduit pour les autres fichiers. */
 const ACTIONS = 'marlowe-actions.js';
 const src = lire(ACTIONS);
-const m = src.match(/const SITE_ATTENDUES = \[\n([\s\S]*?)\n  \];/);
+const m = src.match(/const SITE_ATTENDUES_DEFAUT = \[\n([\s\S]*?)\n  \];/);
 if (!m) { console.error(`${ACTIONS} : liste SITE_ATTENDUES introuvable.`); process.exit(1); }
 const actuelles = [...m[1].matchAll(/'([^']+)'/g)].map(x => x[1]);
 const actuelle = actuelles[0];
@@ -80,7 +80,7 @@ console.log(`Adresse actuelle  : ${actuelle}`);
 console.log(`Nouvelle adresse  : ${principale}${origines.length > 1 ? '  (+ ' + origines.slice(1).join(', ') + ')' : ''}`);
 console.log(essai ? '\nMode essai — rien ne sera écrit.\n' : '');
 
-const bloc = `const SITE_ATTENDUES = [\n${origines.map(o => `    '${o}',`).join('\n')}\n  ];`;
+const bloc = `const SITE_ATTENDUES_DEFAUT = [\n${origines.map(o => `    '${o}',`).join('\n')}\n  ];`;
 ecrire(ACTIONS, src.replace(m[0], bloc), src);
 
 /* 2. Les trois pages : uniquement les lignes marquées <!-- ADRESSE -->, et

@@ -16,7 +16,13 @@
 
    Ce fichier est la seule source. S'il fallait un jour séparer à nouveau le
    site et l'API sur deux domaines, c'est la seule ligne à modifier — et il
-   faut la charger AVANT tout script qui s'en sert (voir index.html et
-   gestion.html).
+   faut la charger AVANT tout script qui s'en sert (voir index.html,
+   accueil.html et gestion.html).
+
+   Quand c'est backend/src/server.js qui sert ce fichier, il y ajoute à la
+   volée ce qu'il tient de .env — window.MARLOWE_SITES (SITE_URL + SITE_URLS)
+   et window.MARLOWE_FOLKOS_HOST (FOLKOS_SCRIPTS_BASE). Les scripts qui s'en
+   servent (marlowe-actions.js, marlowe-folkos.js) ont chacun un repli si ces
+   lignes manquent, c'est-à-dire si le panel est ouvert sans ce serveur.
    ============================================================================ */
 window.MARLOWE_API_BASE = '';
