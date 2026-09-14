@@ -48,7 +48,7 @@
   *{box-sizing:border-box;}
   body{
     margin:0;
-    background:var(--stone);
+    background:transparent;
     color:var(--parchment);
     font-family:'Inter',sans-serif;
     -webkit-font-smoothing:antialiased;
@@ -802,6 +802,7 @@
   .vine-divider .vd-label{font-family:'Fraunces',serif;font-style:italic;font-size:15px;color:var(--or-soft);white-space:nowrap;}
 
 </style>
+<script src="marlowe-config.js"></script>
 <script src="marlowe-auth.js"></script>
 </head>
 <body>
@@ -810,7 +811,7 @@
   <!-- Le rail : une icône par section, jamais plus de sept. Il ne change pas
        de page — il choisit ce que la colonne d'à côté affiche. -->
   <aside class="mv-rail" id="mvRail">
-    <a class="mv-rail-logo" href="index.html" title="Retour au site du domaine">
+    <a class="mv-rail-logo" href="accueil.html" title="Retour au site du domaine">
       <img class="brand-logo" src="logo.png" alt="Marlowe Vineyard"
            onerror="this.remove();document.getElementById('brandFallback').hidden=false;">
       <span class="brand-mark" id="brandFallback" hidden>MV</span>
@@ -1016,7 +1017,7 @@
             <div class="field"><label>RIB</label><input type="text" id="newEmpRib" placeholder="000000"></div>
           </div>
           <div class="field-row">
-            <div class="field"><label>Identifiant Discord</label><input type="text" id="newEmpDiscord" inputmode="numeric" placeholder="826526979204841482"></div>
+            <div class="field"><label>Identifiant Discord</label><input type="text" id="newEmpDiscord" inputmode="numeric" placeholder="000000000000000000"></div>
             <!-- Les noms sont remplis par marlowe-actions.js depuis le registre : les
                  cinq qui figuraient ici en dur ne suivaient pas l'équipe. -->
             <div class="field"><label>Recruteur</label><select id="newEmpRec"><option>—</option></select></div>
@@ -1894,7 +1895,7 @@
         Vous ne voyez ici que ce à quoi vous avez droit.</p>
 
       <div class="panel">
-        <h3>La semaine <span id="weekRange" class="wv-range"></span></h3>
+        <h3>La semaine <span id="agendaWeekRange" class="wv-range"></span></h3>
         <div class="weekview-wrap">
           <div class="weekview-head" id="weekHead"></div>
           <div class="weekview-body" id="weekBody"></div>
@@ -3471,7 +3472,7 @@ function peindreGrille(headId, bodyId, rangeId, garde){
 }
 
 function renderWeekGrid(){
-  peindreGrille('weekHead',    'weekBody',    'weekRange',    a => !estCommercial(a));
+  peindreGrille('weekHead',    'weekBody',    'agendaWeekRange', a => !estCommercial(a));
   peindreGrille('comWeekHead', 'comWeekBody', 'comWeekRange', a =>  estCommercial(a));
 }
 renderWeekGrid();

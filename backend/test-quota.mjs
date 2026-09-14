@@ -55,7 +55,7 @@ const msgVente = (q, item, brut, nom, part, job = 'Vigneron', id) => ({
 
 /* ---------- la fausse base ---------- */
 const KV = new Map();
-let VENTES = new Map();          // msg -> ligne, pour imiter INSERT OR IGNORE
+let VENTES = new Map();          // msg -> ligne, pour imiter INSERT IGNORE
 
 function faireDB() {
   const exec = (sql, a) => ({
@@ -67,7 +67,7 @@ function faireDB() {
       return null;
     },
     async run() {
-      if (/^INSERT OR IGNORE INTO ventes/.test(sql)) {
+      if (/^INSERT IGNORE INTO ventes/.test(sql)) {
         const [msg, ts, nom, cle, qte, brut, part, item, job] = a;
         if (!VENTES.has(msg)) VENTES.set(msg, { msg, ts, nom, cle, qte, brut, part, item, job });
         return {};

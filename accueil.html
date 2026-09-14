@@ -1,0 +1,1722 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Marlowe Vineyard — Là où chaque bouteille raconte une histoire</title>
+<link rel="icon" type="image/png" href="favicon.png">
+
+<!-- ==========================================================================
+     L'APERÇU DES LIENS PARTAGÉS (Open Graph)
+     --------------------------------------------------------------------------
+     Sans ces balises, un lien collé dans Discord reste une ligne bleue nue.
+     Avec elles, Discord affiche un encadré : la bannière, le titre, la phrase
+     de présentation, et un liseré à la couleur du domaine.
+
+     ⚠️ TROIS PIÈGES, dans l'ordre où on les rencontre :
+
+     1. og:image DOIT être une adresse ABSOLUE. Discord ne va pas chercher un
+        chemin relatif : il l'ignore en silence et n'affiche aucune image.
+
+     2. Ces adresses changent avec le domaine. Le jour du passage sur le VPS,
+        les quatre lignes marquées « ADRESSE » ci-dessous sont à mettre à jour
+        — sinon l'aperçu continuera de pointer vers l'ancien site, qui finira
+        par ne plus répondre.
+
+     3. Discord GARDE EN CACHE l'aperçu d'une adresse, plusieurs heures. Après
+        une modification, recoller le même lien réaffiche l'ancienne version.
+        Pour forcer : coller le lien suivi de « ?v=2 » (puis v=3, etc.).
+
+     La bannière fait 1200 × 630 — le format que Discord affiche en grand. Sa
+     source est dans img/_banniere-source.html, pour pouvoir la refaire.
+     ========================================================================== -->
+<meta property="og:type"        content="website">
+<meta property="og:site_name"   content="Marlowe Vineyard">
+<meta property="og:locale"      content="fr_FR">
+<meta property="og:title"       content="Marlowe Vineyard — Domaine viticole">
+<meta property="og:description" content="Depuis les coteaux de Tongva Hills, le domaine Marlowe cultive, vinifie et livre les plus grands crus de l'État. De la vigne au verre, tout se fait chez nous.">
+<!-- ADRESSE --> <meta property="og:url"   content="https://marlowe-vineyard.fbfa.fr/accueil.html">
+<!-- ADRESSE --> <meta property="og:image" content="https://marlowe-vineyard.fbfa.fr/img/banniere.png">
+<meta property="og:image:width"  content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt"    content="Marlowe Vineyard — domaine viticole de Tongva Hills, San Andreas.">
+
+<meta name="twitter:card"  content="summary_large_image">
+<meta name="twitter:title" content="Marlowe Vineyard — Domaine viticole">
+<meta name="twitter:description" content="De la vigne au verre, tout se fait chez nous. Tongva Hills, San Andreas.">
+<!-- ADRESSE --> <meta name="twitter:image" content="https://marlowe-vineyard.fbfa.fr/img/banniere.png">
+
+<!-- C'est cette couleur que Discord peint en liseré à gauche de l'encadré.
+     L'or du domaine, pour que l'aperçu soit reconnaissable d'un coup d'œil. -->
+<meta name="theme-color" content="#D9B872">
+<meta name="description" content="Domaine viticole Marlowe Vineyard — Tongva Hills, San Andreas. Catalogue, livraison 24 h, recrutement.">
+
+<link rel="stylesheet" href="fonts/polices.css">
+<script src="marlowe-config.js"></script>
+
+
+<style>
+  /* ==========================================================
+     THÈME SOMBRE (par défaut)
+     ========================================================== */
+  :root{
+    color-scheme:dark;
+    /* ⚠️ Aucune de ces couleurs n'est verte, et c'est volontaire.
+       Douze jetons de cette palette étaient bâtis sur du vert — le fond, les
+       cartes, les surfaces, les voiles, les vitres, jusqu'au gris du texte
+       secondaire. D'où le « je vois tout vert » des visiteurs : ce n'était pas
+       une impression, c'était la page. La base est maintenant une ardoise
+       chaude, neutre, qui laisse la couleur au ciel et à l'or. Le vert n'a pas
+       disparu du domaine : il est retourné là où il veut dire quelque chose,
+       les vignes et le sceau du grade Saisonnier. */
+    --page:
+      radial-gradient(ellipse 1200px 700px at 78% 8%, rgba(217,184,114,.10), transparent 60%),
+      linear-gradient(165deg, #090D13 0%, #10151E 48%, #161C27 100%);
+    --text:#F3EFE4;
+    --muted:#A3ADBB;
+
+    --gold:#D9B872;
+    --gold-soft:#B89858;
+    --gold-btn:#D9B872;
+    --gold-btn-hi:#E8C989;
+    --on-gold:#090D13;
+
+    --line:rgba(255,255,255,.10);
+    --line-2:rgba(255,255,255,.22);
+    --gold-line:rgba(217,184,114,.35);
+    --gold-line-2:rgba(217,184,114,.45);
+    --gold-tint:rgba(217,184,114,.06);
+
+    /* Les cartes sont désormais LÉGÈREMENT translucides : le massif se devine
+       derrière, très assombri. C'est ce qui empêche le bas de page de
+       redevenir un mur — d'une couleur ou d'une autre. */
+    --card:rgba(20,26,35,.72);
+    --card-2:rgba(28,35,46,.78);
+    --surface:linear-gradient(160deg,rgba(24,31,41,.82),rgba(13,17,24,.88));
+    --glass:rgba(9,13,19,.62);
+    --glass-2:rgba(9,13,19,.9);
+    --dot:rgba(255,255,255,.18);
+    --speck:rgba(217,184,114,.30);
+    --shadow:0 20px 50px rgba(0,0,0,.5);
+    --card-shadow:none;
+    /* Le voile monte au défilement mais ne ferme jamais complètement :
+       il plafonne autour de 90 %, donc la crête reste devinable sous le
+       contenu au lieu d'être remplacée par un aplat. */
+    --veil:linear-gradient(165deg, rgba(7,10,15,.90) 0%, rgba(11,16,24,.86) 45%, rgba(7,10,15,.92) 100%);
+    /* ⚠️ Ce chiffre était réglé pour l'ANCIENNE scène — un lever de soleil très
+       clair, qu'il fallait beaucoup assombrir pour lire le texte par-dessus.
+       Le ciel qui suit l'heure est déjà sombre en haut : le même voile
+       l'éteignait entièrement, on ne voyait plus ni soleil ni crête. */
+    --veil-min:.10;
+    --page-solid:#090D13;
+    /* Le voile latéral s'arrête maintenant à 66 % et non à 82 % : il couvrait
+       encore 45 % du ciel au milieu de la page, et c'est lui — pas le voile
+       général — qui transformait le soleil de midi en disque gris. Il garde
+       toute sa force là où il sert, derrière le texte d'accueil. */
+    /* Ce voile ne sert qu'à UNE chose : garder le titre lisible sur le ciel.
+       Il était écrit en dégradé horizontal, donc il couvrait toute la hauteur
+       de la page sur sa moitié gauche — et il éteignait le soleil du matin,
+       qui est bas et à gauche. Il est maintenant une tache centrée sur le
+       texte : fort là où il y a des mots, absent partout ailleurs. */
+    --scrim:radial-gradient(ellipse 64% 78% at 6% 42%,
+      rgba(6,9,14,.90) 0%, rgba(6,9,14,.70) 40%, rgba(6,9,14,.24) 70%, rgba(6,9,14,0) 88%);
+    --vignette:radial-gradient(ellipse 122% 94% at 50% 44%, transparent 44%, rgba(0,0,0,.30) 100%);
+
+    --g1:#8FBF8F;  /* Saisonnier */
+    --g2:#D9B872;  /* Ouvrier viticole */
+    --g3:#E0A06A;  /* Chef de culture */
+  }
+
+
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html{scroll-behavior:smooth;}
+  body{
+    background:var(--page);
+    background-attachment:fixed;
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  ::selection{background:var(--gold-btn);color:var(--on-gold);}
+
+  /* poussière dorée */
+  body::before{
+    content:'';
+    position:fixed; inset:0; z-index:0; pointer-events:none;
+    background-image:
+      radial-gradient(1px 1px at 12% 22%, var(--speck), transparent),
+      radial-gradient(1px 1px at 82% 14%, var(--speck), transparent),
+      radial-gradient(1px 1px at 64% 62%, var(--speck), transparent),
+      radial-gradient(1px 1px at 30% 78%, var(--speck), transparent),
+      radial-gradient(1px 1px at 90% 70%, var(--speck), transparent);
+  }
+
+  .wrap{max-width:1320px;margin:0 auto;padding:0 40px;position:relative;z-index:1;}
+  @media(max-width:760px){.wrap{padding:0 22px;}}
+
+  /* ===== NAV ===== */
+  nav{display:flex;align-items:center;justify-content:space-between;padding:26px 0;border-bottom:1px solid var(--line);gap:20px;}
+  .brandmark{display:flex;align-items:center;gap:11px;}
+  .brandmark svg{flex-shrink:0;color:var(--gold);}
+  .brandmark #brandFallback{display:flex;} .brandmark #brandFallback[hidden]{display:none;}
+  .brand-logo{height:46px;width:auto;flex-shrink:0;display:block;margin:-8px 0;}
+  @media(max-width:640px){.brand-logo{height:38px;}}
+  /* Sous 480 px le blason porte déjà le nom : le répéter à côté force un
+     retour à la ligne sur trois lignes et écrase la barre. */
+  @media(max-width:480px){.brand-text{display:none;}}
+  .brand-text{line-height:1.15;}
+  .brand-text .t1{font-family:'Fraunces',serif;font-weight:600;font-size:15px;letter-spacing:.02em;}
+  .brand-text .t2{font-size:9.5px;letter-spacing:.22em;color:var(--gold-soft);text-transform:uppercase;}
+
+  .nav-links{display:flex;align-items:center;gap:28px;list-style:none;}
+  .nav-links a{color:var(--text);text-decoration:none;font-size:13.5px;font-weight:500;opacity:.82;transition:.15s;}
+  .nav-links a:hover{opacity:1;color:var(--gold);}
+  @media(max-width:1100px){.nav-links{display:none;}}
+
+  .nav-actions{display:flex;align-items:center;gap:12px;}
+  .btn-member{display:flex;align-items:center;gap:7px;border:1px solid var(--gold-line-2);color:var(--text);background:var(--gold-tint);padding:10px 20px;border-radius:999px;font-size:13px;font-weight:500;text-decoration:none;transition:.15s;white-space:nowrap;}
+  .btn-member:hover{background:rgba(217,184,114,.16);border-color:var(--gold);}
+
+  /* ===== HERO ===== */
+  .hero{display:grid;grid-template-columns:1.15fr .85fr;gap:40px;align-items:center;padding:90px 0 70px;min-height:640px;}
+  @media(max-width:980px){.hero{grid-template-columns:1fr;padding:60px 0 40px;text-align:center;}
+    .hero-stats{justify-content:center;} .hero-ctas{justify-content:center;}}
+
+  .badge{display:inline-flex;align-items:center;gap:9px;border:1px solid var(--gold-line);color:var(--gold);font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;padding:9px 18px;border-radius:999px;margin-bottom:30px;background:var(--gold-tint);}
+  .badge::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--gold);}
+
+  h1{font-family:'Fraunces',serif;font-weight:600;font-size:clamp(38px,5vw,58px);line-height:1.08;letter-spacing:-.01em;margin-bottom:26px;}
+  h1 em{font-style:italic;font-weight:500;color:var(--gold);}
+
+  .hero-desc{font-size:16px;line-height:1.7;color:var(--muted);max-width:520px;margin-bottom:38px;}
+  @media(max-width:980px){.hero-desc{margin-left:auto;margin-right:auto;}}
+
+  .hero-ctas{display:flex;gap:14px;margin-bottom:56px;flex-wrap:wrap;}
+  .btn{padding:15px 28px;border-radius:999px;font-size:14px;font-weight:600;text-decoration:none;transition:.18s;display:inline-flex;align-items:center;gap:9px;cursor:pointer;border:none;font-family:inherit;}
+  .btn-gold{background:var(--gold-btn);color:var(--on-gold);}
+  .btn-gold:hover{background:var(--gold-btn-hi);transform:translateY(-1px);}
+  .btn-outline{border:1px solid var(--line-2);color:var(--text);background:transparent;}
+  .btn-outline:hover{border-color:var(--gold);color:var(--gold);}
+
+  .hero-stats{display:flex;gap:48px;flex-wrap:wrap;}
+  .stat .n{font-family:'Fraunces',serif;font-weight:600;font-size:27px;color:var(--gold);}
+  .stat .l{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-top:5px;}
+
+  /* ===== NOUVEAUTÉS =====
+     Le visuel est présenté comme une pièce en vitrine : un fond de caisse
+     sombre, une lumière chaude derrière, un filet doré à écoinçons, et la
+     légende SOUS le cadre — jamais posée par-dessus l'étiquette. */
+  .news-col{display:flex;flex-direction:column;align-items:center;gap:15px;}
+
+  .news-stage{position:relative;width:100%;max-width:400px;}
+  .news-frame{width:100%;aspect-ratio:4/5;max-height:min(64vh,540px);position:relative;
+    border-radius:16px;overflow:hidden;background:#080B0F;
+    box-shadow:0 0 0 1px var(--gold-line), 0 34px 74px rgba(0,0,0,.5);}
+  .news-frame.is-crest{border:none;background:none;box-shadow:none;overflow:visible;
+    aspect-ratio:auto;max-height:none;}
+  .news-frame svg{width:100%;height:auto;display:block;filter:drop-shadow(var(--shadow));}
+  @keyframes float{0%,100%{transform:translateY(0);}50%{transform:translateY(-10px);}}
+  .news-frame.is-crest svg{animation:float 7s ease-in-out infinite;}
+  @media(prefers-reduced-motion:reduce){.news-frame.is-crest svg{animation:none;}}
+
+  .news-eyebrow{display:flex;align-items:center;gap:10px;font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--gold-soft);}
+  .news-eyebrow::before,.news-eyebrow::after{content:'';height:1px;width:26px;background:var(--gold-line);}
+  .news-eyebrow[hidden]{display:none;}
+
+  .news-slide{position:absolute;inset:0;opacity:0;transform:scale(1.02);
+    transition:opacity .45s ease, transform .45s ease;pointer-events:none;}
+  .news-slide.active{opacity:1;transform:none;pointer-events:auto;}
+
+  /* Le fond de caisse : la même image, très floutée et assombrie, sert de
+     nappe colorée — puis une lumière chaude et une vignette la reprennent en
+     main pour que ce soit un éclairage, pas une bouillie. */
+  .news-bg{position:absolute;inset:-18%;background-size:cover;background-position:center;
+    filter:blur(38px) saturate(1.2) brightness(.38);}
+  .news-lume{position:absolute;inset:0;
+    background:radial-gradient(ellipse 60% 50% at 50% 44%, rgba(255,216,152,.22), transparent 72%);}
+  .news-vig{position:absolute;inset:0;
+    background:radial-gradient(ellipse 98% 86% at 50% 46%, transparent 40%, rgba(0,0,0,.66) 100%);}
+
+  .news-slide img{position:relative;z-index:2;width:100%;height:100%;object-fit:contain;
+    display:block;padding:30px 30px 34px;
+    filter:drop-shadow(0 24px 36px rgba(0,0,0,.62));}
+
+  /* Filet doré à écoinçons. Deux éléments identiques, le second retourné :
+     quatre coins pour le prix de deux. */
+  .news-rule{position:absolute;inset:13px;border:1px solid var(--gold-line-2);border-radius:9px;
+    z-index:3;pointer-events:none;}
+  /* scaleX seulement : un scale(-1) complet renverrait les deux coins sur
+     ceux qu'on a déjà, et il n'y en aurait toujours que deux. */
+  .news-rule.alt{transform:scaleX(-1);}
+  .news-rule::before,.news-rule::after{content:'';position:absolute;width:24px;height:24px;
+    border:1px solid var(--gold);opacity:.85;}
+  .news-rule::before{top:-1px;left:-1px;border-right:0;border-bottom:0;border-radius:9px 0 0 0;}
+  .news-rule::after{bottom:-1px;right:-1px;border-left:0;border-top:0;border-radius:0 0 9px 0;}
+
+  .news-cap{text-align:center;max-width:400px;}
+  .news-cap[hidden]{display:none;}
+  .news-cap .nt{font-family:'Fraunces',serif;font-weight:600;font-size:17.5px;line-height:1.3;color:var(--text);}
+  .news-cap .nd{font-size:12.5px;color:var(--muted);margin-top:5px;line-height:1.6;}
+
+  /* Les flèches vivent hors du cadre : rien ne doit passer devant le visuel. */
+  .news-arrow{position:absolute;top:50%;transform:translateY(-50%);width:36px;height:36px;border-radius:50%;
+    background:var(--glass);border:1px solid var(--line-2);color:var(--text);
+    display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;
+    backdrop-filter:blur(4px);transition:.15s;z-index:5;}
+  .news-arrow:hover{background:var(--glass-2);border-color:var(--gold);color:var(--gold);}
+  .news-arrow.prev{left:-48px;} .news-arrow.next{right:-48px;}
+  @media(max-width:1180px){.news-arrow.prev{left:10px;} .news-arrow.next{right:10px;}}
+
+  .news-dots{display:flex;gap:6px;}
+  .news-dot{width:7px;height:7px;border-radius:50%;background:var(--dot);cursor:pointer;transition:.18s;border:none;padding:0;}
+  .news-dot.active{background:var(--gold);width:20px;border-radius:4px;}
+
+  .scroll-cue{display:flex;justify-content:center;padding-bottom:36px;color:var(--gold-soft);opacity:.7;}
+  .scroll-cue a{color:inherit;display:block;}
+
+  /* ===== SECTIONS ===== */
+  section{padding:86px 0;border-top:1px solid var(--line);scroll-margin-top:20px;}
+  .sec-head{max-width:680px;margin-bottom:46px;}
+  .eyebrow{display:inline-flex;align-items:center;gap:9px;font-size:10.5px;font-weight:600;letter-spacing:.2em;
+    text-transform:uppercase;color:var(--gold-soft);margin-bottom:18px;}
+  .eyebrow::after{content:'';width:140px;height:1px;background:var(--gold-line);}
+  h2{font-family:'Fraunces',serif;font-weight:600;font-size:clamp(28px,3.4vw,40px);line-height:1.14;letter-spacing:-.01em;}
+  h2 em{font-style:italic;font-weight:500;color:var(--gold);}
+  .sec-desc{font-size:15px;line-height:1.75;color:var(--muted);margin-top:16px;}
+  .sub-head{font-family:'Fraunces',serif;font-weight:600;font-size:21px;margin:56px 0 20px;}
+
+  /* ===== CATALOGUE ===== */
+  .cat-viewport{position:relative;border-radius:14px;overflow:hidden;border:1px solid var(--line);
+    background:var(--surface);aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;}
+  @media(max-width:760px){.cat-viewport{aspect-ratio:3/4;}}
+  .cat-viewport img{max-width:100%;max-height:100%;width:auto;height:auto;display:block;
+    opacity:0;transition:opacity .25s ease;}
+  /* display:block l'emporte sur la règle par défaut de [hidden] : sans cette
+     ligne les pages masquées restent dans le flux et se rangent côte à côte. */
+  .cat-viewport img[hidden]{display:none;}
+  .cat-viewport img.on{opacity:1;}
+  /* En plein écran le cadre occupe l'écran : l'aspect fixe n'a plus lieu d'être. */
+  .cat-viewport:fullscreen{aspect-ratio:auto;width:100vw;height:100vh;border-radius:0;
+    background:var(--glass-2);}
+  .cat-bar{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-top:14px;}
+  .cat-bar[hidden]{display:none;}
+  .cat-nav{display:flex;align-items:center;gap:10px;}
+  /* display:flex l'emporte sur la règle par défaut de [hidden] : sans cette
+     ligne la pagination resterait visible sur un document Canva. */
+  .cat-nav[hidden]{display:none;}
+  .cat-count{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;min-width:64px;text-align:center;}
+  .cat-tools{display:flex;gap:9px;flex-wrap:wrap;}
+  .cat-btn{border:1px solid var(--line-2);background:transparent;color:var(--text);cursor:pointer;
+    border-radius:999px;width:38px;height:38px;font-size:17px;line-height:1;display:inline-flex;
+    align-items:center;justify-content:center;font-family:inherit;text-decoration:none;transition:.15s;}
+  .cat-btn.wide{width:auto;padding:0 18px;font-size:13px;font-weight:500;}
+  .cat-btn:hover{border-color:var(--gold);color:var(--gold);}
+  .cat-btn:disabled{opacity:.35;cursor:default;}
+  .cat-btn[hidden]{display:none;}
+  /* Avec un document Canva, le cadre est rempli par l'iframe : pas de
+     centrage, pas de fond visible. */
+  .cat-viewport.is-embed{display:block;background:#000;}
+  .cat-viewport iframe{position:absolute;inset:0;width:100%;height:100%;border:none;}
+  @media(max-width:760px){.cat-viewport.is-embed{aspect-ratio:16/10;}}
+  .cat-placeholder{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:0 60px;text-align:center;}
+  .cat-placeholder span{font-family:'Fraunces',serif;font-style:italic;color:var(--gold-soft);opacity:.75;font-size:15px;}
+
+  /* ===== ORGANIGRAMME ===== */
+  .org-tier{font-size:10.5px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:var(--gold-soft);
+    text-align:center;margin-bottom:20px;}
+  .org-card{border:1px solid var(--line);border-radius:14px;background:var(--card);padding:20px 22px;
+    text-align:center;position:relative;z-index:1;box-shadow:var(--card-shadow);}
+  .org-card.lead{border-color:var(--gold-line-2);background:var(--card-2);}
+  .org-card .role{font-family:'Fraunces',serif;font-weight:600;font-size:16px;}
+  .org-card .who{font-size:12.5px;color:var(--muted);margin-top:7px;line-height:1.6;}
+
+  .org-top{max-width:340px;margin:0 auto;}
+  .org-duo{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;max-width:620px;margin:0 auto;}
+  .org-solo{max-width:340px;margin:0 auto;}
+  @media(max-width:640px){.org-duo{grid-template-columns:1fr;}}
+  .who[data-names] span{display:block;}
+  .who .absent{color:var(--gold-soft);opacity:.75;}
+  .who .vacant, .pill-names .vacant{font-style:italic;opacity:.55;}
+  .org-pill{display:flex;flex-direction:column;gap:5px;padding:11px 16px;border-radius:14px;}
+  .pill-role{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold-soft);}
+  .pill-names{font-size:12.5px;color:var(--text);line-height:1.55;}
+  .pill-names span{display:block;}
+  .org-ladder{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;}
+  @media(max-width:900px){.org-ladder{grid-template-columns:1fr;}}
+  .org-step{border:1px solid var(--line);border-radius:14px;background:var(--card);padding:18px 20px;
+    text-align:center;box-shadow:var(--card-shadow);}
+  .org-step .grade-tag{display:block;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--gold-soft);margin-bottom:8px;}
+  .org-step .role{font-family:'Fraunces',serif;font-weight:600;font-size:15px;}
+  .org-step .who{font-size:12.5px;color:var(--muted);margin-top:7px;line-height:1.6;}
+  .org-note{text-align:center;font-size:12px;color:var(--muted);margin:26px 0 0;}
+  .org-connector{width:1px;height:34px;background:var(--gold-line);margin:0 auto;}
+  .org-branches{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;position:relative;padding-top:34px;}
+  .org-branches::before{content:'';position:absolute;top:0;left:12.5%;right:12.5%;height:1px;background:var(--gold-line);}
+  .org-branch{position:relative;}
+  .org-branch::before{content:'';position:absolute;top:-34px;left:50%;width:1px;height:34px;background:var(--gold-line);}
+  .org-down{display:flex;justify-content:center;color:var(--gold-soft);opacity:.6;font-size:13px;padding:9px 0;position:relative;z-index:1;}
+  .org-sub{display:flex;flex-direction:column;gap:8px;align-items:center;}
+  .org-pill{border:1px solid var(--line);border-radius:999px;padding:9px 16px;font-size:12.5px;
+    background:var(--card);text-align:center;width:100%;position:relative;z-index:1;box-shadow:var(--card-shadow);}
+  @media(max-width:900px){
+    .org-branches{grid-template-columns:1fr;gap:30px;padding-top:26px;}
+    .org-branches::before{left:50%;right:auto;width:1px;top:0;bottom:0;height:auto;}
+    .org-branch::before{display:none;}
+  }
+
+
+
+  /* ===== FOND DU DOMAINE — la vallée nocturne =====
+     Aucune image n'est chargée : le relief, l'aurore, les étoiles et les
+     lucioles sont dessinés en direct par un shader (voir « LA VALLÉE » plus
+     bas dans le script, repris du concept Nocturne). Plus de cycle jour/nuit
+     calé sur l'heure — la scène est délibérément une seule nuit, tout le
+     temps. Le dégradé ci-dessous n'est qu'un repli : pour la fraction de
+     seconde avant que le canvas s'affiche, et pour le cas où WebGL ne
+     serait pas disponible. */
+  .bg-scene{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;
+    background:
+      radial-gradient(ellipse 60% 50% at 55% 63%, #262e52, transparent),
+      linear-gradient(180deg,#070d21 0%,#1c2442 60%,#050a15 100%);}
+
+  /* Le canvas du shader s'ouvre en fondu une fois prêt ; avant ça (ou sans
+     WebGL, ou en cas de perte de contexte), le relief SVG statique reste
+     visible dessous — jamais un trou. */
+  .bg-valley{position:absolute;inset:0;}
+  .bg-valley canvas{width:100%;height:100%;display:block;opacity:0;transition:opacity 2.4s;}
+  .bg-valley.ready canvas{opacity:1;}
+  .bg-fallback{position:absolute;inset:0;width:100%;height:100%;}
+  .bg-valley.ready .bg-fallback{opacity:0;transition:opacity 2.6s;}
+
+  /* Le voile s'épaissit au fil du défilement : la scène est presque nue en haut
+     de page, et entièrement calmée dès qu'on entre dans le contenu. */
+  /* La valeur de repli vaut le voile MINIMUM, pas le maximum : sans le script,
+     l'ancienne valeur (1) éteignait la scène qu'on venait de rendre visible.
+     Le mode « animations réduites », plus bas, la force à 1 de son côté. */
+  .bg-veil{position:absolute;inset:0;background:var(--veil);opacity:var(--veil-o,.10);}
+  .bg-vignette{position:absolute;inset:0;background:var(--vignette);}
+
+  /* Entrée : le fond s'ouvre au chargement plutôt que d'apparaître d'un bloc. */
+  .bg-scene{opacity:0;transition:opacity 1.6s ease;}
+  .bg-scene.pret{opacity:1;}
+  /* Sans JavaScript, « pret » n'est jamais posé et le fond restait invisible :
+     la page se retrouvait nue. Le repli — un ciel de fin de journée écrit en
+     CSS — s'affiche alors tel quel. Il ne suivra pas l'heure, mais il existe. */
+  .sans-js .bg-scene{opacity:1;}
+
+  @media(prefers-reduced-motion:reduce){
+    .bg-scene{transition:none;}
+    /* « Animations réduites » veut dire « n'anime pas », pas « cache l'image ».
+       Le voile ne suivant plus le défilement, on le fige à une valeur moyenne :
+       assez pour lire partout, assez peu pour que la scène existe encore. */
+    .bg-veil{opacity:.55 !important;}
+  }
+
+  /* Deux voiles locaux, posés dans la scène fixe plutôt qu'en pseudo-éléments :
+     une bande sous la navigation, et un dégradé latéral derrière le texte
+     d'accueil. Ils garantissent la lisibilité même sur une photo en plein
+     soleil, et s'effacent au défilement quand le voile général prend le relais. */
+  .bg-scrim{position:absolute;inset:0;background:var(--scrim);opacity:var(--scrim-o,1);}
+  .bg-topfade{position:absolute;top:0;left:0;right:0;height:200px;
+    background:linear-gradient(180deg, color-mix(in srgb, var(--page-solid) 90%, transparent) 0%,
+      color-mix(in srgb, var(--page-solid) 66%, transparent) 55%, transparent 100%);}
+  /* Sur téléphone le dégradé latéral n'a pas de sens : le texte occupe toute
+     la largeur. On le remplace par un voile vertical — assez léger pour que le
+     lever du jour se voie quand même, puisque c'est là qu'il joue son rôle. */
+  @media(max-width:980px){
+    .bg-scrim{background:linear-gradient(180deg,
+      color-mix(in srgb, var(--page-solid) 46%, transparent) 0%,
+      color-mix(in srgb, var(--page-solid) 62%, transparent) 55%,
+      color-mix(in srgb, var(--page-solid) 72%, transparent) 100%);}
+  }
+
+  /* ===== LOCATION DU DOMAINE ===== */
+  .loc-intro{display:grid;grid-template-columns:1.02fr .98fr;gap:44px;align-items:start;}
+  @media(max-width:960px){.loc-intro{grid-template-columns:1fr;gap:32px;}}
+  .loc-lead{font-size:15.5px;line-height:1.75;color:var(--muted);}
+  .loc-lead p + p{margin-top:16px;}
+  .loc-lead b{color:var(--text);font-weight:600;}
+
+  .loc-options{display:flex;flex-direction:column;gap:16px;}
+  .loc-opt{border:1px solid var(--line);border-radius:16px;background:var(--card);padding:22px 24px;
+    box-shadow:var(--card-shadow);}
+  .loc-opt.main{border-color:var(--gold-line-2);background:var(--card-2);}
+  .loc-opt-top{display:flex;align-items:baseline;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:9px;}
+  .loc-opt h3{font-family:'Fraunces',serif;font-weight:600;font-size:16.5px;}
+  .loc-price{font-family:'Fraunces',serif;font-weight:600;font-size:22px;color:var(--gold);white-space:nowrap;}
+  .loc-opt p{font-size:13.5px;line-height:1.65;color:var(--muted);}
+  .loc-opt .tag{display:inline-block;font-size:10px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--gold-soft);margin-bottom:10px;}
+
+  .loc-gal{display:flex;flex-direction:column;gap:18px;margin-top:44px;}
+  .loc-gal figure{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--card);
+    box-shadow:var(--card-shadow);}
+  .loc-gal img{display:block;width:100%;height:auto;}
+  .loc-gal figcaption{font-size:12px;color:var(--muted);padding:12px 18px;border-top:1px solid var(--line);}
+
+  .part-head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin:56px 0 8px;}
+  .part-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;margin-top:22px;}
+  @media(max-width:860px){.part-grid{grid-template-columns:1fr;}}
+  .part-card{border:1px solid var(--line);border-radius:16px;background:var(--card);padding:20px 22px;
+    box-shadow:var(--card-shadow);}
+  .part-card h4{font-family:'Fraunces',serif;font-weight:600;font-size:15.5px;margin-bottom:12px;
+    display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+  .part-card h4 .cut{font-family:'Inter',sans-serif;font-size:11.5px;font-weight:600;color:var(--gold);
+    border:1px solid var(--gold-line);border-radius:999px;padding:4px 11px;white-space:nowrap;}
+  .part-card ul{list-style:none;display:flex;flex-direction:column;gap:7px;}
+  .part-card li{font-size:13px;line-height:1.6;color:var(--muted);padding-left:15px;position:relative;}
+  .part-card li::before{content:'';position:absolute;left:0;top:8px;width:5px;height:5px;border-radius:50%;
+    background:var(--gold-soft);opacity:.7;}
+  .part-card li b{color:var(--text);font-weight:600;}
+  .part-note{font-size:12.5px;line-height:1.7;color:var(--muted);margin-top:22px;
+    border-left:2px solid var(--gold-line);padding-left:16px;}
+
+  /* ===== GRADES & RÉMUNÉRATION ===== */
+  .base-pay{display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+    border:1px solid var(--gold-line-2);background:var(--gold-tint);border-radius:14px;padding:20px 24px;margin-bottom:34px;}
+  .base-pay .bp-amount{font-family:'Fraunces',serif;font-weight:600;font-size:26px;color:var(--gold);white-space:nowrap;}
+  .base-pay .bp-text{font-size:13.5px;color:var(--muted);line-height:1.6;}
+  .base-pay .bp-text b{color:var(--text);font-weight:600;}
+
+  .grade-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;}
+  @media(max-width:900px){.grade-grid{grid-template-columns:1fr;}}
+  .grade-card{border:1px solid var(--line);border-radius:16px;background:var(--card);padding:26px 24px;
+    display:flex;flex-direction:column;box-shadow:var(--card-shadow);}
+  .grade-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:22px;}
+  .g-pill{border:1px solid;border-radius:999px;padding:7px 15px;font-size:12.5px;font-weight:600;
+    background:color-mix(in srgb, currentColor 12%, transparent);white-space:nowrap;}
+  .g-1{color:var(--g1);} .g-2{color:var(--g2);} .g-3{color:var(--g3);}
+  .grade-rank{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);white-space:nowrap;}
+
+  .grade-block{padding:16px 0;border-top:1px solid var(--line);}
+  .grade-block:first-of-type{border-top:none;padding-top:0;}
+  .grade-lbl{font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--gold-soft);margin-bottom:8px;}
+  .grade-big{font-family:'Fraunces',serif;font-weight:600;font-size:24px;line-height:1.2;}
+  .grade-big span{font-size:13px;font-family:'Inter',sans-serif;font-weight:500;color:var(--muted);}
+  .grade-bonus{font-size:13px;color:var(--muted);margin-top:6px;}
+  .grade-bonus b{color:var(--gold);font-weight:600;}
+  .rewards{list-style:none;display:flex;flex-direction:column;gap:7px;}
+  .rewards li{display:grid;grid-template-columns:auto 1fr;gap:10px;font-size:13.5px;line-height:1.5;}
+  .rewards li::before{content:'✦';color:var(--gold);font-size:11px;line-height:1.6;}
+  .grade-next{margin-top:auto;padding-top:16px;border-top:1px solid var(--line);font-size:12.5px;line-height:1.6;color:var(--muted);}
+  .grade-next b{color:var(--text);font-weight:600;}
+  .grade-next.final{color:var(--gold);font-weight:600;}
+
+  .table-scroll{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--card);box-shadow:var(--card-shadow);}
+  table.pay{width:100%;border-collapse:collapse;min-width:620px;}
+  table.pay th{text-align:left;font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--gold-soft);
+    font-weight:600;padding:16px 22px;border-bottom:1px solid var(--line);background:var(--card-2);}
+  table.pay td{padding:17px 22px;font-size:14px;border-bottom:1px solid var(--line);vertical-align:middle;}
+  table.pay tr:last-child td{border-bottom:none;}
+  table.pay td.num{font-variant-numeric:tabular-nums;}
+  table.pay td.prime{font-family:'Fraunces',serif;font-weight:600;font-size:16px;color:var(--gold);white-space:nowrap;}
+
+  /* ===== CARRIÈRES ===== */
+  .perk-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;}
+  @media(max-width:1100px){.perk-grid{grid-template-columns:repeat(2,1fr);}}
+  @media(max-width:620px){.perk-grid{grid-template-columns:1fr;}}
+  .perk-card{border:1px solid var(--line);border-radius:16px;background:var(--card);padding:24px 22px;box-shadow:var(--card-shadow);}
+  .perk-card .ico{font-size:22px;line-height:1;margin-bottom:16px;}
+  .perk-card h3{font-family:'Fraunces',serif;font-weight:600;font-size:17px;margin-bottom:9px;}
+  .perk-card p{font-size:13.5px;line-height:1.65;color:var(--muted);}
+
+  .pull-quote{font-family:'Fraunces',serif;font-style:italic;font-weight:500;font-size:clamp(20px,2.4vw,27px);
+    color:var(--gold);text-align:center;padding:62px 0 52px;}
+
+  .join-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:52px;align-items:start;}
+  @media(max-width:900px){.join-grid{grid-template-columns:1fr;gap:36px;}}
+  .join-grid.solo{grid-template-columns:minmax(0,560px);justify-content:center;}
+  .join-grid.solo .discord-panel{text-align:center;}
+  .expect h3{font-family:'Fraunces',serif;font-weight:600;font-size:21px;margin-bottom:22px;}
+  .expect ul{list-style:none;display:flex;flex-direction:column;gap:16px;}
+  .expect li{display:grid;grid-template-columns:auto 1fr;gap:12px;font-size:14px;line-height:1.65;color:var(--muted);}
+  .expect li::before{content:'✦';color:var(--gold);font-size:12px;line-height:1.6;}
+  .expect li b{color:var(--text);font-weight:600;}
+
+  /* panneau Discord : volontairement sombre dans les deux thèmes */
+  .discord-panel{background:rgba(22,29,38,.80);border:1px solid rgba(217,184,114,.28);border-radius:18px;
+    padding:40px 34px;text-align:center;box-shadow:var(--shadow);}
+  .discord-panel .dico{color:#D9B872;margin-bottom:20px;}
+  .discord-panel .dico svg{width:46px;height:auto;}
+  .discord-panel h3{font-family:'Fraunces',serif;font-weight:600;font-size:21px;color:#F3EFE4;margin-bottom:14px;}
+  .discord-panel p{font-size:13.5px;line-height:1.7;color:#9FB0A2;margin-bottom:26px;}
+
+  /* ===== DEVENIR CLIENT ===== */
+  .client-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:52px;align-items:start;}
+  @media(max-width:900px){.client-grid{grid-template-columns:1fr;gap:38px;}}
+  .steps{display:flex;flex-direction:column;}
+  .step{display:grid;grid-template-columns:auto 1fr;gap:20px;padding:22px 0;border-bottom:1px solid var(--line);}
+  .step:last-child{border-bottom:none;}
+  .step-n{font-family:'Fraunces',serif;font-size:15px;font-weight:600;color:var(--gold);
+    width:38px;height:38px;border:1px solid var(--gold-line-2);border-radius:50%;
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .step h3{font-family:'Fraunces',serif;font-weight:600;font-size:17px;margin-bottom:7px;}
+  .step p{font-size:13.5px;line-height:1.7;color:var(--muted);}
+
+  .client-panel{border:1px solid var(--gold-line);border-radius:16px;background:var(--gold-tint);padding:32px 30px;}
+  .client-panel h3{font-family:'Fraunces',serif;font-weight:600;font-size:19px;margin-bottom:20px;}
+  .perks{list-style:none;display:flex;flex-direction:column;gap:13px;margin-bottom:28px;}
+  .perks li{display:grid;grid-template-columns:auto 1fr;gap:12px;font-size:13.5px;line-height:1.6;}
+  .perks li::before{content:'✦';color:var(--gold);font-size:12px;line-height:1.5;}
+  .perks li span{color:var(--muted);}
+
+  /* ===== FOOTER ===== */
+  footer{border-top:1px solid var(--line);padding:40px 0 56px;display:flex;justify-content:space-between;
+    align-items:center;gap:24px;flex-wrap:wrap;font-size:12px;color:var(--muted);}
+  footer a{color:var(--gold-soft);text-decoration:none;}
+  footer a:hover{color:var(--gold);}
+  .coming-next{border-top:1px solid var(--line);padding:24px 0;text-align:center;font-size:11.5px;color:var(--muted);opacity:.75;letter-spacing:.03em;}
+
+  /* ===== SIGNATURE DU DÉVELOPPEUR =====
+     Discrète par construction : elle vit sous le pied de page, en retrait, et
+     ne réclame l'attention qu'au survol. Une signature qui crie plus fort que
+     le domaine qu'elle a servi à bâtir est une signature ratée. */
+  /* La signature reste UN SEUL objet.
+     -------------------------------------------------------------------------
+     Elle était une pastille unique menant à Discord. En ajoutant le site,
+     j'avais éclaté la marque et les deux liens en trois morceaux qui
+     flottaient côte à côte — trois choses là où l'œil en cherchait une.
+
+     Retour à une pastille, avec les deux destinations DEDANS, séparées de la
+     marque par un trait fin. Le cadre n'apparaît qu'au survol : au repos,
+     l'ensemble reste la ligne discrète qu'il doit être en pied de page. */
+  .signature{border-top:1px solid var(--line);padding:20px 0 40px;
+    display:flex;justify-content:center;}
+  .sig-pastille{display:inline-flex;align-items:center;gap:10px;
+    padding:7px 8px 7px 14px;border-radius:999px;
+    border:1px solid transparent;background:transparent;
+    transition:border-color .25s ease, background .25s ease;}
+  .sig-pastille:hover{border-color:var(--line-2);background:var(--gold-tint);}
+  .sig-txt{color:var(--muted);font-size:11px;letter-spacing:.06em;opacity:.55;
+    transition:opacity .25s ease;white-space:nowrap;}
+  .sig-pastille:hover .sig-txt{opacity:.9;}
+  .sig-trait{width:1px;height:13px;background:var(--line-2);opacity:.5;}
+  /* Les deux liens forment un GROUPE, resserré. Laissés dans l'espacement
+     général de la pastille, ils s'écartaient de vingt-huit pixels et se
+     lisaient comme deux objets sans rapport plutôt que comme un choix. */
+  .sig-actions{display:inline-flex;align-items:center;gap:2px;margin-left:-3px;}
+  .signature a{text-decoration:none;color:var(--muted);font-size:11px;letter-spacing:.06em;
+    opacity:.6;padding:4px 8px;border-radius:999px;white-space:nowrap;
+    transition:opacity .18s ease, color .18s ease, background .18s ease;}
+  .signature a:hover{opacity:1;color:var(--gold);background:rgba(255,255,255,.05);}
+  .signature img{width:20px;height:20px;object-fit:contain;
+    filter:saturate(.55) brightness(.9);transition:filter .25s ease;}
+  .sig-pastille:hover img{filter:none;}
+  .signature b{font-weight:500;color:var(--gold-soft);transition:color .25s ease;}
+  .sig-pastille:hover b{color:var(--gold);}
+
+  @media (max-width:520px){
+    .sig-pastille{flex-wrap:wrap;justify-content:center;padding:9px 12px;row-gap:2px;}
+    .sig-trait{display:none;}
+  }
+</style>
+</head>
+<body>
+
+<!-- Blason du domaine : affiché dans le cadre "Nouveautés" tant qu'aucune image n'a été ajoutée -->
+<template id="crestTpl">
+  <svg viewBox="0 0 400 480" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="8" y="8" width="384" height="464" rx="18" fill="#132A1D" stroke="#D9B872" stroke-width="1.5"/>
+    <rect x="22" y="22" width="356" height="436" rx="10" fill="none" stroke="#8E7C4E" stroke-width="1"/>
+    <path d="M60 60 Q80 40 110 55 M340 60 Q320 40 290 55 M60 420 Q80 440 110 425 M340 420 Q320 440 290 425" stroke="#D9B872" stroke-width="1.2" fill="none" opacity=".7"/>
+    <g transform="translate(200,150)">
+      <path d="M0 -40C-14 -18 -14 8 0 30C14 8 14 -18 0 -40Z" fill="#D9B872" opacity=".9"/>
+      <circle cx="-22" cy="26" r="7" fill="#D9B872"/><circle cx="0" cy="38" r="7" fill="#D9B872"/><circle cx="22" cy="26" r="7" fill="#D9B872"/>
+      <circle cx="-14" cy="46" r="7" fill="#D9B872"/><circle cx="14" cy="46" r="7" fill="#D9B872"/>
+      <circle cx="0" cy="58" r="7" fill="#D9B872"/>
+    </g>
+    <text x="200" y="255" text-anchor="middle" font-family="Fraunces, serif" font-weight="600" font-size="30" fill="#F3EFE4" letter-spacing="2">MARLOWE</text>
+    <text x="200" y="288" text-anchor="middle" font-family="Fraunces, serif" font-style="italic" font-weight="500" font-size="22" fill="#D9B872" letter-spacing="6">VINEYARD</text>
+    <line x1="90" y1="310" x2="310" y2="310" stroke="#8E7C4E" stroke-width="1"/>
+    <text x="200" y="335" text-anchor="middle" font-family="Inter" font-size="10.5" fill="#9FB0A2" letter-spacing="3">TONGVA HILLS · SAN ANDREAS</text>
+  </svg>
+</template>
+
+<noscript><style>.bg-scene{opacity:1 !important;}</style></noscript>
+<div class="bg-scene" id="bgScene" aria-hidden="true">
+  <!-- Le relief : huit plans de montagnes procéduraux, aurore, étoiles et
+       lucioles, dessinés par un shader Three.js (voir « LA VALLÉE » dans le
+       script). Le SVG ci-dessous est le repli : visible avant que le canvas
+       s'ouvre en fondu, et si WebGL manque ou perd son contexte. -->
+  <div class="bg-valley" id="bgValley">
+    <svg class="bg-fallback" viewBox="0 0 1200 300" preserveAspectRatio="none">
+      <path fill="#2A3E52" d="M0,300 L0,150 L52,124 L96,140 L150,76 L196,108 L238,90 L296,26 L332,64 L370,48 L414,90 L462,68 L516,108 L560,88 L606,118 L652,58 L690,96 L736,76 L788,120 L840,100 L892,132 L944,110 L998,136 L1056,116 L1112,142 L1200,126 L1200,300 Z"/>
+      <path fill="#284038" d="M0,300 L0,196 L70,180 L128,194 L186,154 L240,178 L292,148 L350,170 L408,124 L452,146 L508,96 L548,68 L592,112 L642,146 L700,126 L756,158 L812,140 L870,166 L930,150 L988,176 L1050,160 L1112,182 L1200,170 L1200,300 Z"/>
+      <path fill="#1A2C24" d="M0,300 L0,238 C110,228 190,212 300,204 C410,196 470,188 540,182 L580,178 L624,190 C700,208 770,222 850,228 C930,234 1010,230 1100,224 C1150,220 1180,224 1200,228 L1200,300 Z"/>
+      <path fill="#0E1714" d="M0,300 L0,272 C140,262 250,270 370,264 C490,258 560,250 660,254 C780,258 880,268 990,266 C1090,264 1150,270 1200,274 L1200,300 Z"/>
+    </svg>
+  </div>
+  <div class="bg-veil"></div>
+  <div class="bg-scrim"></div>
+  <div class="bg-topfade"></div>
+  <div class="bg-vignette"></div>
+</div>
+
+<div class="wrap">
+
+  <nav>
+    <div class="brandmark">
+      <img class="brand-logo" src="logo.png" alt="Marlowe Vineyard"
+           onerror="this.remove();document.getElementById('brandFallback').hidden=false;">
+      <span id="brandFallback" hidden><svg width="34" height="34" viewBox="0 0 34 34" fill="none">
+        <circle cx="17" cy="17" r="16" stroke="currentColor" stroke-width="1"/>
+        <path d="M17 9c-2 3-2 5 0 7 2-2 2-4 0-7Z" fill="currentColor"/>
+        <path d="M11 15c2 2 4 2 6 0M17 15c2 2 4 2 6 0" stroke="currentColor" stroke-width="1" fill="none"/>
+        <circle cx="14" cy="20" r="1.4" fill="currentColor"/><circle cx="17" cy="21.5" r="1.4" fill="currentColor"/><circle cx="20" cy="20" r="1.4" fill="currentColor"/>
+        <circle cx="15.5" cy="23" r="1.4" fill="currentColor"/><circle cx="18.5" cy="23" r="1.4" fill="currentColor"/>
+      </svg></span>
+      <div class="brand-text"><div class="t1">Marlowe Vineyard</div><div class="t2">Domaine viticole</div></div>
+    </div>
+    <ul class="nav-links">
+      <li><a href="#">Le Domaine</a></li>
+      <li><a href="#catalogue">Catalogue</a></li>
+      <li><a href="#">Feuilleter</a></li>
+      <li><a href="#location">Location</a></li>
+      <li><a href="#organigramme">Organisation</a></li>
+      <li><a href="#grades">Grades</a></li>
+      <li><a href="#carrieres">Carrières</a></li>
+      <li><a href="#devenir-client">Devenir client</a></li>
+      <li><a href="#">Contact</a></li>
+    </ul>
+    <div class="nav-actions">
+      <a href="gestion.html" class="btn-member">🍷 Espace membre</a>
+    </div>
+  </nav>
+
+  <div class="hero">
+    <div>
+      <div class="badge">FlashbackFA · Tongva Hills, San Andreas</div>
+      <h1>Marlowe Vineyard<br>Là où chaque bouteille<br><em>raconte une histoire</em>.</h1>
+      <p class="hero-desc">Depuis les coteaux de Tongva Hills, le domaine Marlowe cultive, vinifie et livre les plus grands crus de l'État. De la vigne au verre, tout se fait chez nous.</p>
+      <div class="hero-ctas">
+        <a href="#catalogue" class="btn btn-gold">Voir le catalogue</a>
+        <a href="https://discord.gg/CG4gYAEat" target="_blank" rel="noopener" class="btn btn-outline">Rejoindre le domaine</a>
+      </div>
+      <div class="hero-stats">
+        <div class="stat"><div class="n">1957</div><div class="l">Année de fondation</div></div>
+        <div class="stat"><div class="n">24 h</div><div class="l">Livraison San Andreas</div></div>
+        <div class="stat"><div class="n">N°1</div><div class="l">Domaine de l'État</div></div>
+      </div>
+    </div>
+
+    <div class="news-col">
+      <div class="news-eyebrow" id="newsEyebrow" hidden>Les nouveautés</div>
+      <div class="news-stage" id="newsStage">
+        <div class="news-frame" id="newsFrame"></div>
+      </div>
+      <div class="news-cap" id="newsCap" hidden></div>
+      <div class="news-dots" id="newsDots"></div>
+    </div>
+  </div>
+
+  <div class="scroll-cue">
+    <a href="#catalogue" aria-label="Descendre vers le catalogue">
+      <svg width="20" height="14" viewBox="0 0 20 14"><path d="M2 2l8 9 8-9" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </a>
+  </div>
+
+  <!-- ===== CATALOGUE ===== -->
+  <section id="catalogue">
+    <div class="sec-head">
+      <div class="eyebrow">Catalogue</div>
+      <h2>La gamme du domaine, <em>à feuilleter</em>.</h2>
+      <p class="sec-desc" id="catDesc">Cuvées, millésimes, tarifs et conditions de livraison — tout est réuni dans notre catalogue. Utilisez les flèches pour tourner les pages.</p>
+    </div>
+
+    <div class="cat-wrap">
+      <div class="cat-viewport" id="catViewport"></div>
+      <div class="cat-bar" id="catBar" hidden>
+        <div class="cat-nav">
+          <button class="cat-btn" data-page="-1" aria-label="Page précédente">‹</button>
+          <span class="cat-count" id="catCount">1 / 1</span>
+          <button class="cat-btn" data-page="1" aria-label="Page suivante">›</button>
+        </div>
+        <div class="cat-tools">
+          <button class="cat-btn wide" id="catFull">⛶ Plein écran</button>
+          <a class="cat-btn wide" id="catOpen" hidden target="_blank" rel="noopener">↗ Ouvrir en grand</a>
+          <a class="cat-btn wide" id="catPdf" hidden download>⬇ Télécharger le PDF</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== ORGANIGRAMME ===== -->
+  <section id="organigramme">
+    <div class="sec-head">
+      <div class="eyebrow">Organisation</div>
+      <h2>L'organigramme <em>du domaine</em>.</h2>
+      <p class="sec-desc">Chaque grade a son périmètre et son responsable direct. Une candidature se dépose toujours auprès du responsable de pôle concerné.</p>
+    </div>
+
+    <div class="org-tier">Direction</div>
+    <div class="org-duo">
+      <div class="org-card lead" data-poste="Patron">
+        <div class="role">Patron</div><div class="who" data-names>—</div>
+      </div>
+      <div class="org-card lead" data-poste="Co-Patron">
+        <div class="role">Co-Patron</div><div class="who" data-names>—</div>
+      </div>
+    </div>
+
+    <!-- Il y avait ici un encadré « Responsable Général » posé entre la
+         direction et TOUS les pôles, ce qui le faisait lire comme le
+         supérieur de chacun d'eux. C'est faux : ce poste encadre les
+         responsables runner, et eux seuls. Il est donc redescendu en tête
+         de la branche « runner », au même niveau que les autres chefs de
+         pôle — un organigramme qui ment sur une hiérarchie est pire qu'un
+         organigramme qui n'en montre aucune. -->
+
+    <div class="org-connector"></div>
+    <div class="org-tier" style="margin:0 0 6px;">Responsables &amp; pôles</div>
+
+    <div class="org-branches">
+      <div class="org-branch">
+        <div class="org-card" data-poste="DRH"><div class="role">DRH</div><div class="who" data-names>—</div></div>
+        <div class="org-down">↓</div>
+        <div class="org-sub">
+          <div class="org-pill" data-poste="RH"><span class="pill-role">RH</span><span class="pill-names" data-names>—</span></div>
+        </div>
+      </div>
+      <div class="org-branch">
+        <div class="org-card" data-poste="Resp. Commercial"><div class="role">Resp. Commercial</div><div class="who" data-names>—</div></div>
+        <div class="org-down">↓</div>
+        <div class="org-sub">
+          <div class="org-pill" data-poste="Commercial"><span class="pill-role">Commercial</span><span class="pill-names" data-names>—</span></div>
+        </div>
+      </div>
+      <div class="org-branch">
+        <div class="org-card" data-poste="Resp. Magasin"><div class="role">Resp. Magasin</div><div class="who" data-names>—</div></div>
+        <div class="org-down">↓</div>
+        <div class="org-sub">
+          <div class="org-pill" data-poste="Assistant(e) magasin"><span class="pill-role">Assistant(e) magasin</span><span class="pill-names" data-names>—</span></div>
+          <div class="org-pill" data-poste="Vendeur|Vendeuse"><span class="pill-role">Vendeur · Vendeuse</span><span class="pill-names" data-names>—</span></div>
+        </div>
+      </div>
+      <!-- La branche runner compte un niveau de plus que les autres : le
+           responsable des responsables runner, puis les responsables runner,
+           puis les runners.
+
+           Le data-poste liste plusieurs orthographes parce que le nom du
+           poste est saisi à la main dans les fiches RH et écrit autrement sur
+           le Discord (« Directeur Des Responsables-Runners »). La comparaison
+           ignore la casse, les accents et la ponctuation, mais PAS le « s »
+           de « Runners » — d'où le singulier et le pluriel tous les deux.
+           « Responsable Général » reste dans la liste : c'est ainsi que la
+           fiche est libellée aujourd'hui, et le nom doit continuer de
+           s'afficher tant qu'elle n'a pas été renommée. -->
+      <div class="org-branch">
+        <div class="org-card"
+             data-poste="Responsable des Responsables Runner|Directeur des Responsables Runners|Directeur des Responsables Runner|Responsable Général">
+          <div class="role">Resp. des Responsables Runner</div><div class="who" data-names>—</div>
+        </div>
+        <div class="org-down">↓</div>
+        <div class="org-sub">
+          <div class="org-pill" data-poste="Resp. Runner"><span class="pill-role">Resp. Runner</span><span class="pill-names" data-names>—</span></div>
+          <div class="org-down" style="padding:2px 0;">↓</div>
+          <div class="org-pill" data-poste="Runner"><span class="pill-role">Runner</span><span class="pill-names" data-names>—</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="org-tier" style="margin:52px 0 20px;">Parcours production</div>
+    <div class="org-ladder">
+      <div class="org-step"><div class="grade-tag">Grade 3</div><div class="role">Chef de culture</div><div class="who">8 000 vins par semaine</div></div>
+      <div class="org-step"><div class="grade-tag">Grade 2</div><div class="role">Ouvrier viticole</div><div class="who">5 000 vins par semaine</div></div>
+      <div class="org-step"><div class="grade-tag">Grade 1</div><div class="role">Saisonnier</div><div class="who">3 000 vins par semaine</div></div>
+    </div>
+
+    <p class="org-note" id="orgNote" hidden></p>
+  </section>
+
+  <!-- ===== GRADES & RÉMUNÉRATION ===== -->
+  <section id="grades">
+    <div class="sec-head">
+      <div class="eyebrow">Carrière</div>
+      <h2>Grades &amp; <em>rémunération</em>.</h2>
+      <p class="sec-desc">Tu montes en grade en produisant. Chaque palier a son quota hebdomadaire, son salaire, ses récompenses — et plus tu montes, plus le bonus versé au quota est élevé.</p>
+    </div>
+
+    <div class="base-pay">
+      <div class="bp-amount">10 $ / vin</div>
+      <div class="bp-text">La <b>base commune à tous les grades</b> : 10 $ pour chaque vin vendu. Les salaires et les bonus ci-dessous viennent s'ajouter dès que le quota hebdomadaire est atteint.</div>
+    </div>
+
+    <div class="grade-grid">
+
+      <div class="grade-card">
+        <div class="grade-top">
+          <span class="g-pill g-1">Saisonnier</span>
+          <span class="grade-rank">Grade 1</span>
+        </div>
+        <div class="grade-block">
+          <div class="grade-lbl">Quota hebdomadaire</div>
+          <div class="grade-big">3 000 <span>vins</span></div>
+          <div class="grade-bonus">Salaire <b>30 000 $</b> + <b>3 000 $</b> de bonus au quota</div>
+        </div>
+        <div class="grade-block">
+          <div class="grade-lbl">Si le quota est fait</div>
+          <ul class="rewards">
+            <li>15 menus</li>
+            <li>15 bidons</li>
+          </ul>
+        </div>
+        <div class="grade-next">↑ Promotion <b>Ouvrier Viticole</b> dès 5 000 ventes dépassées.</div>
+      </div>
+
+      <div class="grade-card">
+        <div class="grade-top">
+          <span class="g-pill g-2">Ouvrier Viticole</span>
+          <span class="grade-rank">Grade 2</span>
+        </div>
+        <div class="grade-block">
+          <div class="grade-lbl">Quota hebdomadaire</div>
+          <div class="grade-big">5 000 <span>vins</span></div>
+          <div class="grade-bonus">Salaire <b>50 000 $</b> + <b>10 000 $</b> de bonus au quota</div>
+        </div>
+        <div class="grade-block">
+          <div class="grade-lbl">Si le quota est fait</div>
+          <ul class="rewards">
+            <li>25 menus</li>
+            <li>20 bidons</li>
+            <li>1 ticket tombola</li>
+          </ul>
+        </div>
+        <div class="grade-next">↑ Promotion <b>Chef de Culture</b> dès 8 000 ventes dépassées.</div>
+      </div>
+
+      <div class="grade-card">
+        <div class="grade-top">
+          <span class="g-pill g-3">Chef de Culture</span>
+          <span class="grade-rank">Grade 3</span>
+        </div>
+        <div class="grade-block">
+          <div class="grade-lbl">Quota hebdomadaire</div>
+          <div class="grade-big">8 000 <span>vins</span></div>
+          <div class="grade-bonus">Salaire <b>80 000 $</b> + <b>24 000 $</b> de bonus au quota</div>
+        </div>
+        <div class="grade-block">
+          <div class="grade-lbl">Si le quota est fait</div>
+          <ul class="rewards">
+            <li>50 menus</li>
+            <li>30 bidons</li>
+            <li>2 tickets tombola</li>
+          </ul>
+        </div>
+        <div class="grade-next final">★ Grade final du parcours production.</div>
+      </div>
+
+    </div>
+
+    <h3 class="sub-head">Salaires &amp; bonus en un coup d'œil</h3>
+    <div class="table-scroll">
+      <table class="pay">
+        <thead>
+          <tr><th>Grade</th><th>Quota hebdo</th><th>Salaire en poche</th><th>Bonus au quota</th><th>Récompenses</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="g-pill g-1">Saisonnier</span></td>
+            <td class="num">3 000 vins</td>
+            <td class="prime">30 000 $</td>
+            <td class="num">+ 3 000 $</td>
+            <td>15 menus · 15 bidons</td>
+          </tr>
+          <tr>
+            <td><span class="g-pill g-2">Ouvrier Viticole</span></td>
+            <td class="num">5 000 vins</td>
+            <td class="prime">50 000 $</td>
+            <td class="num">+ 10 000 $</td>
+            <td>25 menus · 20 bidons · 1 ticket tombola</td>
+          </tr>
+          <tr>
+            <td><span class="g-pill g-3">Chef de Culture</span></td>
+            <td class="num">8 000 vins</td>
+            <td class="prime">80 000 $</td>
+            <td class="num">+ 24 000 $</td>
+            <td>50 menus · 30 bidons · 2 tickets tombola</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===== CARRIÈRES / NOUS REJOINDRE ===== -->
+  <section id="carrieres">
+    <div class="sec-head">
+      <div class="eyebrow">Carrières</div>
+      <h2>On recrute <em>au domaine</em>.</h2>
+      <p class="sec-desc">Pas besoin d'y connaître quoi que ce soit en vin. On forme, on encadre, on récompense. Il faut juste avoir envie.</p>
+    </div>
+
+    <div class="perk-grid">
+      <div class="perk-card">
+        <div class="ico">📍</div>
+        <h3>Tout est sur place</h3>
+        <p>Vigne, chai, entrepôt et bureaux sont sur le même domaine. Zéro trajet interminable entre deux points de la carte.</p>
+      </div>
+      <div class="perk-card">
+        <div class="ico">💰</div>
+        <h3>Payé chaque semaine</h3>
+        <p>10 $ garantis par vin vendu, plus ton salaire et le bonus versé dès que le quota est atteint. Tout est transparent dans ton espace membre.</p>
+      </div>
+      <div class="perk-card">
+        <div class="ico">📈</div>
+        <h3>Évolution rapide</h3>
+        <p>Trois grades de production, puis des passerelles vers le commerce, le magasin ou l'encadrement. Le mérite passe avant l'ancienneté.</p>
+      </div>
+      <div class="perk-card">
+        <div class="ico">🏆</div>
+        <h3>Podium hebdo</h3>
+        <p>Les trois meilleurs producteurs de la semaine touchent une prime et leur badge sur le Discord du domaine.</p>
+      </div>
+      <div class="perk-card">
+        <div class="ico">🧰</div>
+        <h3>Matériel fourni</h3>
+        <p>Sécateur, caisses, véhicule utilitaire et accès au chai dès ta première semaine. Tu n'avances rien.</p>
+      </div>
+      <div class="perk-card">
+        <div class="ico">🍷</div>
+        <h3>Ambiance domaine</h3>
+        <p>Dégustations, événements privés, soirées vendanges. On travaille sérieusement sans se prendre au sérieux.</p>
+      </div>
+      <div class="perk-card">
+        <div class="ico">🎟️</div>
+        <h3>Tombola chaque semaine</h3>
+        <p>Un ticket gagné dès l'Ouvrier Viticole, deux au Chef de Culture. Tirage tous les lundis, lots offerts par le domaine et ses partenaires.</p>
+      </div>
+      <div class="perk-card">
+        <div class="ico">🎉</div>
+        <h3>Événements réguliers</h3>
+        <p>Vendanges, dégustations, soirées privées et locations du domaine. Il y a toujours quelque chose à faire vivre sur place.</p>
+      </div>
+    </div>
+
+    <div class="pull-quote">« Entrez dans les vignes, écrivez votre histoire. »</div>
+
+    <div class="join-grid solo">
+      <div class="discord-panel">
+        <div class="dico">
+          <svg viewBox="0 0 127.14 96.36" fill="currentColor" aria-hidden="true"><path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21H0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,46,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,46,96.12,53,91.08,65.69,84.69,65.69Z"/></svg>
+        </div>
+        <h3>La candidature se fait sur Discord</h3>
+        <p>Rejoins le serveur du domaine, ouvre un ticket « Candidature » et remplis le formulaire. Un responsable RH te répond en général dans la journée.</p>
+        <a href="https://discord.gg/CG4gYAEat" target="_blank" rel="noopener" class="btn btn-gold">Rejoindre le Discord</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== DEVENIR CLIENT ===== -->
+  <section id="devenir-client">
+    <div class="sec-head">
+      <div class="eyebrow">Devenir client</div>
+      <h2>Ouvrir un compte <em>au domaine</em>.</h2>
+      <p class="sec-desc">Particulier ou entreprise, le domaine Marlowe livre partout sur San Andreas. L'ouverture d'un compte client se fait en trois étapes, sur notre Discord.</p>
+    </div>
+
+    <div class="client-grid">
+      <div class="steps">
+        <div class="step">
+          <div class="step-n">1</div>
+          <div>
+            <h3>Rejoindre le Discord</h3>
+            <p>Tout passe par notre serveur : c'est là que vous êtes vérifié et que vous accédez au catalogue réservé aux clients.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-n">2</div>
+          <div>
+            <h3>Créer un ticket</h3>
+            <p>Indiquez vos besoins, les quantités et le lieu de livraison. Un commercial du domaine revient vers vous avec une facture détaillée.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-n">3</div>
+          <div>
+            <h3>Réception de la commande</h3>
+            <p>Un runner du domaine assure la livraison sous 24 h, partout dans l'État. Paiement à la livraison ou sur facture pour les comptes entreprise.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="client-panel">
+        <h3>Ce que ça vous apporte</h3>
+        <ul class="perks">
+          <li><div>Accès au catalogue entreprise <span>— grilles B2B et cuvées non disponibles à la vente publique.</span></div></li>
+          <li><div>Un interlocuteur dédié <span>— un commercial du domaine suit votre compte et vos commandes.</span></div></li>
+          <li><div>Livraison sous 24 h <span>— sur tout San Andreas, assurée par nos runners.</span></div></li>
+        </ul>
+        <a href="https://discord.gg/CG4gYAEat" target="_blank" rel="noopener" class="btn btn-gold">Ouvrir un compte client</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== LOCATION DU DOMAINE ===== -->
+  <section id="location">
+    <div class="sec-head">
+      <div class="eyebrow">Location</div>
+      <h2>Location <em>du domaine</em>.</h2>
+      <p class="sec-desc">Un cadre d'exception pour vos projets — événements, shootings photo &amp; vidéo, séminaires et expériences immersives.</p>
+    </div>
+
+    <div class="loc-intro">
+      <div class="loc-lead">
+        <p>Le domaine <b>Marlowe Vineyard</b> vous ouvre ses portes pour vos événements, shootings photo &amp; vidéo, séminaires et expériences immersives.</p>
+        <p>Cadre luxueux au cœur des vignes, <b>espaces intérieurs et extérieurs modulables</b> : villa, salons, suites, zone VIP, terrasses et parcelles.</p>
+        <p>Nous sommes ouverts à toute proposition de collaboration et de partenariat. Contactez-nous sur le Discord du domaine pour discuter de votre projet.</p>
+        <a href="https://discord.gg/CG4gYAEat" target="_blank" rel="noopener" class="btn btn-gold" style="margin-top:8px;">Réserver le domaine</a>
+      </div>
+
+      <div class="loc-options">
+        <div class="loc-opt main">
+          <span class="tag">Option 1</span>
+          <div class="loc-opt-top">
+            <h3>Intérieur &amp; Extérieur de la Villa</h3>
+            <div class="loc-price">50 000 $</div>
+          </div>
+          <p>Accès complet aux espaces intérieurs et extérieurs du domaine.</p>
+        </div>
+        <div class="loc-opt">
+          <span class="tag">Option 2 · en complément</span>
+          <div class="loc-opt-top">
+            <h3>Supplément Suite &amp; Zone VIP</h3>
+            <div class="loc-price">25 000 $</div>
+          </div>
+          <p>Accès aux suites privées et à la zone VIP, en complément de l'Option 1.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="loc-gal">
+      <figure>
+        <img src="img/villa1.jpg" alt="Cuisine, salon et vue aérienne du domaine" loading="lazy" width="930" height="645">
+        <figcaption>Cuisine, grand salon, salle de billard et vue d'ensemble sur les vignes.</figcaption>
+      </figure>
+      <figure>
+        <img src="img/villa2.jpg" alt="Salle de jeux, bar, suites et salle de bain du domaine" loading="lazy" width="1319" height="523">
+        <figcaption>Zone VIP, bar avec service, suites privées et salles d'eau.</figcaption>
+      </figure>
+    </div>
+
+    <div class="part-head">
+      <h3 class="sub-head" style="margin:0;">Nos partenaires</h3>
+    </div>
+    <p class="sec-desc" style="margin-bottom:0;">Ces réductions s'appliquent dès lors qu'une location du domaine Marlowe a lieu.</p>
+
+    <div class="part-grid">
+      <div class="part-card">
+        <h4>Ls Event</h4>
+        <ul>
+          <li>Décoration et/ou table de mixage — <b>30 000 $</b></li>
+        </ul>
+      </div>
+      <div class="part-card">
+        <h4>Burning Bush</h4>
+        <ul>
+          <li>DJ — <b>20 000 $</b> par heure</li>
+          <li>Danseuse — <b>6 000 $</b> par heure</li>
+          <li>+ <b>5 000 $</b> pour 5 minutes de danse privée</li>
+        </ul>
+      </div>
+      <div class="part-card">
+        <h4>Nyrex Créative <span class="cut">Totalité −20 %</span></h4>
+        <ul>
+          <li>Photographe — réduction de <b>15 %</b></li>
+          <li>Stylisme — réduction de <b>15 %</b></li>
+          <li>Graphiste — réduction de <b>15 %</b></li>
+        </ul>
+      </div>
+      <div class="part-card">
+        <h4>Shashin Sutajio <span class="cut">−15 %</span></h4>
+        <ul>
+          <li>Shooting Event</li>
+          <li>Album photo WWI</li>
+          <li>Album Custom</li>
+          <li>Tenue Event</li>
+          <li>Tenue mariage (mariés + témoins)</li>
+        </ul>
+      </div>
+      <div class="part-card">
+        <h4>Favela's Record</h4>
+        <ul>
+          <li>Mega Mix — <b>100 000 $</b></li>
+          <li>Show case de leurs artistes — selon l'artiste</li>
+        </ul>
+      </div>
+      <div class="part-card">
+        <h4>Gruppe Sechs <span class="cut">−20 %</span></h4>
+        <ul>
+          <li>Réduction de <b>20 %</b> sur le tarif en vigueur</li>
+        </ul>
+      </div>
+      <div class="part-card">
+        <h4>Les Restaurants</h4>
+        <ul>
+          <li>Burger Shot Sud</li>
+          <li>Umami</li>
+          <li>Pizzeria Sud</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="part-note">Cette carte est vouée à évoluer en fonction de nos partenariats.</p>
+  </section>
+
+  <div class="coming-next">Les sections « Le Domaine », « Feuilleter » et « Contact » seront complétées avec les contenus à venir.</div>
+
+  <footer>
+    <div>© 1957–2026 Marlowe Vineyard · Tongva Hills, San Andreas</div>
+    <div><a href="https://discord.gg/CG4gYAEat" target="_blank" rel="noopener">Discord du domaine</a> · <a href="gestion.html">Espace membre</a></div>
+  </footer>
+
+  <div class="signature">
+    <div class="sig-pastille">
+      <img src="img/roxwood.png" alt="" width="20" height="20"
+           onerror="this.remove();" loading="lazy">
+      <span class="sig-txt">Développé par <b>Roxwood Network</b></span>
+      <span class="sig-trait" aria-hidden="true"></span>
+      <span class="sig-actions">
+        <a href="https://roxwood-network.fbfa.fr/" target="_blank" rel="noopener">Site</a>
+        <a href="https://discord.gg/dDAFWxeU8" target="_blank" rel="noopener">Discord</a>
+      </span>
+    </div>
+  </div>
+
+</div>
+
+<!-- three.min.js sert le fond nocturne (voir « LA VALLÉE » ci-dessous).
+     Auto-hébergé (build UMD r160, licence MIT conservée dans le fichier)
+     plutôt que tiré d'un CDN — le reste du site ne dépend d'aucune adresse
+     externe, ce n'est pas le moment de commencer. -->
+<script src="three.min.js"></script>
+<script>
+/* ==================================================================
+   ▼▼▼  CONTENU ÉDITABLE  ▼▼▼
+   Ces deux listes seront pilotées depuis l'espace membre (partie
+   connexion / grades à venir). En attendant, elles se modifient
+   directement ici.
+   ================================================================== */
+
+/* --- RIEN NE SE SAISIT ICI -------------------------------------------
+   Les nouveautés, le catalogue et l'organigramme sont pilotés depuis
+   l'espace membre :
+     · Paramètres ▸ Vitrine du site   pour les images et le catalogue
+     · Recrutement                    pour les noms de l'organigramme
+   L'adresse du backend n'est plus ici : elle vit dans marlowe-config.js
+   (chargé juste avant ce script), pour rester la même partout sur le
+   site au lieu d'être recopiée à chaque page.                          */
+const API_BASE     = window.MARLOWE_API_BASE;
+const ORGA_API     = API_BASE + '/api/orga';
+const VITRINE_API  = API_BASE + '/api/vitrine';
+
+/* ==================================================================
+   ▲▲▲  FIN DU CONTENU ÉDITABLE  ▲▲▲
+   ================================================================== */
+
+const MAX_NOUVEAUTES = 5;
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+
+/* ==================================================================
+   VITRINE PILOTÉE PAR L'ESPACE MEMBRE
+   Les nouveautés et le catalogue viennent du panneau de gestion.
+   Un seul appel sert les deux : c'est la même donnée côté serveur.
+   ================================================================== */
+(function(){
+  const frame   = document.getElementById('newsFrame');
+  const stage   = document.getElementById('newsStage');
+  const capBox  = document.getElementById('newsCap');
+  const dotsBox = document.getElementById('newsDots');
+  const eyebrow = document.getElementById('newsEyebrow');
+  const vue     = document.getElementById('catViewport');
+  const barre   = document.getElementById('catBar');
+
+  /* Le blason tient la place tant que rien n'est publié — et pour toujours si
+     le patron n'a rien mis. Il s'affiche AVANT l'appel réseau : la page ne doit
+     jamais montrer un trou en attendant le serveur. */
+  function blason(){
+    frame.classList.add('is-crest');
+    frame.innerHTML = document.getElementById('crestTpl').innerHTML;
+    eyebrow.hidden = true;
+    capBox.hidden = true;
+    dotsBox.innerHTML = '';
+    stage.querySelectorAll('.news-arrow').forEach(a => a.remove());
+  }
+  blason();
+  vue.innerHTML = `<div class="cat-placeholder"><span>Catalogue en préparation — bientôt disponible.</span></div>`;
+
+  /* ---------------- Les nouveautés ---------------- */
+  function poserNouveautes(news){
+    if(!news.length){ blason(); return; }
+
+    frame.classList.remove('is-crest');
+    eyebrow.hidden = false;
+    const multi = news.length > 1;
+
+    frame.innerHTML =
+      news.map((n, i) => `
+        <div class="news-slide${i === 0 ? ' active' : ''}">
+          <div class="news-bg" style="background-image:url('${String(n.img).replace(/'/g, '%27')}')"></div>
+          <div class="news-lume"></div>
+          <div class="news-vig"></div>
+          <img src="${esc(n.img)}" alt="${esc(n.titre || 'Nouveauté du domaine')}" loading="lazy">
+        </div>`).join('')
+      + `<div class="news-rule"></div><div class="news-rule alt"></div>`;
+
+    if(multi){
+      stage.insertAdjacentHTML('beforeend',
+        `<button class="news-arrow prev" data-step="-1" aria-label="Nouveauté précédente">‹</button>
+         <button class="news-arrow next" data-step="1"  aria-label="Nouveauté suivante">›</button>`);
+    }
+
+    dotsBox.innerHTML = multi ? news.map((_, i) =>
+      `<button class="news-dot${i === 0 ? ' active' : ''}" data-go="${i}" aria-label="Nouveauté ${i+1}"></button>`).join('') : '';
+
+    const slides = frame.querySelectorAll('.news-slide');
+    const dots   = dotsBox.querySelectorAll('.news-dot');
+    let idx = 0;
+
+    function show(i){
+      idx = (i + news.length) % news.length;
+      slides.forEach((s, k) => s.classList.toggle('active', k === idx));
+      dots.forEach((d, k) => d.classList.toggle('active', k === idx));
+
+      const n = news[idx];
+      capBox.innerHTML = (n.titre ? `<div class="nt">${esc(n.titre)}</div>` : '')
+                       + (n.texte ? `<div class="nd">${esc(n.texte)}</div>` : '');
+      capBox.hidden = !(n.titre || n.texte);
+    }
+    show(0);
+
+    /* Le défilement automatique — dix secondes.
+       ----------------------------------------------------------------------
+       Trois précautions, parce qu'un carrousel qui avance tout seul se
+       retourne vite contre le visiteur :
+
+       · toute intervention (flèche, pastille) REPART de zéro. Sans ça, on
+         clique pour revenir en arrière et l'image change une seconde plus
+         tard — on n'a jamais le temps de lire ;
+       · il se met en pause au survol de la zone, et pendant la navigation au
+         clavier, le temps qu'on lise ;
+       · il s'arrête quand l'onglet passe à l'arrière-plan. Rien à animer sur
+         une page que personne ne regarde. */
+    const DELAI = 10000;
+    let minuterie = null;
+
+    function relancer(){
+      arreter();
+      if(!multi) return;
+      minuterie = setInterval(() => show(idx + 1), DELAI);
+    }
+    function arreter(){
+      if(minuterie){ clearInterval(minuterie); minuterie = null; }
+    }
+
+    /* Toute action manuelle affiche ET redonne dix secondes pleines. */
+    function montrerEtAttendre(i){ show(i); relancer(); }
+
+    stage.addEventListener('click', e => {
+      const a = e.target.closest('[data-step]');
+      if(a) montrerEtAttendre(idx + Number(a.dataset.step));
+    });
+    dotsBox.addEventListener('click', e => {
+      const d = e.target.closest('[data-go]');
+      if(d) montrerEtAttendre(Number(d.dataset.go));
+    });
+
+    stage.addEventListener('mouseenter', arreter);
+    stage.addEventListener('mouseleave', relancer);
+    stage.addEventListener('focusin', arreter);
+    stage.addEventListener('focusout', relancer);
+    document.addEventListener('visibilitychange', () => {
+      if(document.hidden) arreter(); else relancer();
+    });
+
+    /* Un visiteur qui a demandé moins d'animations au système n'en reçoit
+       pas : les flèches et les pastilles restent, elles. */
+    const sobre = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if(!sobre) relancer();
+  }
+
+  /* ---------------- Le catalogue ---------------- */
+  function poserCatalogue(cat){
+    const pages = Array.isArray(cat.pages) ? cat.pages : [];
+
+    if(cat.titre) document.querySelector('#catalogue h2').innerHTML = esc(cat.titre);
+    if(cat.desc)  document.getElementById('catDesc').textContent = cat.desc;
+
+    const lienPdf = document.getElementById('catPdf');
+    if(cat.pdf){
+      lienPdf.href = cat.pdf;
+      lienPdf.hidden = false;
+      barre.hidden = false;
+    }
+
+    /* Un lien Canva l'emporte sur les pages déposées : c'est le document
+       vivant, il se met à jour tout seul quand le patron modifie son design.
+       Le lien « ouvrir dans un nouvel onglet » n'est pas décoratif — si Canva
+       refuse l'affichage intégré, c'est la seule porte de sortie du visiteur. */
+    if(cat.embed){
+      barre.querySelector('.cat-nav').hidden = true;
+      vue.classList.add('is-embed');
+      vue.innerHTML = `<iframe src="${esc(cat.embed)}" allowfullscreen allow="fullscreen"
+          loading="lazy" title="${esc(cat.titre || 'Catalogue du domaine')}"></iframe>`;
+      document.getElementById('catFull').hidden = true;
+      document.getElementById('catOpen').href = cat.embed.replace('?embed', '');
+      document.getElementById('catOpen').hidden = false;
+      barre.hidden = false;
+      return;
+    }
+
+    if(!pages.length) return;
+
+    vue.innerHTML = pages.map((u, i) =>
+      `<img src="${esc(u)}" alt="Page ${i+1} du catalogue" hidden ${i ? 'loading="lazy"' : ''}>`).join('');
+
+    const imgs   = [...vue.querySelectorAll('img')];
+    const compte = document.getElementById('catCount');
+    const prec   = barre.querySelector('[data-page="-1"]');
+    const suiv   = barre.querySelector('[data-page="1"]');
+    let p = 0;
+
+    function montrer(i){
+      p = Math.min(Math.max(i, 0), imgs.length - 1);
+      imgs.forEach((im, k) => {
+        im.hidden = k !== p;
+        im.classList.toggle('on', k === p);
+      });
+      compte.textContent = `${p + 1} / ${imgs.length}`;
+      prec.disabled = p === 0;
+      suiv.disabled = p === imgs.length - 1;
+      /* La page suivante est préchargée dès qu'on arrive sur celle-ci :
+         tourner la page doit être instantané, pas attendre le réseau. */
+      const apres = imgs[p + 1];
+      if(apres) apres.removeAttribute('loading');
+    }
+
+    barre.hidden = false;
+    montrer(0);
+
+    barre.addEventListener('click', e => {
+      const b = e.target.closest('[data-page]');
+      if(b) montrer(p + Number(b.dataset.page));
+    });
+
+    /* Plein écran : le cadre lui-même passe en plein écran, pas la page —
+       comme ça les flèches du clavier continuent de tourner les pages. */
+    const plein = document.getElementById('catFull');
+    plein.addEventListener('click', () => {
+      if(document.fullscreenElement) document.exitFullscreen();
+      else if(vue.requestFullscreen) vue.requestFullscreen().catch(() => {});
+    });
+    document.addEventListener('fullscreenchange', () => {
+      plein.textContent = document.fullscreenElement ? '⛶ Quitter' : '⛶ Plein écran';
+    });
+
+    document.addEventListener('keydown', e => {
+      if(e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      const dedans = document.fullscreenElement === vue
+        || vue.getBoundingClientRect().top < innerHeight * .7;
+      if(!dedans) return;
+      montrer(p + (e.key === 'ArrowRight' ? 1 : -1));
+    });
+
+    vue.addEventListener('click', e => {
+      /* Un clic à droite avance, à gauche recule : le réflexe d'une liseuse. */
+      const r = vue.getBoundingClientRect();
+      montrer(p + (e.clientX - r.left > r.width / 2 ? 1 : -1));
+    });
+  }
+
+  fetch(VITRINE_API, { cache: 'no-store' })
+    .then(r => r.ok ? r.json() : Promise.reject(r.status))
+    .then(d => {
+      poserNouveautes((Array.isArray(d.nouveautes) ? d.nouveautes : []).slice(0, MAX_NOUVEAUTES));
+      poserCatalogue((d && d.catalogue) || {});
+    })
+    .catch(() => { /* serveur injoignable : le blason et le message d'attente restent */ });
+})();
+
+/* ==================================================================
+   FOND DU DOMAINE — le voile de lisibilité suit le défilement
+   Indépendant de la scène elle-même (voir « LA VALLÉE » plus bas) :
+   ces deux voiles gardent le texte lisible sur n'importe quel fond,
+   animé ou non, WebGL ou repli SVG.
+   ================================================================== */
+(function(){
+  const scene = document.getElementById('bgScene');
+  if(!scene) return;
+  const calme = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  scene.classList.add('pret');
+
+  /* Quasi transparent en haut de page pour que la scène frappe, opaque dès
+     qu'on entre dans le contenu pour qu'il reste net. Lu dans un rAF : un
+     handler de scroll qui touche au style à chaque pixel fait ramer. */
+  const veilMin = parseFloat(getComputedStyle(document.documentElement)
+    .getPropertyValue('--veil-min')) || .5;
+  let attend = false;
+  function voile(){
+    attend = false;
+    const h = Math.max(innerHeight * .85, 1);
+    const t = Math.min(Math.max(scrollY / h, 0), 1);
+    const r = document.documentElement.style;
+    r.setProperty('--veil-o',  (veilMin + (1 - veilMin) * t).toFixed(3));
+    r.setProperty('--scrim-o', (1 - t).toFixed(3));
+  }
+  if(!calme){
+    voile();
+    addEventListener('scroll', () => { if(!attend){ attend = true; requestAnimationFrame(voile); } }, { passive:true });
+    addEventListener('resize', voile, { passive:true });
+  }
+})();
+
+/* ==================================================================
+   LA VALLÉE — fond nocturne en shader Three.js
+   ------------------------------------------------------------------
+   Relief procédural en huit plans, aurore, étoiles et lucioles, rendus
+   dans #bgValley (voir le CSS .bg-valley et le HTML plus haut). Repris
+   du concept « Nocturne » ; le shader lui-même n'a pas été modifié —
+   seul le montage (pas de React ici, la vitrine n'en utilise pas) a
+   changé de forme. three.min.js est chargé juste avant ce script.
+
+   Respecte le mouvement réduit, se met en pause hors écran, dégrade sa
+   propre qualité si la cadence mesurée est faible, et retombe sur le
+   SVG statique (.bg-fallback) sans WebGL ou en cas de perte de contexte.
+   ================================================================== */
+(function(){
+  const hote = document.getElementById('bgValley');
+  if(!hote || typeof THREE === 'undefined') return;
+
+  const fragment = `
+precision highp float;
+uniform vec2 uResolution;uniform vec2 uMouse;uniform float uTime;uniform float uScroll;uniform float uWave;uniform float uParticles;uniform vec3 uTint;
+varying vec2 vUv;
+float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+1.),f.x),f.y);}
+float fbm(vec2 p){float v=0.;float a=.5;for(int i=0;i<5;i++){v+=a*noise(p);p=p*2.03+vec2(13.1,7.3);a*=.5;}return v;}
+void main(){
+vec2 uv=vUv;float aspect=uResolution.x/uResolution.y;vec2 p=vec2((uv.x-.5)*aspect,uv.y);p+=uMouse*.012;
+vec3 col=mix(vec3(.105,.139,.235),vec3(.016,.024,.065),smoothstep(.25,1.,p.y));
+float aura=exp(-pow((p.x-.2)*.85,2.)-pow((p.y-.58)*4.,2.));col+=vec3(.05,.035,.095)*aura;
+float ay=.79+.06*sin(p.x*2.1+uTime*.035)+.035*sin(p.x*4.3-uTime*.021);
+float curtain=exp(-abs(p.y-ay)*22.)*(.5+.5*noise(vec2(p.x*5.+uTime*.015,p.y*2.)));
+col+=vec3(.075,.057,.145)*curtain*(.35+.65*smoothstep(-.9,.8,p.x));
+vec2 stars=p*vec2(220.,140.);vec2 cell=floor(stars);vec2 sf=fract(stars)-.5;float rnd=hash(cell);float star=exp(-dot(sf,sf)*180.)*step(.992,rnd)*smoothstep(.47,.8,p.y);col+=vec3(.56,.61,.75)*star*(.55+.25*sin(uTime*.3+rnd*80.));
+for(int i=0;i<8;i++){float d=float(i);float x=p.x+uMouse.x*d*.009;float depth=d/7.;
+x*=1.-uScroll*.035*depth;
+float valley=pow(min(abs(x+.055),1.8),.85);
+float ridge=.345-d*.039+valley*(.16+d*.033)+(fbm(vec2(x*(2.1+d*.24)+d*9.7,d*5.13))-.48)*(.20+d*.022);
+ridge+=uMouse.y*depth*.025+uScroll*depth*.07;
+float below=ridge-p.y;float mask=smoothstep(-.0018,.0018,below);
+vec3 mountain=mix(vec3(.12,.16,.265),vec3(.012,.026,.047),depth);
+float face=fbm(vec2(x*6.+d*12.,p.y*7.+d*3.));mountain+=vec3(.014,.02,.035)*(face-.4);
+mountain+=vec3(.019,.027,.05)*exp(-max(below,0.)*11.);
+float sweep=exp(-pow((x-(uWave*3.8-1.9)-d*.065)*5.,2.))*step(0.,uWave)*step(uWave,1.);
+float edge=exp(-abs(below)*250.);mountain+=vec3(.70,.47,.18)*edge*sweep*.85;mountain+=vec3(.09,.055,.017)*sweep*exp(-abs(below)*22.);
+col=mix(col,mountain,mask);
+float mist=exp(-pow((p.y-ridge+.025)*30.,2.))*(.2+.8*fbm(vec2(x*3.+uTime*.023+d*4.,p.y*9.-uTime*.009)));
+col+=vec3(.058,.072,.104)*mist*(1.-depth*.6);
+}
+for(int i=0;i<70;i++){float id=float(i);if(id>=uParticles)break;float r=hash(vec2(id,6.));float r2=hash(vec2(id,19.));vec2 pos=vec2((r-.5)*aspect*1.2,.055+r2*.50);pos.x+=sin(uTime*(.055+r2*.035)+id*3.)*.025+uMouse.x*r2*.03;pos.y+=sin(uTime*.12+id*4.)*.018;vec2 delta=p-pos;float size=mix(.0008,.0021,hash(vec2(id,2.)));float dist=length(delta);float glow=exp(-dist*dist/(size*size))*1.1+exp(-dist*dist/(size*size*30.))*.12;float flicker=pow(.5+.5*sin(uTime*(.35+r*.3)+id*7.),2.);col+=vec3(.95,.66,.28)*glow*(.2+.8*flicker);}
+float vignette=1.-.32*pow(length((uv-.5)*vec2(1.,.8)),1.3);col*=vignette;col*=uTint;col+=(hash(gl_FragCoord.xy)-.5)/255.;gl_FragColor=vec4(col,1.);
+}`;
+
+  let renderer;
+  try { renderer = new THREE.WebGLRenderer({ alpha:false, antialias:false, powerPreference:'low-power' }); }
+  catch(e){ return; }
+
+  const mobile = matchMedia('(max-width: 700px)').matches;
+  let ratio = Math.min(devicePixelRatio, mobile ? 1.15 : 1.65);
+  renderer.setPixelRatio(ratio);
+  hote.appendChild(renderer.domElement);
+
+  /* ================================================================
+     LA TEINTE SUIT L'HEURE
+     ----------------------------------------------------------------
+     La vallée reste nocturne en permanence — montagnes, aurore et
+     étoiles ne disparaissent jamais, il n'y a pas de « plein jour ».
+     Mais sa lumière se réchauffe et se refroidit avec l'heure réelle,
+     comme le faisait l'ancien ciel : froide et bleutée au cœur de la
+     nuit, rosée à l'aube, dorée en fin d'après-midi, violette au
+     crépuscule. Neuf repères réels, tout le reste s'interpole entre eux
+     — un multiplicateur de couleur (uTint) posé à la toute fin du
+     shader, sur l'image déjà complète. */
+  const TEINTES = [
+    { h:0,   c:[1.00,1.00,1.08] },
+    { h:3,   c:[0.94,0.96,1.12] },
+    { h:6,   c:[1.05,0.95,1.02] },
+    { h:7.5, c:[1.28,1.02,0.90] },
+    { h:10,  c:[1.12,1.10,1.15] },
+    { h:13,  c:[1.05,1.12,1.28] },
+    { h:16,  c:[1.15,1.08,1.05] },
+    { h:18,  c:[1.35,1.05,0.85] },
+    { h:20,  c:[1.20,0.85,0.95] },
+    { h:22,  c:[1.02,0.92,1.05] },
+    { h:24,  c:[1.00,1.00,1.08] },
+  ];
+  function teinteHeure(){
+    const d = new Date();
+    const h = d.getHours() + d.getMinutes() / 60;
+    for (let i = 0; i < TEINTES.length - 1; i++){
+      const p = TEINTES[i], q = TEINTES[i+1];
+      if (h >= p.h && h <= q.h){
+        const t = (h - p.h) / (q.h - p.h);
+        return [0,1,2].map(k => p.c[k] + (q.c[k] - p.c[k]) * t);
+      }
+    }
+    return TEINTES[0].c.slice();
+  }
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.OrthographicCamera(-1,1,1,-1,0,1);
+  const teinteDepart = teinteHeure();
+  const uniforms = {
+    uResolution:{ value: new THREE.Vector2() },
+    uMouse:{ value: new THREE.Vector2() },
+    uTime:{ value: 0 },
+    uScroll:{ value: 0 },
+    uWave:{ value: -1 },
+    uParticles:{ value: mobile ? 26 : 64 },
+    uTint:{ value: new THREE.Color(teinteDepart[0], teinteDepart[1], teinteDepart[2]) }
+  };
+  const cibleTeinte = new THREE.Color(teinteDepart[0], teinteDepart[1], teinteDepart[2]);
+  const material = new THREE.ShaderMaterial({
+    uniforms,
+    vertexShader: 'varying vec2 vUv;void main(){vUv=uv;gl_Position=vec4(position.xy,0.,1.);}',
+    fragmentShader: fragment,
+    depthTest:false, depthWrite:false
+  });
+  const geometry = new THREE.PlaneGeometry(2,2);
+  scene.add(new THREE.Mesh(geometry, material));
+
+  let raf = 0, last = performance.now(), time = 0, waveStart = -100, nextWave = 14, frames = 0, cost = 0;
+  const target = new THREE.Vector2();
+  let scroll = 0, lost = false;
+  const paused = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function render(){ renderer.render(scene, camera); }
+  function resize(){ renderer.setSize(innerWidth, innerHeight); uniforms.uResolution.value.set(innerWidth, innerHeight); render(); }
+  function pointer(e){ target.set(e.clientX/innerWidth-.5, .5-e.clientY/innerHeight); }
+  function onScroll(){ scroll = Math.min(1, scrollY/Math.max(1, innerHeight)); }
+  function tick(now){
+    raf = 0;
+    if (document.hidden || lost || paused) return;
+    const dt = Math.min((now-last)/1000, .05); last = now;
+    time += dt; uniforms.uTime.value = time;
+    uniforms.uMouse.value.lerp(target, 1-Math.exp(-dt*2.2));
+    uniforms.uScroll.value += (scroll - uniforms.uScroll.value) * (1-Math.exp(-dt*1.7));
+    /* Lissage lent : la teinte cible ne bouge qu'au rafraîchissement des dix
+       minutes, mais elle y arrive en douceur plutôt que de sauter. */
+    uniforms.uTint.value.lerp(cibleTeinte, 1-Math.exp(-dt*.5));
+    if (time > nextWave){ waveStart = time; nextWave = time+28; }
+    uniforms.uWave.value = time-waveStart < 6.5 ? (time-waveStart)/6.5 : -1;
+    render();
+    frames++; cost += dt;
+    if (frames === 180){
+      if (cost/frames > .026 && ratio > .85){
+        ratio = Math.max(.85, ratio*.8);
+        renderer.setPixelRatio(ratio);
+        uniforms.uParticles.value = mobile ? 18 : 40;
+        resize();
+      }
+      frames = 0; cost = 0;
+    }
+    raf = requestAnimationFrame(tick);
+  }
+  function resume(){ if (!document.hidden && !lost && !paused && !raf){ last = performance.now(); raf = requestAnimationFrame(tick); } }
+  function visibility(){ if (document.hidden){ cancelAnimationFrame(raf); raf = 0; } else resume(); }
+  function contextLost(e){ e.preventDefault(); lost = true; cancelAnimationFrame(raf); raf = 0; hote.classList.remove('ready'); }
+  function restored(){ lost = false; resize(); hote.classList.add('ready'); resume(); }
+
+  addEventListener('resize', resize);
+  addEventListener('pointermove', pointer, { passive:true });
+  addEventListener('scroll', onScroll, { passive:true });
+  document.addEventListener('visibilitychange', visibility);
+  renderer.domElement.addEventListener('webglcontextlost', contextLost);
+  renderer.domElement.addEventListener('webglcontextrestored', restored);
+  resize(); onScroll(); hote.classList.add('ready');
+  if (paused) render(); else resume();
+
+  /* Sans animation continue (mouvement réduit) comme avec : on relit l'heure
+     toutes les dix minutes, pour la page laissée ouverte au crépuscule. */
+  setInterval(() => {
+    const c = teinteHeure();
+    cibleTeinte.setRGB(c[0], c[1], c[2]);
+    if (paused){ uniforms.uTint.value.copy(cibleTeinte); render(); }
+  }, 600000);
+})();
+
+/* ==================================================================
+   ORGANIGRAMME — les noms viennent des fiches RH du panneau
+   ================================================================== */
+(function(){
+  const boxes = document.querySelectorAll('#organigramme [data-poste]');
+  const note  = document.getElementById('orgNote');
+  if(!boxes.length) return;
+
+  /* Deux personnes peuvent écrire « Résp. Magasin », « resp magasin »
+     ou « Resp. Magasin  ». On compare donc sur une forme neutre :
+     minuscules, sans accents, sans ponctuation.                      */
+  const clef = s => String(s || '').normalize('NFKD').toLowerCase()
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ').trim();
+
+  function poser(membres){
+    const parPoste = new Map();
+    membres.forEach(m => {
+      const k = clef(m.poste);
+      if(!parPoste.has(k)) parPoste.set(k, []);
+      parPoste.get(k).push(m);
+    });
+
+    boxes.forEach(box => {
+      const cible = box.querySelector('[data-names]');
+      if(!cible) return;
+
+      /* « Vendeur|Vendeuse » : un même encadré peut réunir deux libellés. */
+      const gens = box.dataset.poste.split('|')
+        .flatMap(p => parPoste.get(clef(p)) || []);
+
+      if(!gens.length){
+        cible.innerHTML = '<span class="vacant">Poste à pourvoir</span>';
+        return;
+      }
+      gens.sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
+      cible.innerHTML = gens.map(m =>
+        `<span class="${m.absent ? 'absent' : ''}">${esc(m.nom)}${m.absent ? ' · absent' : ''}</span>`
+      ).join('');
+    });
+  }
+
+  /* Si le backend ne répond pas, la page garde les postes sans les noms :
+     un organigramme incomplet vaut mieux qu'un organigramme faux.      */
+  fetch(ORGA_API, { cache: 'no-store' })
+    .then(r => r.ok ? r.json() : Promise.reject(r.status))
+    .then(d => {
+      const membres = Array.isArray(d && d.membres) ? d.membres : [];
+      poser(membres);
+      if(!membres.length && note){
+        note.textContent = "Les noms s'affichent dès que les fiches employés sont saisies dans l'espace membre.";
+        note.hidden = false;
+      }
+    })
+    .catch(() => {
+      boxes.forEach(b => {
+        const c = b.querySelector('[data-names]');
+        if(c) c.innerHTML = '';
+      });
+      if(note){
+        note.textContent = "Les noms n'ont pas pu être chargés — l'organisation des pôles reste à jour ci-dessus.";
+        note.hidden = false;
+      }
+    });
+})();
+</script>
+
+<!-- Même garde que sur le panel : chargé seulement en jeu. -->
+<script src="marlowe-folkos.js"></script>
+</body>
+</html>

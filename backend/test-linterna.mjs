@@ -133,7 +133,12 @@ console.log('\n— Ce qui est refusé —');
   r = await W.handleLinterna(req({ raisins: W.RAISINS_MAX + 1 }), e.env);
   dit('un chiffre absurde est refusé par le garde-fou', r.status === 400);
 
-  e = faireEnv({ linterna: [{ name: 'Nella Valmora', raisins: W.RAISINS_MAX - 5 }] });
+  /* La fiche porte l'identifiant Discord de la session : c'est LUI qui dit
+     que cette ligne est la mienne. Une ligne d'avant ce changement n'a pas
+     d'identifiant ; elle n'est reprise que parce que son nom est celui de la
+     FICHE (registre tenu par les RH), jamais celui du pseudo. */
+  e = faireEnv({ rhRoster: [{ id: 'C-42', name: 'Nella Valmora', discord: '42' }],
+                 linterna: [{ name: 'Nella Valmora', raisins: W.RAISINS_MAX - 5 }] });
   r = await W.handleLinterna(req({ raisins: 100 }), e.env);
   dit('un ajout qui ferait dépasser le garde-fou est refusé', r.status === 400);
   dit('… et le total d\'avant est intact',
@@ -157,7 +162,8 @@ console.log('\n— Ce qui est refusé —');
 
 console.log('\n— La casse du nom —');
 {
-  const e = faireEnv({ linterna: [{ name: 'nella valmora', raisins: 20 }] });
+  const e = faireEnv({ rhRoster: [{ id: 'C-42', name: 'Nella Valmora', discord: '42' }],
+                       linterna: [{ name: 'nella valmora', raisins: 20 }] });
   const r = await W.handleLinterna(req({ raisins: 10 }), e.env);
   const d = await r.json();
   dit('une majuscule différente ne crée pas une deuxième ligne',

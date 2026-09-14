@@ -1,0 +1,55 @@
+# ============================================================================
+# Ce qui NE DOIT PAS entrer dans l'image Docker
+# ----------------------------------------------------------------------------
+# Le contexte de build est la RACINE du dépôt (voir backend/deploy/
+# docker-compose.yml, `context: ../..`) et backend/Dockerfile fait `COPY . /app`
+# — donc, sans ce fichier, tout ce qui traîne à côté part dans l'image.
+#
+# .gitignore ne sert à RIEN ici : Docker ne le lit pas. C'est bien le cas qui
+# se posait : backend/.env — mot de passe de la base, secret et jeton Discord,
+# jeton de stockage — était recopié dans une couche de l'image, alors même
+# qu'il est correctement tenu hors de Git. Une image se pousse, se partage et
+# s'inspecte (`docker history`, `docker save`) : un secret figé dans une
+# couche en ressort intact, même si un Dockerfile ultérieur l'efface.
+#
+# ⚠️ N'ajoutez ici que ce qui ne sert pas à FAIRE TOURNER le site : le même
+# conteneur sert le site statique (index.html, accueil.html, gestion.html,
+# marlowe-*.js, three.min.js, img/, fonts/, version.json…) ET l'API. Exclure
+# un de ces fichiers par mégarde donnerait un site qui répond 404 sur une
+# partie de ses pages, sans erreur au build pour le signaler.
+# ============================================================================
+
+# --- Secrets et identifiants (la raison d'être de ce fichier) ---
+.env
+.env.*
+**/.env
+**/.env.*
+!**/.env.example
+.wrangler/
+
+# --- Historique et mécanique Git : lourd, et il porte tout le passé du dépôt ---
+.git/
+.gitignore
+.gitattributes
+
+# --- Dépendances : réinstallées dans l'image par `npm install` (voir Dockerfile) ---
+node_modules/
+**/node_modules/
+
+# --- Documentation et notes de travail : aucun rôle à l'exécution ---
+docs/
+Claude outputs/
+AUDIT.md
+AUDIT-PASSAGE-2.md
+
+# --- Bancs d'essai : lancés à la main, jamais par le serveur ---
+test-*.mjs
+**/test-*.mjs
+
+# --- Dossier de déploiement : décrit comment construire l'image, pas son contenu ---
+backend/deploy/
+
+# --- Divers ---
+*.log
+.DS_Store
+Thumbs.db

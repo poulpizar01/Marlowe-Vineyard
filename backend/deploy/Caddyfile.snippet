@@ -1,0 +1,41 @@
+# À déposer dans /opt/vps-proxy/sites.d/marlowe.caddy sur le VPS partagé.
+# Caddy gère le HTTPS tout seul (Let's Encrypt), à la première requête sur
+# le domaine — à condition que le DNS pointe déjà vers cette machine.
+
+# MARLOWE VINEYARD
+http://marlowe-vineyard.fbfa.fr {
+	redir https://{host}{uri} permanent
+}
+
+marlowe-vineyard.fbfa.fr {
+	encode zstd gzip
+
+	# Aucun dossier de service ne doit sortir. Le serveur applicatif a déjà
+	# son propre filtre (voir backend/src/chemins.js), celui-ci est le second
+	# rempart — et le seul qui tienne si l'application n'est pas à jour.
+	# Le « ^/+ » couvre les barres obliques multiples, le « (?i) » la casse :
+	# « //backend/src/index.js » a réellement servi le code source du serveur
+	# en production, deux barres suffisaient à traverser le filtre applicatif.
+	@dossiers_de_service path_regexp "^/+(?i)(backend|docs|node_modules|\.git|Claude outputs)(/|$)"
+	handle @dossiers_de_service {
+		respond 404
+	}
+
+	handle {
+		reverse_proxy marlowe-app-1:8787 {
+			header_up X-Real-IP {remote_host}
+		}
+	}
+}
+
+# ---------------------------------------------------------------------------
+# Si le site doit répondre sur une SECONDE adresse — le temps d'un
+# déménagement de domaine, ou pendant un essai —, recopiez le bloc ci-dessus
+# avec l'autre nom de domaine, puis ajoutez cette adresse AUX DEUX endroits
+# qui la contrôlent :
+#   · SITE_URLS dans backend/.env      (sans quoi les enregistrements sont
+#                                       refusés, et le cookie de session est
+#                                       perdu à la connexion) ;
+#   · SITE_ATTENDUES dans marlowe-actions.js.
+# Et pensez au Redirect OAuth2 côté Discord, qui doit correspondre à SITE_URL.
+# ---------------------------------------------------------------------------

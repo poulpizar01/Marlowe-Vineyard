@@ -122,7 +122,11 @@ console.log('\n— L\'écriture au registre —');
   ENVOIS = []; DISCORD = { ok: true, status: 200 }; COUPE = false;
   const e = faireEnv({
     rhAbsences: [{ name: 'Quelqu\'un d\'autre', range: '01/09 → 05/09', indef: false }],
-    rhRoster: [{ id: 7, name: 'Nella Valmora', poste: 'DRH', status: 'actif' }],
+    /* `discord` rattache la fiche au compte de la session. C'est lui, et lui
+       seul, qui autorise la déclaration à toucher cette fiche : se fier au nom
+       affiché laissait passer la fiche d'un collègue en « absent » à qui
+       prenait son surnom Discord. */
+    rhRoster: [{ id: 7, name: 'Nella Valmora', poste: 'DRH', status: 'actif', discord: '42' }],
   });
   let r = await W.handleAbsence(req({ du: '03/09/2026', au: '10/09/2026', motif: 'Congé' }), e.env);
   let d = await r.json();

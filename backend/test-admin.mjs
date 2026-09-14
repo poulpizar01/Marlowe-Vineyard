@@ -70,6 +70,19 @@ const DB = {
         return v === undefined ? null : { val: v };
       },
       async run() {
+        /* L'échange atomique du contrôle de version de la matrice : sans
+           `affectedRows`, handlePermissions croirait toujours avoir perdu la
+           course et refuserait toute écriture. */
+        if (/^INSERT IGNORE INTO kv/.test(sql)) {
+          if (TABLE.has(a[0])) return { meta: { affectedRows: 0 } };
+          TABLE.set(a[0], a[1]);
+          return { meta: { affectedRows: 1 } };
+        }
+        if (/^UPDATE kv SET val/.test(sql)) {
+          if (TABLE.get(a[1]) !== a[2]) return { meta: { affectedRows: 0 } };
+          TABLE.set(a[1], a[0]);
+          return { meta: { affectedRows: 1 } };
+        }
         if (/^INSERT INTO kv/.test(sql)) TABLE.set(a[0], a[1]);
         if (/^DELETE FROM kv WHERE cle/.test(sql)) TABLE.delete(a[0]);
         return {};
@@ -181,11 +194,19 @@ console.log('\nLa lecture seule ferme vraiment l\'écriture');
 console.log('\nLa matrice ne s\'ouvre qu\'à qui a « Accès & rôles »');
 {
   poser({ paramdispo: ['Responsable'], parametres: ['DRH'] }, {});
+
+  /* Enregistrer la matrice demande désormais de dire SUR QUELLE VERSION on a
+     travaillé (`_rev`), sinon le serveur répond 409 sans rien écrire — c'est
+     ce qui empêche deux personnes de s'écraser en silence. Un vrai client lit
+     donc la matrice avant de l'écrire ; ce banc d'essai fait pareil. */
+  const vue = await (await W.handlePermissions(req('GET', '/api/permissions', 'drh'), ENV)).json();
+  const rev = vue._meta.rev;
+
   const a = await W.handlePermissions(req('PUT', '/api/permissions', 'resp',
-    { rhemployes: ['Responsable'] }), ENV);
+    { rhemployes: ['Responsable'], _rev: rev }), ENV);
   dit('le responsable ne se donne pas de droits', a.status === 403, a.status);
   const b = await W.handlePermissions(req('PUT', '/api/permissions', 'drh',
-    { rhemployes: ['DRH'] }), ENV);
+    { rhemployes: ['DRH'], parametres: ['DRH'], _rev: rev }), ENV);
   dit('le DRH, coché sur « Accès & rôles », y écrit', b.status === 200, b.status);
   const c = JSON.parse(TABLE.get('permissions'));
   dit('et c\'est bien enregistré', c.rhemployes[0] === 'DRH', c);

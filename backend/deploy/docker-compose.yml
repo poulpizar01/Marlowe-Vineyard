@@ -1,0 +1,92 @@
+# backend/deploy/docker-compose.yml
+# Lancer depuis /opt/marlowe :  sudo docker compose -f backend/deploy/docker-compose.yml up -d --build
+#
+# ⚠️ CE FICHIER SUPPOSE UN VPS PRÉCIS — celui où tournent déjà plusieurs
+# projets derrière un même Caddy partagé (voir le réseau `caddy` tout en bas,
+# externe, nommé vps_default). Sur un VPS neuf ou différent, `docker compose
+# up` échouera à ce réseau externe introuvable : retirez le bloc `caddy` des
+# deux endroits (le service marlowe-app et la section `networks`), et
+# utilisez plutôt un reverse proxy classique devant le port 8787 exposé par
+# le conteneur — ou suivez la voie sans Docker du README.md, sections 1 à 4,
+# qui ne suppose rien de l'hébergeur.
+#
+# ⚠️⚠️ UNE SEULE INSTANCE, UN SEUL PROCESSUS — CE N'EST PAS UNE PRÉFÉRENCE
+# ----------------------------------------------------------------------------
+# Ne lancez PAS ce service en plusieurs exemplaires : pas de `--scale`, pas de
+# `replicas`, pas de deuxième conteneur sur la même base, pas de grappe
+# Node (`cluster`, pm2 en mode `-i`), pas de second `node src/server.js`
+# pointant sur la même base « pour dépanner ».
+#
+# Pourquoi : plusieurs routes lisent un document entier, le modifient et le
+# réécrivent. Ce qui les empêche de s'écraser entre elles est une file
+# d'attente EN MÉMOIRE (`verrou()` dans src/index.js) — une Map JavaScript.
+# Deux processus ont chacun la leur et ne se voient pas : la protection
+# disparaît sans que rien ne le signale, et deux enregistrements simultanés
+# se perdent en silence, les deux personnes lisant « Enregistré ✓ ».
+#
+# Ce qui est protégé quoi qu'il arrive : la matrice des accès
+# (/api/permissions), arbitrée par la base elle-même (comparaison et écriture
+# dans une seule instruction SQL, voir casValeur dans src/index.js).
+#
+# Ce qui ne l'est PAS au-delà d'un processus : `data` (le registre RH, les
+# clients, la facturation…), `journal`, `settings`, `invites`, `alias`.
+#
+# Pour passer à plusieurs instances un jour, il faut d'abord donner à ces
+# documents-là le même traitement qu'à la matrice. Tant que ce n'est pas fait,
+# un seul exemplaire — c'est ce que ce fichier décrit, et il faut que ça le
+# reste. Voir AUDIT-PASSAGE-2.md, §7 ter.
+#
+# Même montage que les projets voisins sur ce VPS (maja13, entre autres) :
+# une image pour l'app (site + API, voir backend/Dockerfile), une base
+# dédiée dans son propre conteneur, un réseau externe partagé avec le Caddy
+# de Dynasty 8 pour que le reverse proxy puisse joindre l'app par son nom.
+name: marlowe
+services:
+  # nom explicite : le réseau vps_default est partagé avec Dynasty 8, dont
+  # le service s'appelle déjà "app"
+  marlowe-app:
+    container_name: marlowe-app-1
+    build:
+      context: ../..
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    env_file: ../.env
+    environment:
+      # Valeurs d'infrastructure, fixes une fois pour toutes : le nom du
+      # service Docker fait office d'adresse réseau. Le mot de passe, lui,
+      # vient de ../.env (DB_PASSWORD), jamais d'ici.
+      DB_HOST: marlowe-db
+      DB_PORT: "3306"
+      DB_NAME: marlowe
+      DB_USER: marlowe
+    depends_on:
+      marlowe-db:
+        condition: service_healthy
+    networks:
+      - default
+      - caddy       # réseau du Caddy partagé du VPS, pour le reverse proxy
+  marlowe-db:
+    container_name: marlowe-db-1
+    image: mariadb:10.11
+    restart: unless-stopped
+    env_file: ../.env          # fournit MARIADB_PASSWORD (= DB_PASSWORD)
+    environment:
+      MARIADB_DATABASE: marlowe
+      MARIADB_USER: marlowe
+      # L'app se connecte avec le compte restreint ci-dessus, jamais en
+      # root — voir docs/A-TRANSMETTRE-AU-RESPONSABLE.md. Un mot de passe
+      # root aléatoire, jamais affiché ni conservé, suffit donc.
+      MARIADB_RANDOM_ROOT_PASSWORD: "yes"
+    volumes:
+      - marlowe-db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+volumes:
+  marlowe-db:
+networks:
+  caddy:
+    external: true
+    name: vps_default     # réseau du compose Dynasty 8 (là où vit le Caddy partagé)

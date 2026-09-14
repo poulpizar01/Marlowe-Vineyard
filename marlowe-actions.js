@@ -210,6 +210,31 @@
       c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
+  /* Pour une adresse posée dans style="background-image:url('...')" : elle
+     traverse DEUX couches (l'attribut HTML, puis la chaîne CSS dedans), et
+     esc() ne protège que la première — le navigateur décode &quot;/&#39; en
+     vrais guillemets AVANT que le CSS ne lise la valeur, donc un esc() seul
+     laisserait un guillemet s'échapper une couche plus loin. Le pourcentage-
+     encodage, lui, n'est décodé par aucune des deux couches : il neutralise
+     les deux à la fois. (Avant ce correctif, seul le guillemet simple était
+     neutralisé — pas le double, qui aurait pu faire sortir de l'attribut.) */
+  function escUrlCss(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g,
+      c => ({ '&': '%26', '<': '%3C', '>': '%3E', '"': '%22', "'": '%27' }[c]));
+  }
+
+  /* Sommes-nous dans l'ordinateur du jeu ?
+     ---------------------------------------------------------------------------
+     Même détection que marlowe-folkos.js (les deux fichiers sont chargés
+     indépendamment, dupliquer ces deux lignes coûte moins cher qu'une
+     dépendance de chargement entre eux). Sert à couper court AVANT d'ouvrir
+     une fenêtre ou d'imprimer : voir openInvoiceDoc() plus bas, où
+     window.print() gèlerait la CEF si on le laissait s'exécuter en jeu. */
+  function estEnJeu() {
+    try { return window.self !== window.top; }
+    catch (e) { return true; }
+  }
+
   function toast(msg) {
     let t = document.querySelector('.mv-toast');
     if (!t) {
@@ -1245,6 +1270,16 @@
   const money = n => Number(n || 0).toLocaleString('fr-FR') + '$';
 
   function openInvoiceDoc(inv) {
+    /* En jeu, l'ordinateur n'a pas de fenêtres séparées : window.open() n'ouvre
+       rien, et le document qu'on y écrirait plus bas appelle window.print() à
+       son chargement — qui, lui, GÈLE la CEF entière (pas seulement la
+       fenêtre). On s'arrête donc AVANT d'ouvrir quoi que ce soit, plutôt que
+       de laisser ce script s'exécuter dans un contexte où il fige le jeu. */
+    if (estEnJeu()) {
+      toast("L'impression n'est pas possible depuis l'ordinateur du jeu. Ouvrez cette facture depuis votre navigateur habituel pour l'imprimer ou l'enregistrer en PDF.");
+      return;
+    }
+
     /* Le parchemin est un vrai fichier du site. La fenêtre de la facture est
        ouverte vide, donc son adresse de base est « about:blank » : un chemin
        relatif n'y résoudrait rien. On calcule l'adresse absolue ici. */
@@ -2750,14 +2785,59 @@ window.onload = function(){
 
   const clotures = { weeks: [], undo: null };
 
-  /* La semaine clôturée est celle des 7 jours qui précèdent aujourd'hui :
-     un lundi, cela donne exactement lundi → dimanche. */
+  /* La semaine clôturée est la dernière semaine lundi→dimanche ENTIÈREMENT
+     terminée — ancrée sur mondayOf(), comme partout ailleurs dans le fichier
+     (Quotas, Ma semaine, Primes). Avant ce correctif, la fenêtre était « les
+     7 jours qui précèdent aujourd'hui », ce qui ne tombait juste que si la
+     clôture était lancée un lundi précisément : lancée un autre jour, elle
+     décalait silencieusement les dates archivées, le compte de recrutements
+     et les heures cumulées par rapport à ce que montrent Quotas/Primes pour
+     la même semaine. mondayOf(aujourd'hui) donne toujours le lundi de la
+     semaine EN COURS ; la semaine précédente est donc toujours la dernière
+     complète, quel que soit le jour où l'on clôture. */
+  /* La période réellement couverte par la clôture qu'on s'apprête à faire.
+     ---------------------------------------------------------------------------
+     Cette fonction rendait « le lundi dernier au dimanche dernier ». C'était une
+     semaine THÉORIQUE, et les chiffres archivés ne lui correspondaient pas : les
+     compteurs de production et d'heures ne connaissent pas les dates, ils
+     comptent depuis la dernière remise à zéro — c'est-à-dire depuis la clôture
+     PRÉCÉDENTE. Tant que la clôture tombait un lundi, les deux coïncidaient. Une
+     clôture faite le mercredi archivait deux jours de trop sous l'étiquette de
+     la semaine passée, et l'employé repartait à zéro en ayant perdu ces deux
+     jours-là.
+
+     On ne recalcule RIEN : les compteurs restent ce qu'ils sont, les montants
+     archivés ne bougent pas. On dit simplement la vérité sur la période qu'ils
+     couvrent — de la clôture précédente à maintenant.
+
+     `start` peut valoir null, et c'est voulu : à la toute première clôture, ou
+     sur une installation dont l'historique a été purgé, personne ne sait depuis
+     quand les compteurs tournent. On ne va pas inventer une date pour faire
+     joli — l'affichage dira « jusqu'au … », ce qui est exact. */
   function closingPeriod() {
-    const end = new Date();
-    end.setDate(end.getDate() - 1);
-    const start = new Date(end);
-    start.setDate(start.getDate() - 6);
-    return { start, end };
+    const precedente = lastClosedWeek();
+    const start = (precedente && precedente.closedAt) ? parseFR(precedente.closedAt) : null;
+    return { start: start || null, end: new Date() };
+  }
+
+  /* La période d'une clôture, telle qu'on l'écrit à l'écran. Vaut aussi pour
+     les archives d'AVANT ce changement : elles portent des dates de semaine
+     théorique, on les affiche telles qu'elles ont été enregistrées plutôt que
+     de les réécrire après coup. Une archive sans date de début — il n'y en a
+     pas aujourd'hui, mais il y en aura — se lit « jusqu'au … ». */
+  /* La même chose, mais à partir des deux dates plutôt que d'une archive —
+     pour les écrans qui annoncent la clôture À VENIR. `start` vaut null tant
+     qu'aucune clôture n'a eu lieu : on ne sait pas depuis quand les compteurs
+     tournent, et on ne l'invente pas. */
+  function libellePeriode(start, end) {
+    return start ? `du ${frDate(start)} au ${frDate(end)}` : `jusqu'au ${frDate(end)}`;
+  }
+
+  function periodeLisible(w) {
+    if (!w) return '';
+    if (w.du && w.au) return `du ${w.du} au ${w.au}`;
+    if (w.au) return `jusqu'au ${w.au}`;
+    return 'période inconnue';
   }
 
   const frDate = d => `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
@@ -2774,7 +2854,15 @@ window.onload = function(){
 
   async function closeWeek() {
     const { start, end } = closingPeriod();
-    const label = `Semaine ${isoWeek(start)}`;
+
+    /* L'étiquette ne prétend plus être un numéro de semaine : « Semaine 37 »
+       était justement la fiction que les chiffres ne respectaient pas. Elle
+       nomme la clôture par sa date, et la période exacte vit dans du/au juste
+       à côté. Les compteurs, eux, ne sont pas touchés (voir closingPeriod). */
+    const label = `Clôture du ${frDate(end)}`;
+    /* Identifiant seulement technique (annulation, suppression d'archive) : il
+       doit être unique même si deux clôtures tombent le même jour. */
+    const id = `cloture-${end.getTime().toString(36)}`;
 
     const eligibles = effectifData
       .filter(e => e.active && e.barils >= e.quota)
@@ -2792,17 +2880,27 @@ window.onload = function(){
     const actifs = effectifData.filter(e => e.active);
     const sansProd = actifs.filter(e => !e.barils).length;
     const meilleur = actifs.slice().sort((a, b) => (b.barils || 0) - (a.barils || 0))[0];
+    /* Sans début connu, on ne borne que par la fin : inventer une date de
+       départ fausserait ce compte au lieu de l'améliorer. */
     const recrutes = rhRosterData.filter(e => {
       const d = parseFR(e.date);
-      return d && d >= start && d <= end;
+      if (!d || d > end) return false;
+      return !start || d >= start;
     }).length;
 
+    const periode = start ? `Du ${frDate(start)} au ${frDate(end)}`
+                          : `Jusqu'au ${frDate(end)}`;
+    const depuis = start
+      ? "Cette période part de la clôture précédente."
+      : "Aucune clôture précédente n'est enregistrée : on ne sait pas depuis "
+        + "quand les compteurs tournent, la période n'a donc pas de début connu.";
+
     const ok = await confirmAction(
-      `Clôturer ${label}`,
-      `Du ${frDate(start)} au ${frDate(end)}.\n\n` +
+      `Clôturer — ${periode.toLowerCase()}`,
+      `${periode}. ${depuis}\n\n` +
       `${eligibles.length} employé(s) ont atteint leur quota. ` +
       `Les compteurs de production et les prises de service repartent à zéro, ` +
-      `et l'éligibilité basculera sur cette semaine. La clôture reste annulable.`);
+      `et l'éligibilité basculera sur cette période. La clôture reste annulable.`);
     if (!ok) return;
 
     /* Photo de l'état actuel, pour pouvoir revenir en arrière. */
@@ -2811,13 +2909,15 @@ window.onload = function(){
       serviceHistory: JSON.parse(JSON.stringify(serviceHistory)),
       dash: JSON.parse(JSON.stringify(dash)),
       linterna: JSON.parse(JSON.stringify(linterna)),
-      weekId: label + ' ' + frDate(start),
+      weekId: id,
     };
 
     clotures.weeks.unshift({
-      id: label + ' ' + frDate(start),
+      id,
       label,
-      du: frDate(start),
+      /* `du` reste vide quand le début est inconnu : l'affichage dira
+         « jusqu'au … » (voir periodeLisible) plutôt qu'une date inventée. */
+      du: start ? frDate(start) : '',
       au: frDate(end),
       closedAt: frDate(new Date()),
       heures,
@@ -3004,8 +3104,8 @@ window.onload = function(){
     const sub = document.querySelector('#page-eligibilite .page-sub');
     if (sub) {
       sub.textContent = w
-        ? `Récompenses de la ${w.label.toLowerCase()} — du ${w.du} au ${w.au}, clôturée le ${w.closedAt}.`
-        : 'Les récompenses portent sur la semaine précédente : aucune semaine clôturée pour l\'instant.';
+        ? `Récompenses de la période ${periodeLisible(w)}, clôturée le ${w.closedAt}.`
+        : 'Les récompenses portent sur la période précédente : aucune clôture pour l\'instant.';
     }
 
     const cls = (typeof gradePillClass === 'function') ? gradePillClass : () => 'gp-muted';
@@ -3048,11 +3148,14 @@ window.onload = function(){
 
     const sub = document.querySelector('#page-statsprimes .primes-sub');
     if (sub) {
-      sub.textContent = `Prochaine clôture : du ${frDate(start)} au ${frDate(end)} · `
+      sub.textContent = `Prochaine clôture : ${libellePeriode(start, end)} · `
         + `prime = vins × multiplicateur, dans la limite du plafond de prime du palier`;
     }
     const h = document.querySelector('#page-statsprimes .primes-titlewrap h1');
-    if (h) h.innerHTML = `Semaine ${isoWeek(start)} — <span class="accent">Primes</span>`;
+    /* Sans clôture précédente, il n'y a pas de numéro de semaine à annoncer :
+       la période n'a pas de début connu. On le dit plutôt que de planter. */
+    if (h) h.innerHTML = `${start ? 'Semaine ' + isoWeek(start) : 'Période en cours'}`
+      + ` — <span class="accent">Primes</span>`;
 
     const cancel = $('annulerClotureBtn');
     if (cancel) {
@@ -3245,8 +3348,13 @@ window.onload = function(){
   function quotaDeLaFiche(nom, grade) {
     const lignes = (typeof effectifData !== 'undefined' && Array.isArray(effectifData)) ? effectifData : [];
     const f = nom ? lignes.find(e => clefNom(e.name) === clefNom(nom)) : null;
-    const q = f ? Number(f.quota) || 0 : 0;
-    if (q > 0) return q;
+    /* Comme pour quotaDuGrade ci-dessus, ZÉRO est une valeur qui veut dire
+       quelque chose — ici, que CETTE personne est exemptée de quota, pas que
+       sa fiche n'a rien de réglé. On ne retombe donc sur le quota du grade
+       que si la fiche n'existe pas du tout (nom introuvable dans l'effectif) ;
+       si elle existe, sa valeur — 0 compris — fait foi, exactement comme le
+       fait déjà actionSousQuota() un peu plus haut avec e.quota. */
+    if (f) return Math.max(0, Number(f.quota) || 0);
     return quotaDuGrade(grade);
   }
   window.mvQuotaFiche = quotaDeLaFiche;
@@ -3822,7 +3930,7 @@ window.onload = function(){
             const prod = (w.production || []).reduce((s, p) => s + (p.barils || 0), 0);
             return `<tr>
               <td><b>${esc(w.label)}</b></td>
-              <td class="mono">${esc(w.du)} → ${esc(w.au)}</td>
+              <td class="mono">${esc(periodeLisible(w))}</td>
               <td class="num">${w.eligibles.length}</td>
               <td class="num">${prod.toLocaleString('fr-FR')}</td>
               <td class="num">${Math.floor((w.heures || 0) / 60)}h${pad((w.heures || 0) % 60)}</td>
@@ -3852,7 +3960,7 @@ window.onload = function(){
             <th class="num">Quota</th><th>Résultat</th></tr></thead>
           <tbody>${mine.map(({ w, p }) => `
             <tr>
-              <td><b>${esc(w.label)}</b><br><span class="mono" style="font-size:11px;color:var(--muted);">${esc(w.du)} → ${esc(w.au)}</span></td>
+              <td><b>${esc(w.label)}</b><br><span class="mono" style="font-size:11px;color:var(--muted);">${esc(periodeLisible(w))}</span></td>
               <td><span class="grade-pill ${typeof gradePillClass === 'function' ? gradePillClass(p.grade) : ''}">${esc(p.grade)}</span></td>
               <td class="num">${(p.barils || 0).toLocaleString('fr-FR')}</td>
               <td class="num dim">${(p.quota || 0).toLocaleString('fr-FR')}</td>
@@ -4070,7 +4178,7 @@ window.onload = function(){
           <tbody>${weeks.map(w => `
             <tr>
               <td><b>${esc(w.label)}</b></td>
-              <td class="mono">${esc(w.du)} → ${esc(w.au)}</td>
+              <td class="mono">${esc(periodeLisible(w))}</td>
               <td class="mono">${esc(w.closedAt)}</td>
               <td class="num">${prod(w).toLocaleString('fr-FR')}</td>
               <td class="num">${fmt$(w.ca)}</td>
@@ -4116,7 +4224,7 @@ window.onload = function(){
     if (i < 0) return;
     const w = clotures.weeks[i];
     if (!await confirmAction('Supprimer de l\'historique',
-      `${w.label} (${w.du} → ${w.au}) sera définitivement retirée. Cela n'annule pas la clôture, cela efface seulement son archive.`, 'Supprimer')) return;
+      `${w.label} (${periodeLisible(w)}) sera définitivement retirée. Cela n'annule pas la clôture, cela efface seulement son archive.`, 'Supprimer')) return;
     clotures.weeks.splice(i, 1);
     if (clotures.undo && clotures.undo.weekId === id) clotures.undo = null;
     D().save('clotures', false);
@@ -4325,7 +4433,7 @@ window.onload = function(){
     const { start, end } = closingPeriod();
     const sub = $('clotureSub');
     if (sub) {
-      sub.textContent = `Semaine du ${frDate(start)} au ${frDate(end)} · suis les étapes dans l'ordre, coche au fur et à mesure.`;
+      sub.textContent = `Période ${libellePeriode(start, end)} · suis les étapes dans l'ordre, coche au fur et à mesure.`;
     }
 
     const done = new Set(clotureSteps.done || []);
@@ -4362,7 +4470,7 @@ window.onload = function(){
       <div class="panel mv-undo${peutAnnuler ? '' : ' off'}">
         <h3>↩ Oubli ou erreur ?</h3>
         <p>${w
-          ? `Dernière clôture : <b>${esc(w.label)}</b> — ${esc(w.du)} → ${esc(w.au)}, clôturée le ${esc(w.closedAt)}.`
+          ? `Dernière clôture : <b>${esc(w.label)}</b> — ${esc(periodeLisible(w))}, clôturée le ${esc(w.closedAt)}.`
             + (peutAnnuler
               ? ' Productions, heures de service et primes exceptionnelles peuvent être restaurées à l\'identique.'
               : ' Cette clôture n\'est plus annulable — la sauvegarde de restauration a été remplacée.')
@@ -4446,21 +4554,20 @@ window.onload = function(){
   }
 
   async function battementPresence() {
-    const cfg = (window.MarloweAuth && window.MarloweAuth.CONFIG) || {};
-    if (cfg.MODE !== 'discord') return;
-    let tok = null;
-    try { tok = JSON.parse(localStorage.getItem('mv.token') || 'null'); } catch (e) {}
-    if (!tok) return;
+    const A = window.MarloweAuth;
+    if (!A || A.CONFIG.MODE !== 'discord') return;
 
-    try {
-      const res = await fetch(cfg.API_BASE + '/api/presence', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tok },
-        body: JSON.stringify({ page: pageCourante() }),
-      });
-      if (!res.ok) return;
-      renderPresence(await res.json());
-    } catch (e) { /* réseau capricieux : on retentera au prochain battement */ }
+    /* apiBrut() ne lève jamais (même en cas de réseau capricieux, ou si la
+       session a expiré entre-temps) : le même comportement de repli
+       silencieux qu'avant, sans réimplémenter la construction de la
+       requête. Pas de pré-vérification « est-on connecté » : le cookie de
+       session ne se lit pas en JavaScript, un appel sans session répond
+       simplement 401 et r.ok reste faux. */
+    const r = await A.apiBrut('/api/presence', {
+      method: 'POST',
+      body: JSON.stringify({ page: pageCourante() }),
+    });
+    if (r.ok) renderPresence(r.data);
   }
 
   const LABEL_PAGE = {};
@@ -5445,30 +5552,25 @@ window.onload = function(){
 
   function cfgAuth() { return (window.MarloweAuth && window.MarloweAuth.CONFIG) || {}; }
 
-  /* Les adresses acceptées par le serveur — au PLURIEL depuis le déménagement.
-     ---------------------------------------------------------------------------
-     C'était une seule chaîne, celle de SITE_URL côté Worker. Le jour où le
-     domaine a changé, cette constante est restée sur l'ancienne adresse : le
-     panel, ouvert sur la nouvelle, se serait mis à afficher « le serveur
-     n'accepte que poulpizar01.github.io » et à conseiller de pousser sur
-     GitHub — un conseil faux, sur une panne qui n'existait pas.
+  /* Les adresses acceptées — plus de GitHub Pages, une seule adresse : celle
+     du domaine du domaine viticole, servie par le backend qui sert aussi ce
+     fichier (même origine, voir marlowe-config.js).
 
-     Elle doit refléter SITE_URLS du Worker. Les deux listes vivent à deux
-     endroits différents, donc elles peuvent diverger : c'est pour ça que la
-     page de diagnostic affiche les deux et dit laquelle est en cause.
+     Elle doit refléter SITE_URLS côté backend (voir backend/.env.example).
+     Les deux listes vivent à deux endroits différents, donc elles peuvent
+     diverger : c'est pour ça que la page de diagnostic affiche celle-ci et
+     dit si elle est en cause.
 
-     ⚠️ À la fin du déménagement, retirer l'ancienne adresse ICI et dans
-     wrangler.toml — dans cet ordre, jamais l'inverse. */
+     Si le site doit un jour répondre sur DEUX adresses en même temps — le
+     temps d'un déménagement de domaine, ou pendant un essai sur une adresse
+     provisoire —, ajoutez-la ici ET dans SITE_URLS côté backend. Les deux
+     ensemble : l'oubli de la seconde fait perdre le cookie de session, et
+     l'utilisateur revient à l'écran de connexion sans aucun message. */
   const SITE_ATTENDUES = [
     'https://marlowe-vineyard.fbfa.fr',
-    'https://poulpizar01.github.io',
   ];
   const SITE_ATTENDU = SITE_ATTENDUES[0];
   const adresseConnue = o => SITE_ATTENDUES.includes(String(o || ''));
-
-  function jeton() {
-    try { return JSON.parse(localStorage.getItem('mv.token') || 'null'); } catch (e) { return null; }
-  }
 
   /* Réduit un fichier image et renvoie un Blob JPEG. Un PDF passe tel quel :
      il n'y a rien à redimensionner, et le recompresser le casserait. */
@@ -5494,20 +5596,20 @@ window.onload = function(){
 
   async function envoyerFichier(file) {
     const cfg = cfgAuth();
-    const tok = jeton();
-    /* On ne teste QUE le jeton : une API_BASE vide n'est pas une absence de
-       configuration, c'est « l'API est sur la même origine que le panel ».
-       Les confondre bloquerait le dépôt de visuel sur le futur montage. */
-    if (!tok) throw new Error('connectez-vous au panel avant de déposer un visuel');
-
+    /* Le corps est le fichier brut (pas du JSON) : ça ne peut pas passer par
+       apiBrut(), qui impose Content-Type: application/json. credentials:
+       'include' suffit à joindre le cookie de session — rien à tester avant
+       l'envoi, un appel sans session répond simplement 401 ci-dessous. */
     const blob = await reduireImage(file);
     const res = await fetch(cfg.API_BASE + '/api/upload', {
       method: 'POST',
-      headers: { 'Content-Type': blob.type || file.type, 'Authorization': 'Bearer ' + tok },
+      credentials: 'include',
+      headers: { 'Content-Type': blob.type || file.type },
       body: blob,
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
+      if (res.status === 401) throw new Error('connectez-vous au panel avant de déposer un visuel');
       if (res.status === 413) throw new Error(file.type === 'application/pdf'
         ? 'PDF trop lourd — le plafond est de 12 Mo, allégez-le avant de le joindre'
         : 'fichier trop lourd même après réduction');
@@ -5534,7 +5636,7 @@ window.onload = function(){
     const n = vitrine.nouveautes;
     const cartes = n.length ? n.map((x, i) => `
       <li class="mv-nouv" data-i="${i}">
-        <div class="mv-nouv-vis" style="background-image:url('${String(x.img).replace(/'/g, "%27")}')"></div>
+        <div class="mv-nouv-vis" style="background-image:url('${escUrlCss(x.img)}')"></div>
         <div class="mv-nouv-champs">
           <input type="text" data-champ="titre" data-i="${i}" placeholder="Titre (facultatif)" value="${esc(x.titre || '')}">
           <input type="text" data-champ="texte" data-i="${i}" placeholder="Une ligne de description (facultatif)" value="${esc(x.texte || '')}">
@@ -5551,7 +5653,7 @@ window.onload = function(){
       ? vitrine.catPages.map((u, i) => `
           <li class="mv-page" data-i="${i}">
             <span class="mv-page-n">${i + 1}</span>
-            <div class="mv-page-vis" style="background-image:url('${String(u).replace(/'/g, "%27")}')"></div>
+            <div class="mv-page-vis" style="background-image:url('${escUrlCss(u)}')"></div>
             <button class="btn" data-cat="up"   data-i="${i}" ${i === 0 ? 'disabled' : ''}>↑</button>
             <button class="btn" data-cat="down" data-i="${i}" ${i === vitrine.catPages.length - 1 ? 'disabled' : ''}>↓</button>
             <button class="btn" data-cat="del"  data-i="${i}">✕</button>
@@ -5629,7 +5731,7 @@ window.onload = function(){
           ? vitrine.entPages.map((u, i) => `
             <li class="mv-page" data-i="${i}">
               <span class="mv-page-n">${i + 1}</span>
-              <div class="mv-page-vis" style="background-image:url('${String(u).replace(/'/g, "%27")}')"></div>
+              <div class="mv-page-vis" style="background-image:url('${escUrlCss(u)}')"></div>
               <button class="btn" data-ent="up"   data-i="${i}" ${i === 0 ? 'disabled' : ''}>↑</button>
               <button class="btn" data-ent="down" data-i="${i}" ${i === vitrine.entPages.length - 1 ? 'disabled' : ''}>↓</button>
               <button class="btn" data-ent="del"  data-i="${i}">✕</button>
@@ -6083,7 +6185,7 @@ window.onload = function(){
           const pc = q > 0 ? Math.round(b / q * 100) : 0;
           return `<tr>
             <td><b>${esc(w.label)}</b></td>
-            <td class="mono dim">${esc(w.du)} → ${esc(w.au)}</td>
+            <td class="mono dim">${esc(periodeLisible(w))}</td>
             <td class="dim">${esc(p.grade || '—')}</td>
             <td class="num">${b.toLocaleString('fr-FR')}</td>
             <td class="num dim">${q.toLocaleString('fr-FR')}</td>
@@ -9031,36 +9133,36 @@ window.onload = function(){
      recompose le message à partir de cette même identité, donc personne ne
      peut demander un retrait au nom d'un autre. */
   /* --- L'envoi vers le salon des runners ------------------------------------
-     Deux voies, essayées dans cet ordre :
+     Deux voies, essayées dans cet ordre — la session voyage désormais dans
+     le cookie httpOnly, joint automatiquement par credentials:'include' sur
+     les DEUX, il n'y a plus de jeton à transporter à la main :
 
-     1. la voie normale — jeton dans l'en-tête Authorization. Un en-tête
-        personnalisé oblige le navigateur à envoyer d'abord une requête
-        préparatoire (OPTIONS). C'est la forme propre, et c'est aussi celle
-        qu'un bloqueur de publicité, un antivirus ou un réseau d'entreprise
-        peut avaler sans le moindre message d'erreur exploitable.
+     1. la voie normale — Content-Type: application/json.
 
-     2. la voie de repli — requête « simple » au sens du navigateur : aucun
-        en-tête personnalisé, donc aucune requête préparatoire, donc rien à
-        bloquer. Le jeton voyage dans le corps, vers le même serveur, en
-        HTTPS : la confidentialité est identique.
+     2. la voie de repli, en cas d'échec de la première (réseau capricieux,
+        bloqueur de publicité, antivirus, réseau d'entreprise) — un
+        Content-Type minimal, pour le cas où c'est spécifiquement la requête
+        JSON qui serait filtrée plutôt que l'adresse elle-même.
 
      L'adresse s'appelle /api/relais et non /api/discord : les listes de
      filtrage coupent volontiers toute adresse contenant « discord ». */
   const RELAIS = '/api/relais';
 
-  async function postRelais(cfg, tok, charge) {
+  async function postRelais(cfg, charge) {
     try {
       const r = await fetch(cfg.API_BASE + RELAIS, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tok },
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(charge),
       });
       return { res: r, voie: 'normale' };
     } catch (e) {
       const r = await fetch(cfg.API_BASE + RELAIS, {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-        body: JSON.stringify(Object.assign({}, charge, { token: tok })),
+        body: JSON.stringify(charge),
       });
       return { res: r, voie: 'repli' };
     }
@@ -9068,8 +9170,6 @@ window.onload = function(){
 
   async function demanderRetrait() {
     const cfg = (window.MarloweAuth && window.MarloweAuth.CONFIG) || {};
-    let tok = null;
-    try { tok = JSON.parse(localStorage.getItem('mv.token') || 'null'); } catch (e) {}
 
     const maintenant = new Date();
     const p = n => String(n).padStart(2, '0');
@@ -9101,22 +9201,20 @@ window.onload = function(){
     D().note(`a demandé un retrait (${produit} ×${quantite})`);
     D().save('comRunner');
 
-    if (cfg.MODE !== 'discord' || !tok) {
+    if (cfg.MODE !== 'discord') {
       toast('Demande inscrite au fil. Discord non relié en mode test.');
       return;
     }
 
     try {
-      const { res } = await postRelais(cfg, tok, { produit, quantite, heure: r.heure });
+      const { res } = await postRelais(cfg, { produit, quantite, heure: r.heure });
       const data = await res.json().catch(() => ({}));
       if (res.ok) { toast('Demande envoyée sur Discord.'); return; }
 
       if (res.status === 503 && data.error === 'webhook_invalide') {
         avertirTexte("Le salon Discord est relié, mais l'adresse enregistrée n'en est pas une.\n\n"
-            + "Depuis le dossier backend :\n\n"
-            + "    npx wrangler secret put DISCORD_WEBHOOK\n\n"
-            + "Au prompt, RIEN ne s'affiche pendant que vous collez : c'est normal, "
-            + "la saisie est masquée. Collez une fois, puis Entrée.\n\n"
+            + "Sur le serveur : modifiez DISCORD_WEBHOOK dans backend/.env, puis redémarrez "
+            + "le conteneur (docker compose restart marlowe-app — voir backend/README.md).\n\n"
             + "La demande reste visible dans le fil ci-dessous.");
         return;
       }
@@ -9124,8 +9222,8 @@ window.onload = function(){
         avertirTexte("Le salon Discord n'est pas encore relié.\n\n"
             + "Le patron doit créer un webhook dans le salon des runners "
             + "(Modifier le salon ▸ Intégrations ▸ Webhooks ▸ Nouveau webhook), "
-            + "puis l'enregistrer côté serveur avec :\n\n"
-            + "    npx wrangler secret put DISCORD_WEBHOOK\n\n"
+            + "puis l'enregistrer côté serveur : DISCORD_WEBHOOK dans backend/.env, "
+            + "puis redémarrer le conteneur (voir backend/README.md).\n\n"
             + "La demande reste visible dans le fil ci-dessous.");
         return;
       }
@@ -9149,11 +9247,11 @@ window.onload = function(){
       }
       /* Les deux voies ont échoué depuis la bonne adresse : ce n'est plus une
          question d'origine, c'est que quelque chose entre le navigateur et
-         Cloudflare coupe l'appel. Le bouton de diagnostic le nomme. */
+         le serveur coupe l'appel. Le bouton de diagnostic le nomme. */
       avertirTexte("La demande est inscrite dans le fil, mais elle n'a pas pu partir sur Discord.\n\n"
           + "L'appel n'est même pas sorti du navigateur — ni par la voie normale, ni par la voie de repli.\n"
           + "C'est presque toujours une extension (bloqueur de publicité, antivirus, filtre DNS) ou le\n"
-          + "réseau qui coupe les adresses en .workers.dev.\n\n"
+          + "réseau qui coupe l'adresse de l'API.\n\n"
           + "Paramètres ▸ Règles du domaine ▸ « Tester le lien Discord » donne le détail.");
     }
   }
@@ -9167,8 +9265,6 @@ window.onload = function(){
      disponible au nom d'un autre. */
   async function annoncerDispo() {
     const cfg = (window.MarloweAuth && window.MarloweAuth.CONFIG) || {};
-    let tok = null;
-    try { tok = JSON.parse(localStorage.getItem('mv.token') || 'null'); } catch (e) {}
 
     /* La confirmation recopie le message MOT POUR MOT. Un résumé approximatif
        ferait valider autre chose que ce qui part réellement dans le salon. */
@@ -9192,7 +9288,7 @@ window.onload = function(){
     D().save('comRunner');
     renderComRunner();
 
-    if (cfg.MODE !== 'discord' || !tok) {
+    if (cfg.MODE !== 'discord') {
       toast('Annonce inscrite au fil. Discord non relié en mode test.');
       return;
     }
@@ -9200,7 +9296,8 @@ window.onload = function(){
     try {
       const res = await fetch(cfg.API_BASE + '/api/dispo', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tok },
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       });
       const data = await res.json().catch(() => ({}));
@@ -9214,7 +9311,7 @@ window.onload = function(){
         return;
       }
       if (res.status === 404) {
-        toast('Cette version du serveur ne connaît pas encore ce bouton — le Worker doit être redéployé.');
+        toast('Cette version du serveur ne connaît pas encore ce bouton — le conteneur doit être reconstruit.');
         return;
       }
       toast(data.detail || `Discord a refusé l'envoi (${res.status}).`);
@@ -9320,18 +9417,15 @@ window.onload = function(){
   let invites = [];
 
   async function apiInvites(methode, corps) {
-    const cfg = cfgAuth();
-    const tok = jeton();
-    /* Voir plus haut : API_BASE vide = même origine, pas « non configuré ». */
-    if (!tok) throw new Error('connectez-vous au panel');
-    const res = await fetch(cfg.API_BASE + '/api/invites', {
+    const A = window.MarloweAuth;
+    if (!A) throw new Error('connectez-vous au panel');
+    const r = await A.apiBrut('/api/invites', {
       method: methode,
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tok },
       body: corps ? JSON.stringify(corps) : undefined,
     });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.detail || data.error || ('erreur ' + res.status));
-    return data;
+    if (r.status === 401) throw new Error('connectez-vous au panel');
+    if (!r.ok) throw new Error(r.data.detail || r.data.error || ('erreur ' + r.status));
+    return r.data;
   }
 
   function pagesDuPanel() {
@@ -9530,6 +9624,14 @@ window.onload = function(){
   });
 
 
+  /* Le nom de domaine à suggérer dans « ajoutez … à ses exceptions » : celui
+     de l'API si elle est sur une adresse à part, sinon celui du panel — pour
+     ne plus jamais recopier un domaine en dur qui finit par changer. */
+  function apiHost(cfg) {
+    try { return new URL(cfg.API_BASE, location.href).hostname; }
+    catch (e) { return location.hostname; }
+  }
+
   /* --- Diagnostic du lien Discord ------------------------------------------
      Quand un envoi échoue, le navigateur ne dit presque rien : « Failed to
      fetch » couvre aussi bien un blocage CORS qu'une extension, une coupure
@@ -9537,7 +9639,6 @@ window.onload = function(){
      étape et rapporte ce qui se passe RÉELLEMENT, au lieu de laisser deviner. */
   async function testerDiscord() {
     const cfg = cfgAuth();
-    const tok = jeton();
     const L = [];
     const dire = (t, v) => L.push(`${t.padEnd(26, '.')} ${v}`);
 
@@ -9547,7 +9648,9 @@ window.onload = function(){
       ? 'oui' : 'NON — le navigateur bloquera tout');
     dire('Mode', cfg.MODE || '—');
     dire('Adresse du serveur', cfg.API_BASE || 'la même que le panel (même origine)');
-    dire('Jeton de session', tok ? 'présent' : 'ABSENT — reconnectez-vous');
+    /* La session vit dans un cookie httpOnly : impossible de dire d'ici
+       s'il est présent, seul le serveur peut répondre — c'est justement
+       ce que teste l'étape suivante. */
 
     /* 1. le serveur répond-il tout court ? */
     try {
@@ -9558,25 +9661,22 @@ window.onload = function(){
       dire('', '');
       dire('Conclusion', "le serveur n'est pas atteignable du tout.");
       dire('', "Une extension de navigateur (bloqueur de pubs, filtre DNS)");
-      dire('', "bloque souvent les adresses en .workers.dev. Réessayez en");
+      dire('', "bloque souvent l'adresse de l'API. Réessayez en");
       dire('', "navigation privée, extensions désactivées.");
       avertirTexte(L.join('\n'));
       return;
     }
 
-    /* 2. la requête préparatoire passe-t-elle ?
-       /api/me porte un en-tête Authorization : le navigateur envoie donc
-       d'abord un OPTIONS. Si CETTE étape passe, le contrôle d'origine est
-       correctement réglé — et un échec plus loin ne peut plus être du CORS.
-       C'est la mesure qui départage les deux causes. */
+    /* 2. la session est-elle valable ? credentials:'include' joint le cookie
+       de session tout seul — s'il manque ou a expiré, /api/me répond 401. */
     let prepOk = false;
     try {
-      const r = await fetch(cfg.API_BASE + '/api/me', { headers: { 'Authorization': 'Bearer ' + tok } });
+      const r = await fetch(cfg.API_BASE + '/api/me', { credentials: 'include' });
       prepOk = true;
-      dire('Requête préparatoire', 'passe');
+      dire('Appel à /api/me', 'passe');
       dire('Session valable', r.ok ? 'oui' : `NON (${r.status}) — reconnectez-vous`);
     } catch (e) {
-      dire('Requête préparatoire', `BLOQUÉE — ${e.message}`);
+      dire('Appel à /api/me', `BLOQUÉ — ${e.message}`);
       dire('Session valable', 'non vérifiable');
     }
 
@@ -9588,7 +9688,8 @@ window.onload = function(){
     try {
       r = await fetch(cfg.API_BASE + RELAIS, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tok },
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(charge),
       });
       voie = 'normale';
@@ -9598,8 +9699,9 @@ window.onload = function(){
       try {
         r = await fetch(cfg.API_BASE + RELAIS, {
           method: 'POST',
+          credentials: 'include',
           headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-          body: JSON.stringify(Object.assign({}, charge, { token: tok })),
+          body: JSON.stringify(charge),
         });
         voie = 'repli';
       } catch (e) { erreurRepli = e.message; }
@@ -9625,8 +9727,7 @@ window.onload = function(){
       dire('', "");
       dire('À faire', "rouvrez le panel en navigation privée, extensions");
       dire('', "désactivées, et refaites ce test. Si ça passe, c'est une");
-      dire('', "extension : ajoutez marlowe-api.marlowe-vineyard.workers.dev");
-      dire('', "à ses exceptions.");
+      dire('', `extension : ajoutez ${apiHost(cfg)} à ses exceptions.`);
     } else {
       const d = await r.json().catch(() => ({}));
       dire('Envoi Discord', `${r.status} ${d.error || (d.ok ? 'envoyé' : '')} (voie ${voie})`);
@@ -9645,17 +9746,14 @@ window.onload = function(){
         dire('', '');
         dire('Conclusion', "le secret existe, mais son contenu n'est pas une");
         dire('', "adresse de webhook. Réenregistrez-le :");
-        dire('', '    cd backend');
-        dire('', '    npx wrangler secret put DISCORD_WEBHOOK');
-        dire('', "Au prompt, RIEN ne s'affiche pendant que vous collez —");
-        dire('', "c'est normal, la saisie est masquée. Collez, Entrée.");
+        dire('', '    sudo nano /opt/marlowe/backend/.env   # DISCORD_WEBHOOK=...');
+        dire('', '    sudo docker compose -f /opt/marlowe/backend/deploy/docker-compose.yml restart marlowe-app');
       } else if (r.status === 503) {
         dire('', '');
         dire('Conclusion', "le webhook n'est pas enregistré côté serveur.");
-        dire('', 'Dans un terminal, depuis le dossier backend :');
-        dire('', '    cd backend');
-        dire('', '    npx wrangler secret put DISCORD_WEBHOOK');
-        dire('', "puis collez l'adresse du webhook au prompt caché.");
+        dire('', 'Sur le VPS :');
+        dire('', '    sudo nano /opt/marlowe/backend/.env   # DISCORD_WEBHOOK=...');
+        dire('', '    sudo docker compose -f /opt/marlowe/backend/deploy/docker-compose.yml restart marlowe-app');
       } else if (r.status === 429) {
         dire('', '');
         dire('Conclusion', 'trop de demandes coup sur coup. Attendez 30 s.');
@@ -9665,13 +9763,14 @@ window.onload = function(){
       } else if (r.status === 404) {
         dire('', '');
         dire('Conclusion', "le serveur ne connaît pas encore /api/relais.");
-        dire('', 'Depuis le dossier backend : npx wrangler deploy');
+        dire('', "Le conteneur n'a sans doute pas été reconstruit après un déploiement récent :");
+        dire('', '    cd /opt/marlowe && git pull && sudo docker compose -f backend/deploy/docker-compose.yml up -d --build');
       } else if (r.status === 500) {
         dire('', '');
         dire('Conclusion', "le serveur a planté pendant le traitement. Le");
         dire('', "détail ci-dessus est le message exact de l'erreur.");
-        dire('', "Pour la voir en direct, depuis le dossier backend :");
-        dire('', '    npx wrangler tail');
+        dire('', "Pour la voir en direct, sur le VPS :");
+        dire('', '    sudo docker logs -f marlowe-app-1');
         dire('', "puis recliquez sur ce bouton.");
       } else if (r.status === 502) {
         dire('', '');
@@ -9778,13 +9877,14 @@ window.onload = function(){
             || `Vous n'avez pas le droit ${quoi ? 'de ' + quoi : 'de faire ceci'}.`;
       case 'config':    return r.data.detail || 'Les catégories de tickets ne sont pas déclarées.';
       case 'reseau':    return 'Le serveur du panel est injoignable. Rien n\'a été envoyé.';
-      /* Le routeur du Worker rend « not_found » quand l'URL demandée ne
+      /* Le routeur du serveur rend « not_found » quand l'URL demandée ne
          correspond à aucune de ses routes. Ce n'est donc pas un refus : c'est
          un serveur plus ancien que le panel qui lui parle. Le dire, sinon on
          cherche une permission Discord qui n'est pas en cause. */
       case 'not_found':
         return 'Cette version du serveur ne connaît pas encore cette fonction. '
-             + 'Le Worker doit être redéployé (cd backend && npx wrangler deploy), '
+             + 'Le conteneur doit être reconstruit (cd /opt/marlowe && git pull && '
+             + 'sudo docker compose -f backend/deploy/docker-compose.yml up -d --build), '
              + 'puis /api/version doit afficher la version attendue.';
       default:          return `Le serveur a refusé (${(r.data && r.data.error) || r.status})${d}.`;
     }
@@ -9901,8 +10001,31 @@ window.onload = function(){
   /* Le même quota que partout ailleurs — celui des Règles du domaine. Cette
      page avait sa propre table en dur : régler le quota n'aurait rien changé
      ici, et les deux pages se seraient contredites. */
-  function qdQuotaDe(poste) {
-    return quotaDuGrade(poste);
+  /* Le quota d'une ligne de « Quota en direct » — fiche d'abord, grade ensuite.
+     ---------------------------------------------------------------------------
+     Cette fonction ne regardait que le GRADE. Un employé exempté — quota
+     individuel réglé à 0 — y apparaissait donc avec le quota de son grade
+     (« 110 · 56 restants »), pendant que la page Primes, elle, le donnait à
+     jour. Deux écrans, deux chiffres, pour la même personne, et c'est sur
+     celui-ci qu'on relance les gens.
+     On passe par quotaDeLaFiche(), exactement comme Primes : la fiche fait foi
+     quand elle existe — y compris quand elle dit ZÉRO, qui veut dire
+     « exempté » et non « rien de réglé » —, et on ne retombe sur le quota du
+     grade que si la personne n'a pas de fiche à l'effectif.
+
+     Effet sur les deux compteurs du haut de page (« X / Y ont atteint leur
+     quota »), à connaître avant de s'étonner qu'ils bougent :
+       · Y (avecQuota) ne compte plus les exemptés — ils n'ont pas de quota à
+         atteindre, les faire figurer au dénominateur revenait à les compter
+         comme en retard ;
+       · X (atteints) ne les compte plus non plus, y compris quand leur
+         production dépasse le quota de leur grade : sans quota, on n'« atteint »
+         rien.
+     Un exempté sort donc des DEUX côtés de la fraction, qui ne parle plus que
+     des personnes réellement soumises à un quota. Si tout le monde est exempté,
+     la tuile affiche « — » au lieu d'une fraction trompeuse. */
+  function qdQuotaDe(poste, nom) {
+    return quotaDeLaFiche(nom, poste);
   }
 
   /* Les bornes de la semaine — à l'heure de PARIS.
@@ -10046,7 +10169,7 @@ window.onload = function(){
   }
 
   function qdLigne(r) {
-    const quota = qdQuotaDe(r.poste);
+    const quota = qdQuotaDe(r.poste, r.nom);
     const pct = quota > 0 ? Math.min(100, Math.round(r.vins / quota * 100)) : 0;
     const atteint = quota > 0 && r.vins >= quota;
     return `<tr>
@@ -10112,7 +10235,7 @@ window.onload = function(){
       </div>
       <div class="qd-top-grid">
         ${podium.map((r, i) => {
-          const quota = qdQuotaDe(r.poste);
+          const quota = qdQuotaDe(r.poste, r.nom);
           const atteint = quota > 0 && r.vins >= quota;
           return `<div class="qd-top-c ${classes[i] || ''}">
             <div class="qd-top-r">
@@ -10178,8 +10301,9 @@ window.onload = function(){
     const totalPart = rattachees.reduce((s, r) => s + (r.part || 0), 0);
     const totalVentes = rattachees.reduce((s, r) => s + r.ventes, 0)
       + orphelines.reduce((s, o) => s + o.ventes, 0);
-    const atteints = rattachees.filter(r => { const q2 = qdQuotaDe(r.poste); return q2 > 0 && r.vins >= q2; }).length;
-    const avecQuota = rattachees.filter(r => qdQuotaDe(r.poste) > 0).length;
+    /* Les exemptés sortent des DEUX côtés de la fraction (voir qdQuotaDe). */
+    const atteints = rattachees.filter(r => { const q2 = qdQuotaDe(r.poste, r.nom); return q2 > 0 && r.vins >= q2; }).length;
+    const avecQuota = rattachees.filter(r => qdQuotaDe(r.poste, r.nom) > 0).length;
 
     const met = (id, v) => { const el = $(id); if (el) el.textContent = v; };
     met('qdTotal', totalVins.toLocaleString('fr-FR'));

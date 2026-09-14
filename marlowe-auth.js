@@ -19,20 +19,33 @@
 
    GET  {API_BASE}/api/callback?code=...
         → échange le code, vérifie l'appartenance au serveur Discord,
-          récupère les rôles, puis renvoie le membre sur gestion.html
-          avec un token (#token=... dans l'URL)
+          récupère les rôles, puis renvoie le membre sur gestion.html —
+          la session voyage dans un cookie httpOnly (Set-Cookie), jamais
+          dans l'URL ni dans une valeur lisible par ce fichier.
 
-   GET  {API_BASE}/api/me            [Authorization: Bearer <token>]
-        → 200 {"user":{"id","name","avatar"},"roles":["Patron","RH",...]}
+   Toutes les routes protégées ci-dessous lisent ce cookie automatiquement
+   (credentials:'include' sur chaque appel, voir api()/apiBrut()) :
+
+   GET  {API_BASE}/api/me
+        → 200 {"user":{"id","name","avatar"},"roles":["Patron","RH",...],
+               "invite":null,"isOwner":false,"isPatron":true}
           401 si non connecté / plus membre du serveur
 
-   GET  {API_BASE}/api/roles         [Authorization: Bearer <token>]
+          `isOwner` et `isPatron` sont CALCULÉS PAR LE SERVEUR et pris tels
+          quels : ce fichier n'a plus le trousseau OWNER_IDS qui servait à
+          les recalculer (voir la section CONFIG). Ils portent sur la
+          personne connectée uniquement — la liste, elle, ne sort jamais
+          du .env du serveur.
+
+   GET  {API_BASE}/api/roles
         → 200 ["Patron","Co-Patron","DRH",...]   (rôles réels du serveur)
 
    GET  {API_BASE}/api/permissions
         → 200 {"rhemployes":["Patron","DRH"], ...}
+          401 si non connecté. Cette route était ouverte à tous : elle
+          publiait la carte des accès du panel sans demander de compte.
 
-   PUT  {API_BASE}/api/permissions   [Authorization: Bearer <token>]
+   PUT  {API_BASE}/api/permissions
         → enregistre la matrice. DOIT refuser si le membre n'est pas patron.
 
    IMPORTANT : le backend revalide les rôles à CHAQUE appel de données.
@@ -64,6 +77,10 @@
 
     /* Adresse du backend.
        ---------------------------------------------------------------------
+       Lue depuis marlowe-config.js (chargé juste avant ce script), pour ne
+       plus vivre en double avec la copie qu'utilise index.html — les deux
+       fichiers partagent maintenant la même source.
+
        Une chaîne VIDE est une valeur légitime, et ce sera la bonne le jour où
        l'API tournera sur la même machine que le site : les appels deviennent
        « /api/… », donc de même origine. Ce jour-là, CORS disparaît entièrement
@@ -71,7 +88,7 @@
        panne classique « ça marche en curl mais pas dans le navigateur ».
        Il n'y aura rien d'autre à changer : tout le panel construit ses appels
        par concaténation, et '' + '/api/data' vaut '/api/data'. */
-    API_BASE: 'https://marlowe-api.marlowe-vineyard.workers.dev',
+    API_BASE: window.MARLOWE_API_BASE,
 
     /* Rôles Discord qui donnent les pleins pouvoirs (accès à tout +
        accès à la page Paramètres). Doivent correspondre EXACTEMENT au nom
@@ -79,22 +96,27 @@
     PATRON_ROLES: ['Patron', 'Co-Patron'],
 
     /* ---------------------------------------------------------------------
-       ACCÈS PERMANENT — identifiants Discord qui ont TOUJOURS tous les accès,
-       quels que soient leurs rôles, et que personne ne peut retirer depuis
-       la page Paramètres.
+       ACCÈS PERMANENT — le trousseau du développeur : des identifiants
+       Discord qui gardent TOUS les accès quels que soient leurs rôles, et que
+       personne ne peut retirer depuis la page Paramètres. Même si le patron
+       se trompe dans les réglages, même si on te retire un rôle, tu gardes
+       la main.
 
-       C'est le trousseau du développeur : même si le patron se trompe dans
-       les réglages, même si on te retire un rôle, tu gardes la main.
+       IL N'Y A PAS DE LISTE ICI, ET IL NE FAUT PAS EN REMETTRE UNE.
+       Ce fichier est servi au navigateur : tout ce qu'on y écrit est lisible
+       par n'importe quel visiteur du site. Le trousseau se règle à un seul
+       endroit, la variable OWNER_IDS du fichier .env du serveur (voir
+       backend/.env.example), qui ne quitte jamais la machine.
 
-       Pour trouver ton identifiant : Discord ▸ Paramètres ▸ Avancés ▸
-       activer « Mode développeur », puis clic droit sur ton pseudo ▸
-       « Copier l'identifiant ». C'est une suite de 18-19 chiffres.
+       Le panel ne reçoit donc pas la liste mais la réponse : /api/me renvoie
+       `isOwner` pour la personne connectée, et rien sur les autres. Une seule
+       source, donc aucune divergence possible entre ce qu'affiche l'écran et
+       ce qu'autorisent les routes.
 
+       Pour trouver un identifiant : Discord ▸ Paramètres ▸ Avancés ▸ activer
+       « Mode développeur », puis clic droit sur le pseudo ▸ « Copier
+       l'identifiant ». C'est une suite de 18-19 chiffres.
        --------------------------------------------------------------------- */
-    OWNER_IDS: [
-      '826526979204841482',   // Thomas — développeur du site
-      '186397473374208000',   // accès développeur permanent
-    ],
   };
 
   /* ==========================================================================
@@ -251,7 +273,6 @@
 
   const LS_SESSION = 'mv.session';
   const LS_PERMS   = 'mv.permissions';
-  const LS_TOKEN   = 'mv.token';
   const LS_SETTINGS = 'mv.settings';
 
   /* ------------------------------------------------------------------------
@@ -391,13 +412,16 @@
     del(k)    { try { localStorage.removeItem(k); } catch (e) {} },
   };
 
-  function token() { return ls.get(LS_TOKEN, null); }
-
+  /* Le jeton de session vit dans un cookie httpOnly posé par le serveur —
+     jamais dans localStorage, jamais lu par ce fichier. credentials:'include'
+     suffit à ce que le navigateur le rejoigne à chaque appel ; il n'y a plus
+     d'en-tête Authorization à construire ici. C'est tout l'intérêt du
+     changement : un script qui tournerait sur cette page (faille XSS
+     oubliée quelque part dans marlowe-actions.js) ne peut plus lire ce que
+     JavaScript ne voit jamais. */
   async function api(path, options) {
-    const opts = Object.assign({ headers: {} }, options || {});
+    const opts = Object.assign({ credentials: 'include', headers: {} }, options || {});
     opts.headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers);
-    const t = token();
-    if (t) opts.headers['Authorization'] = 'Bearer ' + t;
     const res = await fetch(CONFIG.API_BASE + path, opts);
     if (!res.ok) throw new Error('API ' + res.status);
     return res.json();
@@ -408,10 +432,8 @@
      trop récente, salon interdit — perd tout son intérêt si l'appelant ne
      reçoit qu'un « API 400 » sec. */
   async function apiBrut(path, options) {
-    const opts = Object.assign({ headers: {} }, options || {});
+    const opts = Object.assign({ credentials: 'include', headers: {} }, options || {});
     opts.headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers);
-    const t = token();
-    if (t) opts.headers['Authorization'] = 'Bearer ' + t;
     let res;
     try { res = await fetch(CONFIG.API_BASE + path, opts); }
     catch (e) { return { ok: false, status: 0, data: { error: 'reseau', detail: String(e.message || e) } }; }
@@ -420,27 +442,91 @@
     return { ok: res.ok, status: res.status, data: data || {} };
   }
 
+  /* La version de la matrice sur laquelle cet onglet travaille.
+     ---------------------------------------------------------------------------
+     Retenue ici, en privé, plutôt que rendue avec la matrice : tout le panel lit
+     `perms[idDePage]`, et y laisser traîner un `_meta` en ferait une pseudo-page
+     que chaque lecteur devrait penser à écarter. getPermissions() la met de
+     côté, setPermissions() la renvoie au serveur, qui refuse d'enregistrer si
+     elle n'est plus la bonne (voir handlePermissions dans backend/src/index.js).
+     null = on n'a pas encore lu la matrice ; le serveur refusera, et c'est bien
+     ce qu'on veut plutôt que d'écraser à l'aveugle. */
+  let revPermissions = null;
+
   const Store = {
     async getPermissions() {
       if (CONFIG.MODE === 'discord') {
-        try { return await api('/api/permissions'); }
-        catch (e) { return defaultPermissions(); }
+        /* En cas d'échec, on ne retombe PAS sur defaultPermissions() : cette
+           matrice de démo est large (DRH, RH, Gestion…) et afficherait des
+           pages auxquelles la vraie matrice, configurée par le patron,
+           n'aurait peut-être jamais donné accès. Une panne réseau
+           momentanée ne doit pas se traduire par un panel qui en montre
+           plus que d'habitude — {} ferme tout, exactement comme le fait
+           déjà getSettings() juste en dessous pour le même genre d'échec. */
+        try {
+          const recu = await api('/api/permissions');
+          const meta = recu && recu._meta;
+          revPermissions = (meta && typeof meta.rev === 'number') ? meta.rev : null;
+          /* On rend la matrice SEULE : le reste du panel la lit page par page
+             et n'a pas à connaître ce numéro de version. */
+          const matrice = Object.assign({}, recu);
+          delete matrice._meta;
+          return matrice;
+        }
+        catch (e) { return {}; }
       }
       return ls.get(LS_PERMS, null) || defaultPermissions();
     },
 
-    async setPermissions(perms) {
+    /* `ro` — les pages en lecture seule — part avec la matrice, dans le MÊME
+       appel. Séparées, les deux écritures pouvaient réussir à moitié : la
+       matrice élargie enregistrée, ses restrictions non. Voir handlePermissions
+       côté serveur, qui les écrit dans l'ordre qui échoue du bon côté. */
+    async setPermissions(perms, ro) {
       if (CONFIG.MODE === 'discord') {
-        return api('/api/permissions', { method: 'PUT', body: JSON.stringify(perms) });
+        /* apiBrut et non api() : un conflit (409) n'est pas une panne, c'est une
+           réponse qu'il faut pouvoir LIRE — api() lèverait sans son contenu, et
+           on perdrait le nom de la personne qui a enregistré entre-temps. */
+        const corps = Object.assign({}, perms, { _rev: revPermissions });
+        if (ro && typeof ro === 'object') corps._ro = ro;
+
+        const r = await apiBrut('/api/permissions', { method: 'PUT', body: JSON.stringify(corps) });
+        if (r.status === 409) {
+          const e = new Error('conflit');
+          e.conflit = r.data || {};
+          throw e;
+        }
+        if (!r.ok) throw new Error('API ' + r.status);
+
+        const meta = r.data && r.data._meta;
+        if (meta && typeof meta.rev === 'number') revPermissions = meta.rev;
+
+        /* Enregistrement à moitié : le serveur le dit, on ne le tait pas. */
+        if (r.data && Array.isArray(r.data.echoue) && r.data.echoue.length) {
+          const e = new Error('partiel');
+          e.partiel = r.data;
+          throw e;
+        }
+        return r.data;
       }
       ls.set(LS_PERMS, perms);
+      if (ro && typeof ro === 'object') {
+        const s = ls.get(LS_SETTINGS, {}) || {};
+        s.permsRO = ro;
+        ls.set(LS_SETTINGS, s);
+      }
       return perms;
     },
 
     async getRoles() {
       if (CONFIG.MODE === 'discord') {
+        /* Idem que getPermissions() : en cas d'échec, ne pas faire croire à
+           la page Paramètres que les rôles de démonstration (DEMO_ROLES)
+           sont ceux du vrai serveur Discord — un patron qui y assignerait
+           des droits par erreur les donnerait à des rôles qui n'existent
+           pas. Liste vide plutôt que fausse liste. */
         try { return await api('/api/roles'); }
-        catch (e) { return DEMO_ROLES.slice(); }
+        catch (e) { return []; }
       }
       return DEMO_ROLES.slice();
     },
@@ -475,14 +561,13 @@
       let s = null;
 
       if (CONFIG.MODE === 'discord') {
-        /* Le backend renvoie le membre sur gestion.html#token=xxx */
-        if (location.hash.startsWith('#token=')) {
-          ls.set(LS_TOKEN, decodeURIComponent(location.hash.slice(7)));
-          history.replaceState(null, '', location.pathname + location.search);
-        }
-        if (!token()) return null;
+        /* Le cookie de session (posé par le serveur sur la redirection de
+           retour de Discord/FolkOS) accompagne cet appel tout seul — voir
+           api(). S'il est absent ou périmé, /api/me répond 401 et api()
+           lève : c'est le SEUL moyen de savoir si on est connecté, puisque
+           JavaScript ne peut justement pas lire un cookie httpOnly. */
         try { s = await api('/api/me'); }
-        catch (e) { ls.del(LS_TOKEN); return null; }
+        catch (e) { return null; }
       } else {
         s = ls.get(LS_SESSION, null);
       }
@@ -497,13 +582,29 @@
         return s;
       }
 
-      /* Accès permanent par identifiant Discord, puis par rôle. */
-      /* Les noms de rôles se comparent normalisés, exactement comme le fait le
-         serveur : « Patron 👑 » et « Patron » sont le même rôle, et le panel
-         ne doit pas dire l'inverse de ce que le serveur décidera. L'égalité
-         reste stricte sur la forme normalisée — « Sous-Patron » n'ouvre rien. */
-      s.isOwner  = CONFIG.OWNER_IDS.includes(String(s.user.id));
-      s.isPatron = s.isOwner || s.roles.some(estRolePatronNom);
+      /* Accès permanent (trousseau) et accès patron (rôle Discord).
+         ---------------------------------------------------------------------
+         En mode Discord, les deux arrivent tout calculés dans la réponse de
+         /api/me et on les prend tels quels. Le panel n'a PLUS le trousseau :
+         il vit dans le .env du serveur, et lui seul sait qui en fait partie.
+         Recalculer ici rouvrirait la divergence qu'on vient de fermer.
+
+         Le repli sur les rôles ne sert qu'aux sessions qui n'ont pas traversé
+         le serveur — le mode démo, qui n'a ni .env ni trousseau, d'où un
+         `isOwner` toujours faux. Les noms de rôles s'y comparent normalisés
+         comme le fait le serveur : « Patron 👑 » et « Patron » sont le même
+         rôle. L'égalité reste stricte sur la forme normalisée — « Sous-Patron »
+         n'ouvre rien.
+
+         Rien de tout ceci n'est un droit d'accès : c'est ce qui décide de
+         l'affichage du menu et du bandeau. Chaque route revérifie de son
+         côté, à partir de la session du serveur. */
+      s.isOwner  = typeof s.isOwner === 'boolean'
+        ? s.isOwner
+        : false;
+      s.isPatron = typeof s.isPatron === 'boolean'
+        ? s.isPatron
+        : (s.isOwner || s.roles.some(estRolePatronNom));
       return s;
     },
 
@@ -518,14 +619,26 @@
       ls.set(LS_SESSION, { user: { id: 'demo', name: name, avatar: null }, roles: roles });
     },
 
-    logout() {
-      /* On prévient le backend pour qu'il efface la session de son côté,
-         sans attendre la réponse — le rechargement suffit à l'utilisateur. */
-      if (CONFIG.MODE === 'discord' && token()) {
-        try { api('/api/logout').catch(() => {}); } catch (e) {}
+    async logout() {
+      /* On ATTEND la révocation côté serveur (avec une minuterie, pour ne
+         pas bloquer indéfiniment si le réseau traîne) : sans ça, un
+         rechargement qui interrompt l'appel juste après son lancement
+         pouvait laisser la session valable côté serveur alors que
+         l'utilisateur se croyait déconnecté. Pas de pré-vérification « y
+         a-t-il un jeton » possible ici — un cookie httpOnly ne se lit pas
+         en JavaScript — donc on appelle toujours /api/logout en mode
+         discord ; le serveur ne fait rien s'il n'y avait pas de session,
+         et efface le cookie dans tous les cas. */
+      if (CONFIG.MODE === 'discord') {
+        await Promise.race([
+          /* POST et non GET : une déconnexion CHANGE quelque chose, et un
+             GET se déclenche depuis n'importe quel site tiers par une simple
+             balise <img src="…/api/logout">. Le serveur l'exige désormais. */
+          api('/api/logout', { method: 'POST' }).catch(() => {}),
+          new Promise(resolve => setTimeout(resolve, 4000)),
+        ]);
       }
       ls.del(LS_SESSION);
-      ls.del(LS_TOKEN);
       location.reload();
     },
   };
@@ -633,8 +746,18 @@
   .mv-avatar img{width:100%;height:100%;object-fit:cover;}
   .mv-user-name{font-size:13px;font-weight:600;color:var(--parchment,#EDE3CF);line-height:1.3;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  .mv-user-role{font-size:10.5px;color:var(--muted,#9C9384);margin-top:2px;
-    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  /* Les rôles passent à la ligne au lieu d'être coupés.
+     ------------------------------------------------------------------------
+     Avec white-space:nowrap et une ellipse, la liste s'arrêtait au premier
+     rôle et demi : quelqu'un qui portait « 👑・Patron » en quatrième position
+     ne le voyait jamais, et pouvait croire qu'il n'était pas reconnu comme
+     patron — alors que le panel, lui, le comptait bien. Rien n'est caché
+     maintenant. overflow-wrap:anywhere évite qu'un nom de rôle très long ne
+     déborde de la colonne. Le pied de la barre grandit d'autant, et la
+     navigation au-dessus se contente de moins de place : elle défile déjà.
+     (Ce bloc est un littéral de gabarit : pas d'accent grave ici.) */
+  .mv-user-role{font-size:10.5px;color:var(--muted,#9C9384);margin-top:3px;
+    line-height:1.5;white-space:normal;overflow-wrap:anywhere;}
   .mv-owner-tag{color:var(--or,#C9A961);font-weight:600;}
   .mv-logout{margin-top:10px;width:100%;background:transparent;border:1px solid rgba(243,208,138,.18);
     border-radius:8px;padding:7px;font-size:11.5px;color:var(--muted,#9C9384);cursor:pointer;
@@ -1087,7 +1210,7 @@
         go.disabled = true; err.textContent = '';
         try {
           const res = await fetch(CONFIG.API_BASE + '/api/invite-login', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ code, mdp }),
           });
           const data = await res.json().catch(() => ({}));
@@ -1101,7 +1224,8 @@
             go.disabled = false;
             return;
           }
-          ls.set(LS_TOKEN, data.token);
+          /* Le cookie de session arrive avec cette réponse (Set-Cookie) : rien
+             à ranger nous-mêmes, le rechargement suffit — /api/me le lira. */
           location.reload();
         } catch (e) {
           err.textContent = 'Serveur injoignable. Réessayez dans un instant.';
@@ -1687,6 +1811,91 @@
     /* ------------------------------------------------------------------ */
     /* Les deux derniers gestionnaires appartiennent à la matrice, pas aux
        données : ils se branchent avec elle. */
+    /* Un enregistrement qui n'est passé qu'à moitié.
+       ------------------------------------------------------------------------
+       Le serveur écrit la matrice et ses pages en lecture seule l'une après
+       l'autre ; il ne peut pas en faire une seule transaction (deux documents
+       distincts, dont l'un porte bien d'autres réglages). Quand l'une des deux
+       échoue, il le DIT au lieu de laisser croire que tout est enregistré —
+       et on le répète ici mot pour mot. Ne jamais afficher « Enregistré » sur
+       une réponse qui liste des échecs. */
+    function messagePartiel(info) {
+      const faits = (info.enregistre || []).map(nomLisible).join(', ');
+      const rates = (info.echoue || []).map(nomLisible).join(', ');
+      return 'Enregistrement incomplet.\n\n'
+        + (faits ? 'Enregistré : ' + faits + '\n' : "Rien n'a été enregistré.\n")
+        + (rates ? 'Échoué : ' + rates + '\n' : '')
+        + '\n' + (info.detail || 'Rechargez la page pour voir l\'état réel.');
+    }
+
+    function nomLisible(clef) {
+      return clef === 'permissions' ? 'la matrice des accès'
+           : clef === 'permsRO'     ? 'les pages en lecture seule'
+           : clef;
+    }
+
+    /* Un enregistrement refusé parce que quelqu'un est passé avant.
+       ------------------------------------------------------------------------
+       Rien n'est fusionné, rien n'est écrasé, et surtout : les cases restent
+       EXACTEMENT comme la personne les a laissées. C'est son travail ; il n'a
+       pas à disparaître parce qu'un collègue a enregistré entre-temps. On dit
+       ce qui s'est passé, on nomme qui et quand, et on propose de charger la
+       version actuelle — ce qui, lui, remplace l'écran. D'où la question posée
+       AVANT, jamais après, et une réponse négative qui ne fait rien du tout. */
+    async function conflitMatrice(acces, info) {
+      const qui   = info && info.by ? ' par ' + info.by : '';
+      let quand = '';
+      if (info && info.at) {
+        const d = new Date(info.at);
+        if (!isNaN(d)) quand = ' le ' + d.toLocaleString('fr-FR',
+          { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+      }
+
+      const texte = 'La matrice des accès a été enregistrée' + qui + quand
+        + ' pendant que vous la modifiiez.\n\n'
+        + "Vos modifications sont toujours à l'écran et n'ont PAS été envoyées.";
+
+      const A = window.MarloweActions;
+      const ok = A && A.confirmAction
+        ? await A.confirmAction('Matrice modifiée entre-temps',
+            texte + '\n\nCharger la version actuelle ? Vos modifications seront remplacées.')
+        : false;
+
+      if (!ok) {
+        mvDire(texte + '\n\nRechargez la page quand vous voudrez repartir de la version actuelle.');
+        return;
+      }
+
+      /* getPermissions() remet au passage le numéro de version à jour : c'est
+         lui qui permettra au prochain enregistrement de passer. En cas
+         d'échec réseau elle rend {} — on ne repeint alors RIEN, plutôt que de
+         vider la matrice à l'écran sur une panne momentanée. */
+      revPermissions = null;
+      const frais = await Store.getPermissions();
+      if (revPermissions === null) {
+        mvDire("La version actuelle n'a pas pu être chargée. Vos modifications sont intactes.");
+        return;
+      }
+      const reglages = await Store.getSettings();
+
+      perms = frais;
+      settings = reglages || {};
+      const ro = settings.permsRO || {};
+
+      acces.querySelectorAll('[data-cell]').forEach(c => {
+        const [pid, role] = c.dataset.cell.split('|');
+        const vu = (frais[pid] || []).includes(role);
+        const etat = !vu ? 'non' : ((ro[pid] || []).includes(role) ? 'ro' : 'oui');
+        c.dataset.etat = etat;
+        c.className = 'mv-cell mv-' + etat;
+        c.textContent = etat === 'non' ? '·' : etat === 'ro' ? '👁' : '✓';
+        c.title = (etat === 'non' ? 'Aucun accès' : etat === 'ro' ? 'Lecture seule' : 'Accès complet')
+                + ' — cliquez pour changer';
+      });
+
+      mvDire('Version actuelle chargée. Vous pouvez reprendre vos modifications.');
+    }
+
     function brancherAccesEnregistrement(acces) {
     /* --- enregistrer --- */
     acces.querySelector('#mvSave').addEventListener('click', async () => {
@@ -1712,12 +1921,17 @@
       });
 
       try {
-        await Store.setSettings({ permsRO: nextRO });
-        await Store.setPermissions(next);
+        /* UN SEUL appel porte la matrice ET ses pages en lecture seule. En
+           deux appels, un conflit ou une panne entre les deux laissait un
+           enregistrement à moitié fait — et du mauvais côté : des accès
+           élargis sans leurs restrictions. */
+        await Store.setPermissions(next, nextRO);
         const tag = acces.querySelector('#mvSaved');
         tag.classList.add('on');
         setTimeout(() => tag.classList.remove('on'), 1800);
       } catch (e) {
+        if (e && e.conflit) return await conflitMatrice(acces, e.conflit);
+        if (e && e.partiel) return mvDire(messagePartiel(e.partiel));
         mvDire("Impossible d'enregistrer : " + e.message);
       }
     });
@@ -1732,8 +1946,16 @@
         c.className = 'mv-cell mv-' + c.dataset.etat;
         c.textContent = on ? '✓' : '·';
       });
-      await Store.setSettings({ permsRO: {} });
-      await Store.setPermissions(def);
+      /* Même appel et même traitement des refus que l'enregistrement normal :
+         réinitialiser est une écriture comme une autre, et rien ne justifie
+         qu'elle passe par-dessus le travail de quelqu'un d'autre. */
+      try {
+        await Store.setPermissions(def, {});
+      } catch (e) {
+        if (e && e.conflit) return await conflitMatrice(acces, e.conflit);
+        if (e && e.partiel) return mvDire(messagePartiel(e.partiel));
+        mvDire("Impossible d'enregistrer : " + e.message);
+      }
     });
     }
   }

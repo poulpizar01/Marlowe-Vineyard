@@ -31,7 +31,7 @@ const dit = (nom, vrai, detail) => {
 
 /* ---------- le faux Discord ---------- */
 const CAT = '1489223949790216303';
-const MOI = '826526979204841482';      // l'employé visé
+const MOI = '777777777777777777';      // l'employé visé
 const AUTRE = '111111111111111111';    // un collègue
 const ROLE_STAFF = '222222222222222222';
 

@@ -225,19 +225,21 @@ window.MarloweData = (function () {
     try { localStorage.setItem(LS_KEY, JSON.stringify(obj)); } catch (e) {}
   }
 
+  /* Les appels passent par window.MarloweAuth.apiBrut() (même wrapper que
+     tout le reste du panel) plutôt que par un fetch() écrit à la main ici :
+     un seul endroit sait construire la requête et joindre le cookie de
+     session, au lieu de plusieurs copies à tenir manuellement synchronisées.
+     Pas de pré-vérification « est-on connecté » : un cookie httpOnly ne se
+     lit pas en JavaScript, et api.load()/flush() attrapent déjà l'échec
+     (401 → « lecture 401 »/« écriture 401 ») exactement comme ils
+     attrapaient l'ancien « non connecté » écrit à la main. */
   async function fetchAll() {
     const c = cfg();
     if (c.MODE !== 'discord') return localRead();
 
-    let tok = null;
-    try { tok = JSON.parse(localStorage.getItem('mv.token') || 'null'); } catch (e) {}
-    if (!tok) return {};
-
-    const res = await fetch(c.API_BASE + '/api/data', {
-      headers: { 'Authorization': 'Bearer ' + tok },
-    });
-    if (!res.ok) throw new Error('lecture ' + res.status);
-    return res.json();
+    const r = await window.MarloweAuth.apiBrut('/api/data');
+    if (!r.ok) throw new Error('lecture ' + r.status);
+    return r.data;
   }
 
   async function pushKeys(payload) {
@@ -249,19 +251,18 @@ window.MarloweData = (function () {
       return;
     }
 
-    let tok = null;
-    try { tok = JSON.parse(localStorage.getItem('mv.token') || 'null'); } catch (e) {}
-    if (!tok) throw new Error('non connecté');
-
-    const res = await fetch(c.API_BASE + '/api/data', {
+    const r = await window.MarloweAuth.apiBrut('/api/data', {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tok },
       body: JSON.stringify(payload),
     });
-    if (!res.ok) throw new Error('écriture ' + res.status);
+    /* Le code d'erreur du serveur voyage avec le statut : sans lui, deux
+       refus très différents arrivaient ici sous le même « écriture 403 » et
+       l'un se faisait passer pour l'autre à l'écran (voir flush()). */
+    if (!r.ok) throw new Error('écriture ' + r.status
+      + (r.data && r.data.error ? ' ' + r.data.error : ''));
     /* On retient notre propre révision : inutile de se resynchroniser
        sur une modification que l'on vient de faire soi-même. */
-    try { const j = await res.json(); if (j && j.rev) myRev = j.rev; } catch (e) {}
+    if (r.data && r.data.rev) myRev = r.data.rev;
   }
 
   /* ------------------------------------------------------------------------
@@ -290,7 +291,30 @@ window.MarloweData = (function () {
       .catch(err => {
         /* Un refus de droits ne se répare pas en réessayant : on arrête. */
         if (String(err.message).includes('403')) {
+          /* Deux refus très différents portent le même 403. Celui-ci veut dire
+             que la requête a été jugée venue d'un autre site (voir
+             exigerOrigine côté serveur) : en pratique, SITE_URL/SITE_URLS ne
+             correspond pas à l'adresse réellement ouverte. Le dire, plutôt que
+             d'envoyer chercher un problème de droits qui n'existe pas. */
+          if (String(err.message).includes('origine_refusee')) {
+            setStatus('error', "adresse du site non reconnue par le serveur — prévenez l'administrateur");
+            return;
+          }
           setStatus('error', 'écriture refusée — vous êtes en lecture seule sur cette page');
+          return;
+        }
+        /* Une session expirée non plus — et c'est le cas le plus coûteux.
+           Sans ce contrôle, un 401 tombait dans le cas général ci-dessous :
+           les clés repartaient en file, `finally` relançait schedule(), et le
+           panel réessayait TOUTES LES 1,5 SECONDE, indéfiniment. La personne
+           voyait une pastille rouge sans savoir quoi en faire, continuait de
+           saisir, et perdait tout au rechargement — puisque rien ne s'était
+           jamais enregistré. On arrête donc la boucle et on dit quoi faire.
+           (Le cookie de session étant httpOnly, le panel ne PEUT pas vérifier
+           lui-même s'il est encore connecté : ce 401 est le seul signal
+           disponible. Voir entetesCookieSession dans backend/src/index.js.) */
+        if (String(err.message).includes('401')) {
+          setStatus('error', 'session expirée — rechargez la page pour vous reconnecter');
           return;
         }
         setStatus('error', err.message);
@@ -380,14 +404,8 @@ window.MarloweData = (function () {
   async function fetchMeta() {
     const c = cfg();
     if (c.MODE !== 'discord') return null;
-    let tok = null;
-    try { tok = JSON.parse(localStorage.getItem('mv.token') || 'null'); } catch (e) {}
-    if (!tok) return null;
-    const res = await fetch(c.API_BASE + '/api/data?meta=1', {
-      headers: { 'Authorization': 'Bearer ' + tok },
-    });
-    if (!res.ok) return null;
-    return res.json();
+    const r = await window.MarloweAuth.apiBrut('/api/data?meta=1');
+    return r.ok ? r.data : null;
   }
 
   async function syncTick() {
@@ -470,14 +488,8 @@ window.MarloweData = (function () {
     async journal() {
       const c = cfg();
       if (c.MODE !== 'discord') return [];
-      let tok = null;
-      try { tok = JSON.parse(localStorage.getItem('mv.token') || 'null'); } catch (e) {}
-      if (!tok) return [];
-      const res = await fetch(c.API_BASE + '/api/journal', {
-        headers: { 'Authorization': 'Bearer ' + tok },
-      });
-      if (!res.ok) return [];
-      return res.json();
+      const r = await window.MarloweAuth.apiBrut('/api/journal');
+      return r.ok ? r.data : [];
     },
 
     startSync,

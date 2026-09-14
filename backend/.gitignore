@@ -1,6 +1,5 @@
-# Dépendances et fichiers de travail de Wrangler
+# Dépendances
 node_modules/
-.wrangler/
 
-# Secrets en local — ne doit JAMAIS partir sur GitHub
-.dev.vars
+# Configuration locale — contient des secrets, ne doit JAMAIS partir sur GitHub
+.env

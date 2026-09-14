@@ -73,7 +73,7 @@ function faireEnv(opts = {}) {
     SITE_URL: 'https://marlowe-vineyard.fbfa.fr',
     DISCORD_GUILD_ID: '111111111111111111',
     DISCORD_BOT_TOKEN: 'jeton',
-    OWNER_IDS: '826526979204841482',
+    OWNER_IDS: '999999999999999999',
     FOLKOS_ID_BASE: 'https://id.fbfa.fr/',
     FOLKOS_CLIENT_ID: 'client-abc',
     FOLKOS_CLIENT_SECRET: 'secret-xyz',
@@ -98,10 +98,12 @@ const appeler = async (env, ticket) => {
   return W.handleFolkos(new Request(u), env, u);
 };
 
+/* Le jeton ne voyage plus dans l'URL de retour (#token=…) : il est posé
+   dans un cookie httpOnly (Set-Cookie: mv_session=…). */
 const jetonDe = r => {
-  const loc = r.headers.get('Location') || '';
-  const m = /#token=(.+)$/.exec(loc);
-  return m ? m[1] : null;
+  const brut = r.headers.get('Set-Cookie') || '';
+  const m = /mv_session=([^;]+)/.exec(brut);
+  return m ? decodeURIComponent(m[1]) : null;
 };
 
 /* ========================================================================== */
@@ -129,8 +131,10 @@ console.log('\n— L\'échange du ticket —');
 
   dit('la réponse est une redirection', r.status === 302, r.status);
   dit('vers le panel du domaine',
-    (r.headers.get('Location') || '').startsWith('https://marlowe-vineyard.fbfa.fr/gestion.html#token='),
+    r.headers.get('Location') === 'https://marlowe-vineyard.fbfa.fr/gestion.html',
     r.headers.get('Location'));
+  dit('avec un cookie de session httpOnly',
+    /HttpOnly/.test(r.headers.get('Set-Cookie') || ''), r.headers.get('Set-Cookie'));
 
   const sid = jetonDe(r);
   const sess = JSON.parse(kv.get('sess:' + sid) || 'null');
@@ -197,7 +201,7 @@ console.log('\n— Le SSO n\'est PAS un droit d\'entrée —');
   /* Le développeur, lui, doit pouvoir entrer sans fiche : c'est le trousseau
      de secours, celui qui permet de réparer un registre cassé. */
   REPONSE = { ok: true, corps: { valid: true, identity: {
-    name: 'Thomas', discord_id: '826526979204841482', unique_id: 1,
+    name: 'Thomas', discord_id: '999999999999999999', unique_id: 1,
   } } };
   const b = faireEnv();
   const r2 = await appeler(b.env, 'T');

@@ -97,8 +97,9 @@ function ajusterCors(reponse, request, env) {
 }
 
 function corsHeaders(env, request) {
-  return {
-    'Access-Control-Allow-Origin': allowedOrigin(env, request),
+  const origine = allowedOrigin(env, request);
+  const h = {
+    'Access-Control-Allow-Origin': origine,
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
     'Access-Control-Max-Age': '86400',
@@ -107,12 +108,19 @@ function corsHeaders(env, request) {
        l'autre, et l'accès casserait de façon parfaitement aléatoire. */
     'Vary': 'Origin',
   };
+  /* Nécessaire pour que le navigateur accepte d'envoyer/lire le cookie de
+     session sur un appel credentials:'include' — seulement si le site est
+     un jour servi depuis une origine différente de l'API. Jamais avec '*' :
+     la combinaison est invalide et le navigateur rejette purement et
+     simplement la réponse d'un appel avec identifiants. */
+  if (origine !== '*') h['Access-Control-Allow-Credentials'] = 'true';
+  return h;
 }
 
-function json(env, data, status = 200) {
+function json(env, data, status = 200, entetesSupp) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json; charset=utf-8', ...corsHeaders(env) },
+    headers: { 'Content-Type': 'application/json; charset=utf-8', ...corsHeaders(env), ...(entetesSupp || {}) },
   });
 }
 
@@ -176,6 +184,42 @@ function memSet(cle, val, ttlSecondes) {
 }
 
 /* ---------------------------------------------------------------------------
+   Une file d'attente par document — contre les enregistrements qui s'effacent
+   ---------------------------------------------------------------------------
+   Le document « data » se réécrit toujours de la même façon : on le LIT en
+   entier, on remplace les collections envoyées, on le RÉÉCRIT en entier. Trois
+   routes font ça (/api/data, /api/absence, /api/linterna) et rien ne les
+   empêchait de se chevaucher.
+
+   Le défaut, reproduit en essai : deux enregistrements lancés en même temps sur
+   des pages DIFFÉRENTES — le registre RH d'un côté, les clients de l'autre.
+   Les deux lisent la même version d'avant, chacun y pose sa collection, et le
+   second écrase le premier. Le panel affiche « Enregistré ✓ » aux deux
+   personnes, et le travail de l'une a disparu. Le numéro de révision, lui, ne
+   montait que d'un cran au lieu de deux : même les autres navigateurs ne
+   voyaient pas qu'il s'était passé quelque chose.
+
+   La file ci-dessous fait passer ces sections l'une après l'autre. Elle vaut
+   pour CE processus : le montage prévu (backend/deploy/docker-compose.yml) en
+   fait tourner un seul, donc elle suffit. Le jour où l'API tournerait en
+   plusieurs exemplaires derrière un répartiteur, il faudrait un verrou porté
+   par la base elle-même (SELECT … FOR UPDATE) — c'est écrit dans AUDIT.md.
+   --------------------------------------------------------------------------- */
+const verrous = new Map();
+
+function verrou(nom, action) {
+  const precedent = verrous.get(nom) || Promise.resolve();
+  let liberer;
+  const mien = new Promise(r => { liberer = r; });
+  /* La file suivante attend MON tour, qu'il se termine bien ou mal. */
+  verrous.set(nom, precedent.then(() => mien, () => mien));
+  return precedent
+    .catch(() => {})
+    .then(() => action())
+    .finally(() => liberer());
+}
+
+/* ---------------------------------------------------------------------------
    La base — D1 (SQLite) derrière la façade de toujours
    ---------------------------------------------------------------------------
    Tout le fichier continue d'écrire base(env).get / .put / .delete / .list,
@@ -187,9 +231,9 @@ function memSet(cle, val, ttlSecondes) {
    gratuit — de quoi tenir une demi-journée de travail à une personne. D1 en
    compte 100 000, gratuitement lui aussi, et lit tout aussi vite.
 
-   Les images, elles, restent dans KV (env.IMAGES) : elles s'écrivent trois
-   fois par mois et pèsent lourd. C'est exactement ce pour quoi KV est bon, et
-   D1 plafonne à 2 Mo par ligne. */
+   Les images et PDF déposés depuis le panel ne transitent plus par ici du
+   tout : voir handleUpload plus bas, qui les envoie directement au service
+   de stockage de l'opérateur FlashbackFA. */
 
 /* Le préfixe d'un listing est comparé avec LIKE, où % et _ sont des
    caractères spéciaux. Aucune de nos clés n'en contient, mais une échappe
@@ -198,15 +242,29 @@ function echapperLike(x) {
   return String(x).replace(/[\\%_]/g, c => '\\' + c);
 }
 
+/* SUM()/AVG() rendent un DECIMAL, que le pilote mysql2 livre en TEXTE pour ne
+   pas perdre de précision — D1 (SQLite) rendait un nombre, et c'est cette
+   différence qui a produit une fois « 0 + "100" + "10" = 0100010 » sur la
+   page Quota (voir handleQuota plus bas). Posée ici, au niveau du fichier,
+   plutôt que réécrite dans chaque route qui agrège : ce fichier n'a qu'une
+   seule dépendance (aucune, justement — voir l'en-tête), donc pas question
+   d'aller la chercher dans db.js ; mais rien n'empêche de la partager ENTRE
+   les routes d'ici. Le prochain SUM()/AVG() ajouté ailleurs doit s'en servir
+   plutôt que de retomber dans le même piège. */
+function nombreSQL(x) {
+  const n = Number(x);
+  return Number.isFinite(n) ? n : 0;
+}
+
 function base(env) {
-  if (!env.DB) throw new Error('La base D1 n\'est pas reliée (binding DB manquant dans wrangler.toml).');
+  if (!env.DB) throw new Error('La base de données n\'est pas reliée (vérifiez DB_HOST/DB_USER/DB_PASSWORD/DB_NAME dans .env).');
 
   return {
     async get(cle, type) {
       const r = await env.DB
         .prepare('SELECT val FROM kv WHERE cle = ? AND (exp IS NULL OR exp > ?)')
         .bind(cle, Date.now()).first();
-      if (!r) return repriseKV(env, cle, type);
+      if (!r) return null;
       if (type !== 'json') return r.val;
       try { return JSON.parse(r.val); } catch (e) { return null; }
     },
@@ -218,7 +276,7 @@ function base(env) {
       const texte = typeof val === 'string' ? val : JSON.stringify(val);
       await env.DB.prepare(
         'INSERT INTO kv (cle, val, exp) VALUES (?, ?, ?) ' +
-        'ON CONFLICT(cle) DO UPDATE SET val = excluded.val, exp = excluded.exp'
+        'ON DUPLICATE KEY UPDATE val = VALUES(val), exp = VALUES(exp)'
       ).bind(cle, texte, exp).run();
     },
 
@@ -226,46 +284,79 @@ function base(env) {
       await env.DB.prepare('DELETE FROM kv WHERE cle = ?').bind(cle).run();
     },
 
+    /* Écrire SEULEMENT si la valeur est restée celle qu'on a lue.
+       -----------------------------------------------------------------------
+       C'est le « compare-and-swap » : la comparaison et l'écriture se font
+       dans UNE SEULE instruction SQL, donc la base les rend indivisibles. Deux
+       requêtes qui partent du même état ne peuvent pas gagner toutes les deux
+       — la seconde voit `affectedRows = 0` et sait qu'elle a perdu.
+
+       Pourquoi il fallait ça, alors que verrou() existe déjà : verrou() est
+       une Map JavaScript. Elle ne vaut que pour LE processus qui l'exécute.
+       Deux conteneurs derrière un répartiteur, ou simplement deux `node
+       src/server.js` sur la même base, ont chacun leur Map et ne se voient
+       pas — le verrou donne alors une impression de protection qu'il n'offre
+       pas. La base, elle, est commune à tous : c'est le seul endroit où un
+       arbitrage tient quel que soit le nombre d'instances.
+
+       Rend true si on a gagné, false sinon. `attendu` à null veut dire « la
+       clé ne doit pas encore exister » : INSERT IGNORE ne crée la ligne que
+       si personne ne l'a devancée. */
+    async casValeur(cle, attendu, nouveau) {
+      const texte = typeof nouveau === 'string' ? nouveau : JSON.stringify(nouveau);
+
+      if (attendu === null || attendu === undefined) {
+        const r = await env.DB.prepare(
+          'INSERT IGNORE INTO kv (cle, val, exp) VALUES (?, ?, NULL)'
+        ).bind(cle, texte).run();
+        return ((r && r.meta && r.meta.affectedRows) || 0) === 1;
+      }
+
+      /* Comparaison sur la valeur EXACTE relue juste avant — pas sur un champ
+         extrait. Toute modification concurrente, quelle qu'elle soit, change
+         la chaîne et fait échouer l'échange. */
+      const r = await env.DB.prepare(
+        'UPDATE kv SET val = ?, exp = NULL WHERE cle = ? AND val = ?'
+      ).bind(texte, cle, attendu).run();
+      return ((r && r.meta && r.meta.affectedRows) || 0) === 1;
+    },
+
     async list(opts) {
       const prefixe = (opts && opts.prefix) || '';
+      /* ⚠️ Le backslash est DOUBLÉ dans le SQL envoyé — « ESCAPE '\\' » et non
+         « ESCAPE '\' ».
+         ---------------------------------------------------------------------
+         SQLite (l'ancienne base D1) prenait « '\' » pour un backslash tout
+         simple. MariaDB/MySQL, non : dans une chaîne SQL, le backslash
+         échappe le caractère suivant, donc « '\' » se lit « une apostrophe
+         échappée » — la chaîne ne se referme jamais et le serveur répond
+         « You have an error in your SQL syntax ». Résultat après la
+         migration : cette requête échouait à TOUS les coups, et /api/presence
+         — le seul appelant — renvoyait 500 à chaque changement de page.
+         Le paramètre lié, lui, n'est pas concerné : echapperLike() y pose un
+         vrai backslash, que ESCAPE reconnaît bien. */
       const r = await env.DB.prepare(
-        "SELECT cle FROM kv WHERE cle LIKE ? ESCAPE '\\' AND (exp IS NULL OR exp > ?) ORDER BY cle"
+        "SELECT cle FROM kv WHERE cle LIKE ? ESCAPE '\\\\' AND (exp IS NULL OR exp > ?) ORDER BY cle"
       ).bind(echapperLike(prefixe) + '%', Date.now()).all();
       return { keys: (r.results || []).map(x => ({ name: x.cle })) };
     },
+
+    /* Comme list(), mais ramène aussi la valeur de chaque clé en UNE seule
+       requête — pour handlePresence, qui listait puis relisait chaque
+       personne une par une (1+N requêtes à chaque battement de présence,
+       toutes les 45 s pour chaque onglet ouvert). Les valeurs invalides en
+       JSON sont écartées plutôt que de faire échouer tout l'appel. */
+    async listValeurs(opts) {
+      const prefixe = (opts && opts.prefix) || '';
+      const r = await env.DB.prepare(
+        "SELECT val FROM kv WHERE cle LIKE ? ESCAPE '\\\\' AND (exp IS NULL OR exp > ?) ORDER BY cle"
+      ).bind(echapperLike(prefixe) + '%', Date.now()).all();
+      return (r.results || []).reduce((acc, x) => {
+        try { acc.push(JSON.parse(x.val)); } catch (e) { /* ligne écartée */ }
+        return acc;
+      }, []);
+    },
   };
-}
-
-/* La reprise de l'ancienne base — sans commande, sans intervention
-   ---------------------------------------------------------------------------
-   Le jour du déménagement, D1 est vide et KV contient tout : les fiches RH,
-   les réglages, la matrice des accès. Plutôt qu'un script de migration à jouer
-   au bon moment — avec le risque de l'oublier, ou de le jouer deux fois — le
-   premier qui réclame un document absent de D1 le fait remonter de KV, et il y
-   est rangé au passage. La migration se fait donc toute seule, à la première
-   ouverture du panel, sans que personne ne s'en aperçoive.
-
-   Une fois le document dans D1, KV n'est plus jamais consulté pour lui. Ce
-   détour ne concerne que les six documents durables : hors de question d'aller
-   fouiller l'ancienne base pour une session ou une présence, qui n'ont aucune
-   raison d'y être. */
-const CLES_REPRISE = new Set(['data', 'datameta', 'settings', 'permissions', 'journal', 'invites']);
-
-async function repriseKV(env, cle, type) {
-  if (!CLES_REPRISE.has(cle) || !env.IMAGES) return null;
-
-  /* Un document absent des deux bases ne doit pas relancer une lecture KV à
-     chaque appel : on note l'échec pour une heure. */
-  if (memGet('reprise:' + cle)) return null;
-
-  let v = null;
-  try { v = await env.IMAGES.get(cle); } catch (e) { return null; }
-  if (v === null || v === undefined) { memSet('reprise:' + cle, 1, 3600); return null; }
-
-  try { await base(env).put(cle, v); } catch (e) { /* on rendra la valeur quand même */ }
-
-  if (type !== 'json') return v;
-  try { return JSON.parse(v); } catch (e) { return null; }
 }
 
 /* KV effaçait tout seul les clés périmées ; SQLite non. Les lectures les
@@ -287,9 +378,162 @@ function bearer(request) {
   return h.startsWith('Bearer ') ? h.slice(7) : null;
 }
 
+/* --------------------------------------------------------------------------
+   Le jeton de session vit maintenant dans un cookie httpOnly, plus dans
+   localStorage.
+   ---------------------------------------------------------------------------
+   Avant : le panel recevait le jeton en clair (URL, réponse JSON), le
+   rangeait dans localStorage, et le recopiait dans l'en-tête Authorization
+   à chaque appel. N'importe quel script tournant sur la page — une faille
+   XSS oubliée n'importe où dans les 10 000 lignes de marlowe-actions.js —
+   pouvait donc lire ce jeton et l'emporter. Un cookie posé avec HttpOnly
+   n'est, lui, jamais lisible par JavaScript : seul le navigateur le voit,
+   et il ne fait que le rejoindre automatiquement à chaque requête vers ce
+   domaine.
+
+   bearer()/jetonExplicite restent acceptés par currentSession() en plus du
+   cookie — sans risque : le panel ne les alimente plus lui-même, ce sont
+   des voies de secours pour un appelant qui ne serait pas un navigateur
+   (script, test), pas des retours en arrière possibles pour une XSS. */
+const COOKIE_SESSION = 'mv_session';
+
+function cookieSid(request) {
+  const brut = request.headers.get('Cookie') || '';
+  for (const morceau of brut.split(';')) {
+    const i = morceau.indexOf('=');
+    if (i < 0) continue;
+    if (morceau.slice(0, i).trim() === COOKIE_SESSION) {
+      try { return decodeURIComponent(morceau.slice(i + 1).trim()) || null; }
+      catch (e) { return null; }
+    }
+  }
+  return null;
+}
+
+/* Secure est toujours posé : le site ne tourne qu'en HTTPS (voir Caddy dans
+   backend/deploy/), et un cookie de session sans Secure survivrait à un
+   détour accidentel par du HTTP en clair.
+
+   SameSite=None, et pas Lax — c'est le point qui mérite d'être expliqué.
+   Lax aurait été le choix par défaut, plus protecteur contre le CSRF : il
+   retient le cookie sur une requête venue d'un autre site. Mais le panel
+   est aussi affiché DANS une iframe tierce, l'ordinateur en jeu (voir la
+   CSP frame-ancestors dans server.js — cfx-nui-external-iframe, nui://game).
+   Pour le navigateur, ce contexte-là EST un site différent du nôtre, même
+   si l'iframe pointe vers notre propre domaine : avec SameSite=Lax ou
+   Strict, le cookie ne serait tout simplement jamais renvoyé une fois posé,
+   et la connexion depuis le jeu échouerait en silence, sans le moindre
+   message d'erreur pour le dire.
+
+   Ce que ça coûte : un cookie SameSite=None est aussi renvoyé sur une
+   requête déclenchée par un site tiers (CSRF). C'est exigerOrigine(), plus
+   bas, qui ferme ce trou — et il le fallait : la version précédente de ce
+   commentaire affirmait que « la plupart des routes attendent un corps JSON
+   qu'un simple formulaire HTML ne sait pas produire ». C'EST FAUX, et c'est
+   le genre d'erreur qui laisse une porte ouverte pendant des années :
+     — request.json() ne REGARDE PAS le Content-Type. Un corps envoyé en
+       text/plain est parsé comme du JSON sans broncher (vérifié sur Node) ;
+     — un formulaire <form enctype="text/plain"> encode « nom=valeur ». En
+       coupant un JSON en deux à l'endroit du « = » — nom de champ
+       {"action":"creer","nom":"x","mdp":"secret12 et valeur "} — le corps
+       reçu est un JSON parfaitement valide.
+   Un formulaire hébergé n'importe où pouvait donc déclencher n'importe
+   quelle route POST au nom de la victime connectée, sans préflight CORS
+   (un formulaire n'en déclenche jamais) et sans avoir besoin de LIRE la
+   réponse : la liste blanche CORS empêche de lire, pas d'agir. */
+function entetesCookieSession(sid) {
+  return { 'Set-Cookie':
+    `${COOKIE_SESSION}=${encodeURIComponent(sid)}; Path=/; Max-Age=${SESSION_TTL}; HttpOnly; Secure; SameSite=None` };
+}
+
+function entetesEffacerCookie() {
+  return { 'Set-Cookie': `${COOKIE_SESSION}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=None` };
+}
+
+/* --------------------------------------------------------------------------
+   Le rempart anti-CSRF : d'où vient cette requête ?
+   ---------------------------------------------------------------------------
+   Depuis que la session vit dans un cookie SameSite=None (voir juste au-dessus
+   pourquoi elle le doit — l'ordinateur en jeu), le navigateur joint ce cookie
+   à TOUTE requête vers notre domaine, y compris celles déclenchées par un
+   autre site. Sans le contrôle ci-dessous, une page piégée ouverte par un
+   patron connecté pouvait créer un accès extérieur, déclarer une absence au
+   nom de quelqu'un ou poster dans un salon Discord — en aveugle, mais avec
+   tous ses droits.
+
+   On s'appuie sur l'en-tête Origin, que le navigateur pose lui-même sur toute
+   requête qui change quelque chose et qu'une page ne peut PAS falsifier
+   (contrairement au Referer, qu'on peut faire disparaître).
+
+   Trois cas, dans cet ordre :
+   1. Pas d'Origin du tout → ce n'est pas un navigateur. Un banc d'essai, un
+      script, le serveur de jeu : on laisse passer, sinon on casse tout ce qui
+      appelle l'API sans navigateur. Ces appelants-là ne portent pas de cookie
+      de session ambiant : il n'y a rien à détourner chez eux.
+   2. Origin === l'adresse par laquelle la requête est arrivée → c'est notre
+      propre panel. On compare à l'adresse RÉELLE plutôt qu'à SITE_URL : le
+      site répond sur deux domaines (voir deploy/Caddyfile.snippet), et un
+      SITE_URL réglé sur l'autre aurait bloqué le panel légitime — une panne
+      totale et incompréhensible à la première requête d'enregistrement.
+   3. Origin dans SITE_URLS → autorisé explicitement (le temps d'un
+      déménagement de domaine, voir originesAutorisees plus haut).
+   Tout le reste est refusé, « null » compris : une iframe en bac à sable
+   envoie exactement ça, et c'est précisément un vecteur d'attaque.
+
+   Les lectures (GET/HEAD) ne passent pas par ici : elles ne changent rien, et
+   la liste blanche CORS empêche déjà un site tiers d'en LIRE la réponse. */
+/* Où renvoyer le navigateur après une connexion réussie.
+   ---------------------------------------------------------------------------
+   Le cookie de session est posé par la réponse de /api/callback, donc sur
+   l'hôte par lequel le navigateur est ARRIVÉ — un cookie est toujours rattaché
+   à un hôte précis. Renvoyer ensuite vers SITE_URL en dur casse la connexion
+   dès que les deux diffèrent : le cookie reste sur l'hôte A, la page s'ouvre
+   sur l'hôte B, et l'utilisateur revient à l'écran de connexion sans le
+   moindre message. Ce n'est pas théorique — deploy/Caddyfile.snippet sert
+   DEUX domaines vers la même application (l'actuel et le futur), et
+   .env.example pointe déjà sur le futur.
+   On renvoie donc vers l'hôte réellement utilisé QUAND il est explicitement
+   autorisé (SITE_URL/SITE_URLS) ; sinon on retombe sur SITE_URL. La condition
+   n'est pas une formalité : url.origin se déduit de X-Forwarded-Host, qu'un
+   proxy mal réglé laisserait choisir à l'appelant — sans cette liste blanche,
+   on aurait fabriqué une redirection ouverte. */
+function racineRetour(env, url) {
+  const propre = String(env.SITE_URL || '').replace(/\/+$/, '');
+  try {
+    if (url && originesAutorisees(env).includes(url.origin)) return url.origin;
+  } catch (e) { /* on retombe sur SITE_URL */ }
+  return propre;
+}
+
+function exigerOrigine(request, url, env) {
+  const methode = request.method;
+  if (methode === 'GET' || methode === 'HEAD' || methode === 'OPTIONS') return true;
+
+  const origine = request.headers.get('Origin');
+  if (!origine) return true;                          /* appelant sans navigateur */
+
+  /* On compare l'HÔTE, pas l'origine entière — et c'est délibéré.
+     url.origin est reconstruit à partir de X-Forwarded-Proto (voir
+     construireURL dans server.js), qui retombe sur « http » quand le proxy ne
+     le transmet pas. Un panel servi en HTTPS enverrait alors « Origin:
+     https://… » face à un url.origin en « http://… » : comparer les origines
+     entières aurait refusé TOUTE écriture, sur toute l'application, pour un
+     en-tête manquant dans une configuration de proxy. Panne totale et
+     parfaitement incompréhensible.
+     L'hôte suffit à prouver qu'on est chez nous, et un site tiers ne peut pas
+     le falsifier : c'est le navigateur qui pose Origin, hors de portée d'une
+     page. Une origine illisible — « null », qu'envoie une iframe en bac à
+     sable — ne donne aucun hôte : refusée. */
+  let hote = null;
+  try { hote = new URL(origine).host; } catch (e) { return false; }
+  if (hote && hote === url.host) return true;         /* notre propre panel */
+
+  return originesAutorisees(env).includes(origine);
+}
+
 /* Le nom d'un rôle, ramené à sa forme comparable.
    ---------------------------------------------------------------------------
-   PATRON_ROLES est tapé à la main dans wrangler.toml ; le nom du rôle, lui,
+   PATRON_ROLES est tapé à la main dans backend/.env ; le nom du rôle, lui,
    vit sur Discord et s'écrit comme on veut. « Patron », « PATRON », « Patron
    👑 », « Co-Patron » contre « Co Patron » : quatre façons de désigner le même
    rôle, et une comparaison caractère par caractère n'en reconnaissait qu'une.
@@ -542,8 +786,12 @@ async function handleCallback(request, env, url) {
     avatar: me.avatar ? `https://cdn.discordapp.com/avatars/${me.id}/${me.avatar}.png?size=64` : null,
   }), { expirationTtl: SESSION_TTL });
 
-  const dest = env.SITE_URL.replace(/\/+$/, '') + '/gestion.html#token=' + sid;
-  return Response.redirect(dest, 302);
+  /* Le jeton ne part plus dans l'URL (#token=…) : il ne quitte jamais le
+     serveur autrement que dans ce cookie httpOnly — ni dans l'historique du
+     navigateur, ni visible par un script de la page. */
+  const dest = racineRetour(env, url) + '/gestion.html';
+  return new Response(null, { status: 302,
+    headers: { Location: dest, ...entetesCookieSession(sid) } });
 }
 
 /* ==========================================================================
@@ -571,9 +819,24 @@ async function handleCallback(request, env, url) {
        Discord de l'employé : le SSO nous donne QUI, le Discord donne QUOI.
 
    La session délivrée est exactement la même que par la voie Discord — même
-   forme, même durée, même jeton dans l'URL de retour. Une seule sorte de
-   session à comprendre, et donc à sécuriser.
+   forme, même durée, même cookie httpOnly posé sur la redirection de retour.
+   Une seule sorte de session à comprendre, et donc à sécuriser.
    ========================================================================== */
+
+/* En mode tablette, le shell FolkOS repasse la dernière sous-page visitée
+   dans `?next=`. On ne le suit QUE si c'est un chemin relatif : accepter une
+   adresse absolue ouvrirait un open-redirect (n'importe qui pourrait forger
+   un lien de connexion qui renvoie, une fois authentifié, vers un site tiers
+   qui usurpe l'apparence du panel). On refuse aussi tout fragment : le nôtre
+   (#token=...) est le seul que la page attend, un second l'écraserait. */
+function cheminRelatifSur(valeur) {
+  const s = String(valeur || '').trim();
+  if (!s) return null;
+  if (!s.startsWith('/') || s.startsWith('//') || s.startsWith('/\\')) return null;
+  if (s.includes('://') || s.includes('#')) return null;
+  return s;
+}
+
 async function handleFolkos(request, env, url) {
   for (const cle of ['FOLKOS_ID_BASE', 'FOLKOS_CLIENT_ID', 'FOLKOS_CLIENT_SECRET']) {
     if (!env[cle]) {
@@ -662,20 +925,19 @@ async function handleFolkos(request, env, url) {
     id: discordId, name: nom, avatar: null, via: 'folkos',
   }), { expirationTtl: SESSION_TTL });
 
-  const dest = env.SITE_URL.replace(/\/+$/, '') + '/gestion.html#token=' + sid;
-  return Response.redirect(dest, 302);
+  const suite = cheminRelatifSur(url.searchParams.get('next')) || '/gestion.html';
+  const dest = racineRetour(env, url) + suite;
+  return new Response(null, { status: 302,
+    headers: { Location: dest, ...entetesCookieSession(sid) } });
 }
 
-/* Lit la session depuis le header Authorization, rôles rafraîchis à chaque appel */
-/* Le jeton arrive normalement dans l'en-tête Authorization. Certaines routes
-   acceptent en plus de le recevoir dans le corps de la requête : un en-tête
-   personnalisé oblige le navigateur à envoyer une requête préparatoire
-   (OPTIONS) avant la vraie, et cette requête-là se fait parfois avaler
-   silencieusement par une extension ou un réseau filtré. Sans en-tête
-   personnalisé, il n'y a pas de requête préparatoire — et donc rien à bloquer.
-   Le jeton reste au même endroit, vers le même serveur, en HTTPS. */
+/* Lit la session — cookie httpOnly d'abord (voir entetesCookieSession plus
+   haut), c'est la voie que prend le panel depuis un navigateur. bearer()
+   et jetonExplicite (jeton dans le corps de la requête) restent acceptés
+   en repli, pour un appelant qui ne serait pas un navigateur ; rôles
+   rafraîchis à chaque appel dans tous les cas. */
 async function currentSession(request, env, jetonExplicite) {
-  const sid = bearer(request) || jetonExplicite || null;
+  const sid = cookieSid(request) || bearer(request) || jetonExplicite || null;
   if (!sid) return null;
 
   const stored = await base(env).get('sess:' + sid, 'json');
@@ -714,6 +976,30 @@ async function currentSession(request, env, jetonExplicite) {
   }
 
   const roles = member ? member.roles : [];
+
+  /* D'OÙ VIENNENT LES DROITS — les quatre sources, et ce que chacune décide.
+     -------------------------------------------------------------------------
+     1. L'IDENTITÉ vient du cookie de session, et d'elle seule : `stored.id`
+        est l'identifiant Discord posé à la connexion. Rien de ce que le
+        navigateur envoie ensuite ne peut le changer.
+     2. Les RÔLES sont relus chez Discord à CHAQUE requête (cache de
+        MEMBER_TTL secondes, voir memberRoles). Ils ne sont jamais pris dans
+        la session : un rôle retiré cesse donc de compter au plus tard une
+        minute après, sans déconnexion ni action de personne. Un membre sorti
+        du Discord perd sa session sur-le-champ, quelques lignes plus haut.
+     3. `isPatron` se RECALCULE ici, à chaque appel, à partir de ces rôles et
+        de OWNER_IDS (fichier .env). Il n'est PAS rangé dans la session : le
+        poser dans le document de session ne servirait à rien, puisque cette
+        ligne l'écrase. C'est ce qui rend impossible de se déclarer patron —
+        ni par le corps d'une requête, ni en trafiquant une session.
+     4. La MATRICE (canWrite) décide de tout le reste, page par page. Elle est
+        relue en base à chaque requête, donc un droit retiré s'applique
+        immédiatement, sans attendre le cache Discord.
+
+     Conséquence à connaître : on ne peut pas se donner de droits, mais on
+     peut s'en retirer. C'est pour ça que handlePermissions refuse un
+     enregistrement qui priverait son auteur de la page « Accès & rôles »
+     (voir le garde-fou « enfermement »). */
   return {
     user:  { id: stored.id, name: (member && member.nick) || stored.name, avatar: stored.avatar },
     roles,
@@ -724,11 +1010,39 @@ async function currentSession(request, env, jetonExplicite) {
 
 /* GET /api/me */
 async function handleMe(request, env) {
+  /* Une route de lecture ne doit pas répondre 200 à un DELETE : ça laisse
+     croire à l'appelant qu'il vient de supprimer quelque chose. */
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    return json(env, { error: 'method_not_allowed' }, 405);
+  }
   const s = await currentSession(request, env);
   if (!s) return json(env, { error: 'unauthorized' }, 401);
   /* Le panel a besoin de savoir s'il a affaire à un accès extérieur : il n'a
-     ni rôles ni matrice, ses pages lui sont dictées ici. */
-  return json(env, { user: s.user, roles: s.roles, invite: s.invite || null });
+     ni rôles ni matrice, ses pages lui sont dictées ici.
+
+     `isOwner` et `isPatron` sont RENVOYÉS, pas laissés à recalculer.
+     -------------------------------------------------------------------------
+     Le panel affichait « Accès permanent » et ouvrait son menu à partir d'une
+     copie de OWNER_IDS écrite en dur dans marlowe-auth.js — un fichier que
+     sert le site, donc lisible par n'importe quel visiteur. Deux défauts :
+     le trousseau du développeur s'affichait en clair, et surtout le réglage
+     vivait en DOUBLE. Changer OWNER_IDS dans le .env sans toucher au panel, et
+     l'écran se mettait à contredire le serveur : menu fermé alors que les
+     routes répondaient, ou l'inverse.
+
+     Il n'y a plus qu'une source, ce .env, et le serveur publie sa conclusion
+     plutôt que la liste qui y mène. L'identifiant du développeur ne quitte
+     jamais la machine : la réponse ne contient qu'un booléen, et seulement
+     pour la personne connectée.
+
+     Ce n'est pas un droit d'accès pour autant — c'est de l'affichage. Les
+     deux valeurs sont recalculées à chaque appel dans currentSession() et
+     revérifiées à chaque route ; un panel qui mentirait n'ouvrirait que des
+     écrans dont le contenu répondrait 403. */
+  return json(env, {
+    user: s.user, roles: s.roles, invite: s.invite || null,
+    isOwner: !!s.isOwner, isPatron: !!s.isPatron,
+  });
 }
 
 /* GET /api/roles */
@@ -739,11 +1053,60 @@ async function handleRoles(request, env) {
   return json(env, list.map(r => r.name));
 }
 
+/* La version courante de la matrice des droits.
+   ---------------------------------------------------------------------------
+   Rangée à part (`permsmeta`) et non dans la matrice elle-même : la matrice
+   est recopiée telle quelle dans la réponse et relue page par page par le
+   panel ; y glisser un numéro en ferait une pseudo-page à filtrer partout.
+
+   Une installation qui tourne déjà n'a pas cette clé : elle vaut donc zéro, et
+   le panel qui vient de lire la matrice renvoie zéro — le premier
+   enregistrement après mise à jour passe sans rien demander à personne. Seul
+   un onglet resté ouvert AVANT la mise à jour se fera refuser, ce qui est
+   exactement le comportement voulu. */
+/* Nettoyage d'une carte « page → rôles en lecture seule ». Même filtre que
+   celui de handleSettings pour `permsRO` : des tableaux de chaînes, rien
+   d'autre n'entre en base. Posé ici parce que les deux routes l'utilisent
+   maintenant — la matrice écrit sa lecture seule avec elle. */
+function pagesLectureSeule(brut) {
+  const ro = {};
+  if (!brut || typeof brut !== 'object' || Array.isArray(brut)) return ro;
+  for (const [page, roles] of Object.entries(brut)) {
+    if (!Array.isArray(roles)) continue;
+    ro[String(page).slice(0, 64)] = roles
+      .filter(r => typeof r === 'string').map(r => r.slice(0, 100)).slice(0, 200);
+  }
+  return ro;
+}
+
+function analyserMetaPermissions(brut) {
+  try {
+    const m = JSON.parse(brut);
+    if (m && typeof m.rev === 'number') return m;
+  } catch (e) { /* valeur illisible : on repart de zéro */ }
+  return { rev: 0, by: null, at: null };
+}
+
+async function metaPermissions(env) {
+  return analyserMetaPermissions(await base(env).get('permsmeta'));
+}
+
 /* GET | PUT /api/permissions */
 async function handlePermissions(request, env) {
   if (request.method === 'GET') {
+    /* La lecture était ouverte à tout le monde : n'importe qui pouvait
+       relever, sans compte, la liste des rôles du domaine et l'écran auquel
+       chacun donne accès. Ce n'est pas un secret d'État, mais c'est la carte
+       des portes du panel, et elle n'a rien à faire sur la voie publique.
+       Le panel, lui, appelle toujours cette route avec son jeton. */
+    const s = await currentSession(request, env);
+    if (!s) return json(env, { error: 'unauthorized' }, 401);
     const perms = await base(env).get('permissions', 'json');
-    return json(env, perms || {});
+    /* `_meta` accompagne la matrice comme il accompagne déjà /api/data : c'est
+       le numéro de version que le panel devra RENVOYER pour enregistrer (voir
+       le PUT plus bas). Même convention de nom, pour qu'il n'y ait qu'une
+       habitude à retenir dans ce fichier. */
+    return json(env, Object.assign({}, perms || {}, { _meta: await metaPermissions(env) }));
   }
 
   if (request.method === 'PUT') {
@@ -766,6 +1129,21 @@ async function handlePermissions(request, env) {
       return json(env, { error: 'bad_shape' }, 400);
     }
 
+    /* La version sur laquelle l'appelant a travaillé. Rangée dans le corps
+       plutôt que dans un en-tête, comme `_log` l'est déjà pour /api/data :
+       un en-tête personnalisé imposerait une requête préparatoire (OPTIONS)
+       de plus, que ce fichier évite partout ailleurs. */
+    const revEnvoyee = body._rev;
+    delete body._rev;
+
+    /* Les pages en lecture seule voyagent avec la matrice, et non plus par un
+       second appel à /api/settings. Voir plus bas : séparées, un échec de la
+       seconde écriture laissait des rôles en accès COMPLET alors qu'on venait
+       de les passer en lecture seule. */
+    const roEnvoye = (body._ro && typeof body._ro === 'object' && !Array.isArray(body._ro))
+      ? body._ro : null;
+    delete body._ro;
+
     /* On ne garde que des tableaux de chaînes — rien d'autre n'entre en base. */
     const clean = {};
     for (const [page, roles] of Object.entries(body)) {
@@ -776,8 +1154,139 @@ async function handlePermissions(request, env) {
         .slice(0, 200);
     }
 
-    await base(env).put('permissions', JSON.stringify(clean));
-    return json(env, clean);
+    /* Contrôle de version, dans la file — et c'est la file qui le rend fiable.
+       -------------------------------------------------------------------------
+       Cette route REMPLACE la matrice entière : sans rien pour l'arbitrer, deux
+       personnes qui ouvrent « Accès & rôles » en même temps s'écrasent l'une
+       l'autre, la seconde enregistrée effaçant en silence le travail de la
+       première. Les deux voient « enregistré ». C'est le même défaut qu'E4 sur
+       le document `data`, mais un verrou seul n'y aurait rien changé : deux
+       remplacements complets sérialisés donnent le même résultat qu'en
+       parallèle. Il fallait comparer les VERSIONS, pas sérialiser les écritures.
+
+       La comparaison et l'écriture doivent être indivisibles, sinon deux
+       requêtes peuvent lire le même numéro avant que l'une n'écrive : d'où le
+       verrou AUTOUR des deux. Comme pour E4, la garantie vaut pour ce
+       processus — le montage prévu n'en fait tourner qu'un (voir verrou()).
+
+       Aucune fusion automatique, aucun écrasement forcé : en cas de conflit on
+       ne touche à rien et on rend 409 avec le numéro courant, qui a enregistré
+       et quand. C'est au panel de proposer à la personne de recharger — ses
+       modifications non enregistrées lui appartiennent. */
+    /* Garde-fou : ne pas se retirer soi-même la clé de la pièce.
+       -----------------------------------------------------------------------
+       Cette route remplace la matrice ENTIÈRE. Rien n'empêchait donc quelqu'un
+       de s'enlever, d'un enregistrement, le droit d'y revenir — en décochant
+       son propre rôle sur « Paramètres », ou en le passant en lecture seule.
+       Ce n'est pas une élévation de privilège : c'est l'inverse, et c'est
+       précisément ce qui le rend dangereux. Personne ne s'en aperçoit avant
+       d'essayer de rouvrir la page, et il est alors trop tard.
+
+       Qui garde la main quoi qu'il arrive : un PATRON (rôle Discord listé dans
+       PATRON_ROLES) et un propriétaire (OWNER_IDS). Ni l'un ni l'autre ne se
+       décide dans la matrice — ils viennent du .env et de Discord —, donc eux
+       ne peuvent pas s'enfermer et n'ont pas besoin de ce contrôle. Pour tous
+       les autres, on refuse l'enregistrement qui les mettrait dehors, en
+       disant comment faire s'ils le voulaient vraiment. */
+    if (!s.isPatron) {
+      const roApres = roEnvoye ? pagesLectureSeule(roEnvoye) : (reg0.permsRO || {});
+      const gardeLaMain = (COLLECTION_PAGES.acces || []).some(page =>
+        (clean[page] || []).some(r => s.roles.includes(r))
+        && !(roApres[page] || []).some(r => s.roles.includes(r)));
+
+      if (!gardeLaMain) {
+        return json(env, { error: 'enfermement', detail:
+          "Cet enregistrement vous retirerait l'accès à la page « Accès & rôles » — vous ne "
+          + "pourriez plus y revenir, ni défaire ce que vous venez de faire. Gardez au moins "
+          + "un de vos rôles coché en accès complet sur cette page. Si vous voulez vraiment "
+          + "passer la main, demandez à un patron de le faire : lui garde l'accès quoi qu'il "
+          + "arrive." }, 400);
+      }
+    }
+
+    const conflit = (meta) => json(env, {
+      error: 'conflit',
+      detail: revEnvoyee === undefined
+        ? "Cet onglet a été ouvert avant la dernière mise à jour de la matrice."
+        : "La matrice a été modifiée depuis l'ouverture de cet onglet.",
+      rev: meta.rev, by: meta.by || null, at: meta.at || null,
+    }, 409);
+
+    /* verrou() reste, mais il ne PROUVE rien : il évite seulement que deux
+       requêtes du même processus se marchent dessus pour rien. La garantie,
+       c'est casValeur() — une seule instruction SQL qui compare et écrit, donc
+       arbitrée par la BASE, commune à toutes les instances. */
+    return verrou('permissions', async () => {
+      const brut = await base(env).get('permsmeta');
+      const meta = analyserMetaPermissions(brut);
+
+      if (typeof revEnvoyee !== 'number' || revEnvoyee !== meta.rev) return conflit(meta);
+
+      /* On prend le tour d'écriture AVANT de toucher quoi que ce soit : si un
+         autre processus a avancé entre la lecture et ici, l'échange échoue et
+         personne n'a rien écrasé. */
+      const suivante = { rev: meta.rev + 1, by: s.user.name, at: new Date().toISOString() };
+      const gagne = await base(env).casValeur('permsmeta', brut, JSON.stringify(suivante));
+      if (!gagne) return conflit(await metaPermissions(env));
+
+      /* ORDRE DÉLIBÉRÉ : les pages en lecture seule d'abord, la matrice
+         ensuite.
+         ---------------------------------------------------------------------
+         Les deux écritures ne peuvent pas être une seule transaction : elles
+         portent sur deux documents distincts, dont l'un (`settings`) contient
+         bien d'autres réglages qu'il faut relire et préserver. On choisit donc
+         l'ordre dont la MOITIÉ est inoffensive. Si la seconde échoue, il reste
+         des pages marquées « lecture seule » pour une matrice inchangée :
+         c'est plus restrictif que prévu, donc sans danger. Dans l'autre sens,
+         une matrice élargie sans ses restrictions donnerait l'accès COMPLET à
+         des rôles qu'on venait de passer en lecture seule.
+         Et dans tous les cas, la réponse dit exactement ce qui est passé et ce
+         qui ne l'est pas : personne ne doit croire « enregistré » à moitié. */
+      const enregistre = [], echoue = [];
+      let detailEchec = null;
+
+      if (roEnvoye) {
+        try {
+          await verrou('settings', async () => {
+            const reg = await base(env).get('settings', 'json') || {};
+            reg.permsRO = pagesLectureSeule(roEnvoye);
+            await base(env).put('settings', JSON.stringify(reg));
+          });
+          enregistre.push('permsRO');
+        } catch (e) {
+          echoue.push('permsRO');
+          detailEchec = String((e && e.message) || e);
+        }
+      }
+
+      /* La lecture seule a échoué : on n'élargit pas la matrice par-dessus. */
+      if (echoue.length) {
+        echoue.push('permissions');
+        return json(env, {
+          ok: false, enregistre, echoue, detail:
+            "Les pages en lecture seule n'ont pas pu être enregistrées ; la matrice n'a donc "
+            + "pas été modifiée non plus, pour ne pas ouvrir des accès qu'on venait de "
+            + "restreindre. Rechargez la page et recommencez. Détail : " + detailEchec,
+          _meta: suivante,
+        }, 200);
+      }
+
+      try {
+        await base(env).put('permissions', JSON.stringify(clean));
+        enregistre.push('permissions');
+      } catch (e) {
+        echoue.push('permissions');
+        return json(env, {
+          ok: false, enregistre, echoue, detail:
+            "La matrice n'a pas pu être enregistrée. Les pages en lecture seule, elles, "
+            + "l'ont été : l'accès est donc plus restreint que prévu, jamais plus large. "
+            + "Rechargez la page pour voir l'état réel. Détail : " + String((e && e.message) || e),
+          _meta: suivante,
+        }, 200);
+      }
+
+      return json(env, Object.assign({}, clean, { _meta: suivante, ok: true, enregistre }));
+    });
   }
 
   return json(env, { error: 'method_not_allowed' }, 405);
@@ -822,6 +1331,14 @@ const COLLECTION_PAGES = {
      cette collection à la page Linterna reviendrait à laisser chacun réécrire
      la récolte de toute l'équipe. */
   linterna:        ['cloture'],
+  /* Le kit d'entretien MANQUAIT à cette table. Conséquence, vérifiée en
+     essai : canWrite() refuse toute collection qu'elle ne connaît pas, donc
+     un RH à qui la page « Kit d'entretien » était pourtant cochée recevait
+     403 en enregistrant — seul le patron y arrivait, sans que rien n'explique
+     pourquoi. La page « Documents » n'est pas listée ici volontairement :
+     c'est l'écran de CONSULTATION du kit (voir marlowe-data.js), il ne doit
+     pas donner le droit d'écrire. */
+  entretien:       ['entretien'],
   serviceHistory:  ['masemaine'],
   tombola:         ['tombola'],
   commandes:       ['magcommandes', 'magrecap'],
@@ -850,6 +1367,53 @@ const PAGES_ADMIN = new Set([
   'parametres', 'paramagenda', 'paramdispo', 'paramvitrine',
   'paramregles', 'paraminvites', 'paramdonnees',
 ]);
+
+/* Les collections qui portent des données PERSONNELLES.
+   ---------------------------------------------------------------------------
+   Ce sont celles que handleOrga énumère déjà comme ne devant jamais sortir du
+   panel : « numéro civil, téléphone, RIB, Discord, recruteur, dates, motifs
+   d'absence » — plus les sanctions et la blacklist, qui nomment des gens.
+   Toute nouvelle collection contenant l'identité de quelqu'un a sa place ici. */
+const COLLECTIONS_PERSONNELLES = new Set([
+  'rhRoster', 'rhDeparts', 'rhAbsences', 'rhRecruiters', 'avertissements', 'blacklist',
+]);
+
+/* Ce qu'un ACCÈS EXTÉRIEUR a le droit de LIRE dans /api/data.
+   ---------------------------------------------------------------------------
+   Le contrôle d'écriture existait déjà (canWrite) ; la lecture, non : /api/data
+   rendait le document ENTIER à toute session valable, accès extérieur compris.
+   Un comptable à qui on n'avait coché que « Facturation » recevait donc aussi
+   le registre RH complet — numéros civils, téléphones, RIB, identifiants
+   Discord — dès qu'il ouvrait le panel. Le navigateur n'en affichait rien,
+   mais la réponse du serveur les contenait, lisibles dans l'onglet Réseau.
+
+   Un membre du Discord, lui, garde tout : c'est un outil d'équipe, et c'est la
+   règle métier existante (voir le commentaire de handleData). On ne restreint
+   QUE les accès extérieurs, qui sont par définition des tiers.
+
+   Pourquoi ne filtrer QUE les collections personnelles, et pas tout le
+   document : COLLECTION_PAGES dit qui a le droit d'ÉCRIRE une collection, pas
+   qui a le droit de la LIRE. Neuf pages du panel sont des écrans de
+   consultation qui n'y figurent pas — Documents, Historique, Vue d'ensemble,
+   Grades & quotas… — et qui lisent des collections rangées sous une autre
+   page. S'en servir comme liste blanche de lecture viderait ces pages-là chez
+   un partenaire pourtant autorisé à les voir. On ferme donc précisément ce qui
+   fuit — l'identité des gens — sans casser le reste.
+   (Une liste blanche de lecture complète serait plus stricte : elle demande
+   d'établir la carte page → collections en lecture, qui n'existe pas encore.
+   C'est noté dans AUDIT.md comme suite à donner.) */
+function collectionsLisibles(session) {
+  if (!session.invite) return null;   /* null = aucune restriction */
+
+  const pages = session.invite.pages || [];
+  const refusees = new Set();
+  for (const collection of COLLECTIONS_PERSONNELLES) {
+    const sesPages = COLLECTION_PAGES[collection] || [];
+    const autorise = sesPages.some(p => !PAGES_ADMIN.has(p) && pages.includes(p));
+    if (!autorise) refusees.add(collection);
+  }
+  return refusees;
+}
 
 function canWrite(session, collection, perms, ro) {
   if (session.isPatron) return true;
@@ -885,22 +1449,43 @@ function canWrite(session, collection, perms, ro) {
 const JOURNAL_MAX = 500;
 
 async function appendJournal(env, session, texte, keys) {
-  const list = await base(env).get('journal', 'json') || [];
-  list.unshift({
-    at: new Date().toISOString(),
-    by: session.user.name,
-    id: session.user.id,
-    texte,
-    keys,
+  /* Même lecture-modification-écriture que le document « data », donc même
+     file d'attente : sans elle, deux actions simultanées se recouvraient et
+     l'une des deux ne laissait aucune trace au journal. */
+  return verrou('journal', async () => {
+    const list = await base(env).get('journal', 'json') || [];
+    list.unshift({
+      at: new Date().toISOString(),
+      by: session.user.name,
+      id: session.user.id,
+      texte,
+      keys,
+    });
+    if (list.length > JOURNAL_MAX) list.length = JOURNAL_MAX;
+    await base(env).put('journal', JSON.stringify(list));
   });
-  if (list.length > JOURNAL_MAX) list.length = JOURNAL_MAX;
-  await base(env).put('journal', JSON.stringify(list));
 }
 
 /* GET /api/journal */
 async function handleJournal(request, env) {
   const s = await currentSession(request, env);
   if (!s) return json(env, { error: 'unauthorized' }, 401);
+
+  /* Deuxième porte de service laissée ouverte par le filtre de /api/data : le
+     journal nomme les gens dans presque chaque ligne (« X a rétrogradé Y »,
+     « X a rappelé son permis à Y »), et n'importe quelle session valable le
+     lisait en entier — 500 entrées d'activité RH nominative chez un accès
+     extérieur qui n'avait qu'« Facturation ».
+     Le journal n'est pas une collection de `data` : COLLECTION_PAGES ne peut
+     pas l'arbitrer. Mais il a bien une page à lui dans le panel (« Journal »,
+     id `journal`, voir PAGES dans marlowe-auth.js), et c'est elle qui fait
+     foi — un accès extérieur à qui le patron l'a cochée continue de l'avoir,
+     les autres ne l'ont plus. Un membre du Discord, lui, garde tout : c'est
+     la même règle métier que partout ailleurs. */
+  if (s.invite && !(s.invite.pages || []).includes('journal')) {
+    return json(env, { error: 'forbidden' }, 403);
+  }
+
   const list = await base(env).get('journal', 'json') || [];
   return json(env, list);
 }
@@ -937,12 +1522,18 @@ async function handlePresence(request, env) {
     }
   }
 
-  const list = await base(env).list({ prefix: 'pres:' });
-  const membres = [];
-  for (const k of list.keys) {
-    const v = await base(env).get(k.name, 'json');
-    if (v) membres.push(v);
-  }
+  /* Troisième porte de service de la même famille que /api/data et
+     /api/journal : « qui travaille en ce moment » livre l'identifiant Discord,
+     le nom et la page ouverte de tout le personnel connecté. C'est une
+     fonction d'ÉQUIPE ; un accès extérieur — comptable, partenaire — n'a pas
+     à savoir qui est devant son écran ni ce qu'il consulte.
+     On lui rend une liste vide plutôt qu'un 403 : son battement de présence
+     continue d'être enregistré (le patron doit pouvoir voir qu'il est
+     connecté), et son panel n'affiche simplement personne d'autre, sans
+     tomber en erreur. */
+  if (s.invite) return json(env, { membres: [], moi: s.user.id });
+
+  const membres = await base(env).listValeurs({ prefix: 'pres:' });
   membres.sort((a, b) => a.name.localeCompare(b.name));
   return json(env, { membres, moi: s.user.id });
 }
@@ -986,31 +1577,20 @@ async function handleOrga(request, env) {
 const IMG_MAX   = 1200 * 1024;        // 1,2 Mo par image
 const PDF_MAX   = 12 * 1024 * 1024;   // 12 Mo pour un catalogue complet
 const IMG_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+const EXT_PAR_TYPE = { 'image/jpeg':'.jpg', 'image/png':'.png', 'image/webp':'.webp', 'application/pdf':'.pdf' };
 
-/* GET /api/img/{id}  —  PUBLIC
-   Sert un visuel déposé depuis le panel. Mis en cache un an côté navigateur :
-   l'identifiant change à chaque nouveau dépôt, donc une image ne peut jamais
-   rester périmée dans le cache de quelqu'un. */
-async function handleImage(request, env, id) {
-  if (request.method !== 'GET') return json(env, { error: 'method' }, 405);
-  if (!/^[a-z0-9]{6,40}$/.test(id)) return json(env, { error: 'not_found' }, 404);
+/* POST /api/upload  —  patron uniquement (ou facturesRecues, voir plus bas)
+   ---------------------------------------------------------------------------
+   Le fichier part sur le service de stockage de l'opérateur FlashbackFA
+   (STORAGE_BASE, ex. https://storage.fbfa.fr) au lieu de vivre dans notre
+   propre base : plus de plafond « packet too large » à surveiller côté
+   MariaDB pour un PDF de catalogue, et le fichier est servi directement par
+   ce service (son champ `url`), sans repasser par nous. « marlowe/ » préfixe
+   toutes nos clés : le service est partagé entre plusieurs projets FlashbackFA,
+   et rien n'empêcherait deux clés identiques de se marcher dessus sinon.
 
-  const bin = await env.IMAGES.getWithMetadata('img:' + id, { type: 'arrayBuffer' });
-  if (!bin || !bin.value) return json(env, { error: 'not_found' }, 404);
-
-  const type = (bin.metadata && bin.metadata.type) || 'application/octet-stream';
-  return new Response(bin.value, {
-    headers: {
-      'Content-Type': type,
-      'Cache-Control': 'public, max-age=31536000, immutable',
-      'Access-Control-Allow-Origin': allowedOrigin(env),
-    },
-  });
-}
-
-/* POST /api/upload  —  patron uniquement
    Le corps est le fichier brut ; le type arrive dans Content-Type. On répond
-   avec l'identifiant, que le panel range dans ses données. */
+   avec l'adresse publique, que le panel range dans ses données. */
 async function handleUpload(request, env) {
   if (request.method !== 'POST') return json(env, { error: 'method' }, 405);
 
@@ -1030,6 +1610,18 @@ async function handleUpload(request, env) {
     }
   }
 
+  /* STORAGE_TOKEN ET STORAGE_BASE doivent tous les deux être explicitement
+     réglés — laisser STORAGE_BASE vide retomber en silence sur l'adresse de
+     production enverrait les fichiers (justificatifs de factures compris)
+     vers le service de l'opérateur FlashbackFA sans que personne ne l'ait
+     décidé, sur une installation qui aurait simplement oublié la variable. */
+  if (!env.STORAGE_TOKEN) {
+    return json(env, { error: 'config', missing: 'STORAGE_TOKEN' }, 500);
+  }
+  if (!env.STORAGE_BASE) {
+    return json(env, { error: 'config', missing: 'STORAGE_BASE' }, 500);
+  }
+
   const type = (request.headers.get('Content-Type') || '').split(';')[0].trim();
   if (!IMG_TYPES.includes(type)) return json(env, { error: 'bad_type', accepte: IMG_TYPES }, 415);
 
@@ -1040,9 +1632,42 @@ async function handleUpload(request, env) {
 
   const id = [...crypto.getRandomValues(new Uint8Array(10))]
     .map(b => b.toString(36).padStart(2, '0')).join('').slice(0, 20);
+  const cle = 'marlowe/' + id + (EXT_PAR_TYPE[type] || '');
+  const base_ = String(env.STORAGE_BASE).replace(/\/+$/, '');
 
-  await env.IMAGES.put('img:' + id, buf, { metadata: { type, taille: buf.byteLength } });
-  return json(env, { id, url: '/api/img/' + id, type, taille: buf.byteLength });
+  let reponse;
+  try {
+    reponse = await fetch(base_ + '/api/object/' + cle, {
+      method: 'PUT',
+      headers: { 'Authorization': 'Bearer ' + env.STORAGE_TOKEN, 'Content-Type': type },
+      body: buf,
+      /* Sans ça, un service qui accepte la connexion mais ne répond jamais
+         bloque cette requête indéfiniment — sur le même processus qui sert
+         tout le site. 20 s : plus généreux que les 8 s de FolkOS, parce
+         qu'un PDF de 12 Mo met plus longtemps à partir qu'un ticket SSO. */
+      signal: AbortSignal.timeout(20000),
+    });
+  } catch (e) {
+    return json(env, { error: 'storage_unreachable', detail: String((e && e.message) || e) }, 502);
+  }
+  if (!reponse.ok) {
+    const detail = await reponse.text().catch(() => '');
+    return json(env, { error: 'storage_error', status: reponse.status, detail: detail.slice(0, 300) }, 502);
+  }
+  const donnees = await reponse.json().catch(() => ({}));
+
+  /* L'adresse renvoyée par le service est reprise telle quelle dans la
+     vitrine PUBLIQUE (nouveautés, catalogue) : comme pour lienCanva()
+     un peu plus haut, on vérifie que c'est bien une adresse https avant
+     de lui faire confiance, plutôt que de l'afficher sans regarder. */
+  let urlValide = null;
+  try {
+    const u = new URL(String(donnees.url || ''));
+    if (u.protocol === 'https:') urlValide = u.href;
+  } catch (e) { /* urlValide reste null */ }
+  if (!urlValide) return json(env, { error: 'storage_bad_response' }, 502);
+
+  return json(env, { id: donnees.id || id, url: urlValide, type, taille: buf.byteLength });
 }
 
 /* GET /api/vitrine  —  PUBLIC
@@ -1148,10 +1773,10 @@ function webhookDuSalon(env) {
   const url = String(env.DISCORD_WEBHOOK).trim();
   if (!/^https:\/\/(discord\.com|discordapp\.com)\/api\/webhooks\/\d+\/[\w-]+$/.test(url)) {
     return { erreur: { error: 'webhook_invalide', detail:
-      "Le secret DISCORD_WEBHOOK ne contient pas une adresse de webhook Discord valable. "
+      "La variable DISCORD_WEBHOOK ne contient pas une adresse de webhook Discord valable. "
       + "Elle doit ressembler à https://discord.com/api/webhooks/<nombres>/<jeton>. "
-      + "Depuis le dossier backend : npx wrangler secret put DISCORD_WEBHOOK, "
-      + "puis collez l'adresse au prompt (sans guillemets, sans espace)." } };
+      + "Corrigez la ligne DISCORD_WEBHOOK= dans backend/.env (l'adresse collée telle "
+      + "quelle, sans guillemets ni espace), puis redémarrez le serveur." } };
   }
   return { url };
 }
@@ -1387,9 +2012,8 @@ async function handleInvites(request, env) {
     }
   }
 
-  const invites = await lireInvites(env);
-
   if (request.method === 'GET') {
+    const invites = await lireInvites(env);
     return json(env, { invites: invites.map(i => ({
       code: i.code, nom: i.nom, pages: i.pages, ro: i.ro || [],
       cree: i.cree, dernier: i.dernier || null, actif: i.actif !== false,
@@ -1403,68 +2027,89 @@ async function handleInvites(request, env) {
   let body;
   try { body = await request.json(); }
   catch (e) { return json(env, { error: 'bad_json' }, 400); }
+  /* « null » est du JSON parfaitement valable : sans ce contrôle, body.action
+     lève « Cannot read properties of null » et la route répond 500 au lieu de
+     400 — en recopiant au passage un message d'erreur interne à l'appelant. */
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return json(env, { error: 'bad_shape' }, 400);
+  }
 
   const texte = (x, n) => String(x == null ? '' : x).slice(0, n);
   const action = texte(body.action, 20);
 
-  if (action === 'creer') {
-    const nom = texte(body.nom, 60).trim();
-    const mdp = String(body.mdp || '');
-    if (!nom) return json(env, { error: 'nom_manquant' }, 400);
-    if (mdp.length < 8) return json(env, { error: 'mdp_court', detail: '8 caractères minimum.' }, 400);
-    if (invites.length >= 50) return json(env, { error: 'trop', detail: '50 accès au maximum.' }, 400);
+  /* Même file d'attente que pour « data », et pour une raison plus grave qu'une
+     simple perte de travail : la liste est lue, modifiée, puis RÉÉCRITE EN
+     ENTIER. Sans file, une suppression d'accès (« supprimer ») partie pendant
+     qu'une autre requête tenait déjà la liste en mémoire était purement et
+     simplement annulée par la réécriture de celle-ci — l'accès révoqué
+     revenait, actif, avec son mot de passe. Une révocation qui ne révoque pas
+     ne se voit nulle part : ni à l'écran, ni dans les journaux.
+     handleInviteLogin, juste en dessous, partage la même file : c'est lui le
+     plus dangereux des deux, parce qu'il réécrit la liste (pour noter la date
+     de dernière connexion) et qu'il est PUBLIC — donc déclenchable à volonté
+     par le porteur de l'accès qu'on est justement en train de retirer. */
+  return verrou('invites', async () => {
+    const invites = await lireInvites(env);
 
-    /* Le code est tiré au sort ici, pas côté navigateur : c'est la moitié du
-       secret, il doit venir d'une source sûre. */
-    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    const brut = crypto.getRandomValues(new Uint8Array(8));
-    const code = 'MV-' + [...brut].map(b => alphabet[b % alphabet.length]).join('');
+    if (action === 'creer') {
+      const nom = texte(body.nom, 60).trim();
+      const mdp = String(body.mdp || '');
+      if (!nom) return json(env, { error: 'nom_manquant' }, 400);
+      if (mdp.length < 8) return json(env, { error: 'mdp_court', detail: '8 caractères minimum.' }, 400);
+      if (invites.length >= 50) return json(env, { error: 'trop', detail: '50 accès au maximum.' }, 400);
 
-    const sel = b64(crypto.getRandomValues(new Uint8Array(16)));
-    invites.push({
-      code, nom, sel, hash: await empreinte(mdp, sel),
-      pages: pagesInvite(body.pages),
-      ro: pagesInvite(body.ro),
-      cree: new Date().toISOString().slice(0, 10),
-      actif: true,
-    });
-    await base(env).put('invites', JSON.stringify(invites));
-    return json(env, { ok: true, code });
-  }
+      /* Le code est tiré au sort ici, pas côté navigateur : c'est la moitié du
+         secret, il doit venir d'une source sûre. */
+      const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      const brut = crypto.getRandomValues(new Uint8Array(8));
+      const code = 'MV-' + [...brut].map(b => alphabet[b % alphabet.length]).join('');
 
-  const code = texte(body.code, 30);
-  const i = invites.findIndex(x => x.code === code);
-  if (i < 0) return json(env, { error: 'introuvable' }, 404);
+      const sel = b64(crypto.getRandomValues(new Uint8Array(16)));
+      invites.push({
+        code, nom, sel, hash: await empreinte(mdp, sel),
+        pages: pagesInvite(body.pages),
+        ro: pagesInvite(body.ro),
+        cree: new Date().toISOString().slice(0, 10),
+        actif: true,
+      });
+      await base(env).put('invites', JSON.stringify(invites));
+      return json(env, { ok: true, code });
+    }
 
-  if (action === 'supprimer') {
-    invites.splice(i, 1);
-    await base(env).put('invites', JSON.stringify(invites));
-    return json(env, { ok: true });
-  }
+    const code = texte(body.code, 30);
+    const i = invites.findIndex(x => x.code === code);
+    if (i < 0) return json(env, { error: 'introuvable' }, 404);
 
-  if (action === 'basculer') {
-    invites[i].actif = invites[i].actif === false;
-    await base(env).put('invites', JSON.stringify(invites));
-    return json(env, { ok: true, actif: invites[i].actif });
-  }
+    if (action === 'supprimer') {
+      invites.splice(i, 1);
+      await base(env).put('invites', JSON.stringify(invites));
+      return json(env, { ok: true });
+    }
 
-  if (action === 'pages') {
-    invites[i].pages = pagesInvite(body.pages);
-    invites[i].ro    = pagesInvite(body.ro);
-    await base(env).put('invites', JSON.stringify(invites));
-    return json(env, { ok: true });
-  }
+    if (action === 'basculer') {
+      invites[i].actif = invites[i].actif === false;
+      await base(env).put('invites', JSON.stringify(invites));
+      return json(env, { ok: true, actif: invites[i].actif });
+    }
 
-  if (action === 'mdp') {
-    const mdp = String(body.mdp || '');
-    if (mdp.length < 8) return json(env, { error: 'mdp_court', detail: '8 caractères minimum.' }, 400);
-    invites[i].sel = b64(crypto.getRandomValues(new Uint8Array(16)));
-    invites[i].hash = await empreinte(mdp, invites[i].sel);
-    await base(env).put('invites', JSON.stringify(invites));
-    return json(env, { ok: true });
-  }
+    if (action === 'pages') {
+      invites[i].pages = pagesInvite(body.pages);
+      invites[i].ro    = pagesInvite(body.ro);
+      await base(env).put('invites', JSON.stringify(invites));
+      return json(env, { ok: true });
+    }
 
-  return json(env, { error: 'action_inconnue' }, 400);
+    if (action === 'mdp') {
+      const mdp = String(body.mdp || '');
+      if (mdp.length < 8) return json(env, { error: 'mdp_court', detail: '8 caractères minimum.' }, 400);
+      invites[i].sel = b64(crypto.getRandomValues(new Uint8Array(16)));
+      invites[i].hash = await empreinte(mdp, invites[i].sel);
+      await base(env).put('invites', JSON.stringify(invites));
+      return json(env, { ok: true });
+    }
+
+    return json(env, { error: 'action_inconnue' }, 400);
+  });
 }
 
 /* POST /api/invite-login  —  PUBLIC (c'est la porte d'entrée) */
@@ -1503,15 +2148,48 @@ async function handleInviteLogin(request, env) {
 
   await base(env).delete(cleEssais);
 
-  inv.dernier = new Date().toISOString().slice(0, 16).replace('T', ' ');
-  await base(env).put('invites', JSON.stringify(invites));
+  /* La note de dernière connexion réécrit TOUTE la liste — et la liste lue
+     plus haut date d'avant la vérification du mot de passe, qui prend une
+     bonne centaine de millisecondes (PBKDF2, 120 000 tours). Réécrire telle
+     quelle une liste vieille de 100 ms annulait toute modification faite
+     entre-temps : le patron révoquait un accès pendant que son porteur se
+     connectait, et la connexion le ressuscitait, actif, avec son mot de passe.
+     On relit donc la liste DANS la file — la même que handleInvites, pour que
+     les deux ne se chevauchent jamais — et on revérifie au passage que l'accès
+     est toujours là et toujours actif. Une révocation partie pendant la
+     vérification du mot de passe gagne désormais la course.
+
+     Et c'est la version FRAÎCHE qui sert ensuite à bâtir la session : se
+     contenter de relire pour dire oui ou non n'aurait réglé que la
+     suppression. Deux autres actions se jouent dans la même fenêtre de
+     100 ms — « pages » (réduction des droits) et « mdp » (rotation du mot de
+     passe). Bâtir la session sur la liste d'avant aurait délivré les ANCIENS
+     droits, et validé un mot de passe qu'on venait de changer. On refuse donc
+     aussi si l'empreinte a bougé depuis qu'on l'a vérifiée. */
+  const frais = await verrou('invites', async () => {
+    const liste = await lireInvites(env);
+    const cible = liste.find(x => x.code === code);
+    if (!cible || cible.actif === false) return null;
+    /* Le mot de passe a été vérifié contre l'empreinte d'AVANT : si elle a
+       changé entre-temps, ce qu'on vient de valider n'ouvre plus rien. */
+    if (cible.hash !== inv.hash || cible.sel !== inv.sel) return null;
+
+    cible.dernier = new Date().toISOString().slice(0, 16).replace('T', ' ');
+    await base(env).put('invites', JSON.stringify(liste));
+    return cible;
+  });
+
+  if (!frais) return json(env, { error: 'refuse' }, 401);
 
   const sid = crypto.randomUUID();
   await base(env).put('sess:' + sid, JSON.stringify({
-    invite: true, code: inv.code, id: 'inv:' + inv.code, name: inv.nom, avatar: null,
+    invite: true, code: frais.code, id: 'inv:' + frais.code, name: frais.nom, avatar: null,
   }), { expirationTtl: SESSION_TTL });
 
-  return json(env, { token: sid, nom: inv.nom, pages: inv.pages, ro: inv.ro || [] });
+  /* Plus de `token` dans la réponse : le cookie httpOnly suffit, et ne
+     jamais le poser dans une valeur que le JS du panel lit lui-même est
+     tout l'intérêt du changement (voir entetesCookieSession). */
+  return json(env, { nom: frais.nom, pages: frais.pages, ro: frais.ro || [] }, 200, entetesCookieSession(sid));
 }
 
 /* GET | PUT /api/settings
@@ -1519,6 +2197,11 @@ async function handleInviteLogin(request, env) {
    du domaine (les autres — partenaires, décoratifs — sont écartés). */
 async function handleSettings(request, env) {
   if (request.method === 'GET') {
+    /* Même raison que /api/permissions : ces réglages nomment les rôles
+       autorisés à annoncer, ceux en lecture seule, la visibilité de
+       l'agenda. Rien qui doive se lire sans être connecté. */
+    const session = await currentSession(request, env);
+    if (!session) return json(env, { error: 'unauthorized' }, 401);
     const s = await base(env).get('settings', 'json');
     return json(env, s || {});
   }
@@ -1530,6 +2213,11 @@ async function handleSettings(request, env) {
     let body;
     try { body = await request.json(); }
     catch (e) { return json(env, { error: 'bad_json' }, 400); }
+    /* Même remarque que sur /api/invites : « null » passe le JSON.parse et
+       faisait répondre 500 à la première lecture de propriété. */
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return json(env, { error: 'bad_shape' }, 400);
+    }
 
     /* Un filtre en liste blanche : ce qui n'est pas nommé ici est JETÉ.
        ------------------------------------------------------------------------
@@ -1591,9 +2279,9 @@ async function handleSettings(request, env) {
       dispoRoles:   'dispoRoles',
     };
     const perms = await base(env).get('permissions', 'json') || {};
-    const avant = await base(env).get('settings', 'json') || {};
+    const avantControle = await base(env).get('settings', 'json') || {};
     const refuses = Object.keys(clean)
-      .filter(k => !canWrite(s, APPARTENANCE[k], perms, avant.permsRO || {}));
+      .filter(k => !canWrite(s, APPARTENANCE[k], perms, avantControle.permsRO || {}));
     if (refuses.length) return json(env, { error: 'forbidden', reglages: refuses }, 403);
 
     /* Fusion, et non remplacement.
@@ -1601,9 +2289,19 @@ async function handleSettings(request, env) {
        L'ancienne version réécrivait TOUT l'objet à partir du seul envoi reçu :
        un écran qui n'envoyait que sa clé effaçait celles des autres. Maintenant
        que chaque écran n'envoie que la sienne, remplacer serait catastrophique
-       — enregistrer les disponibilités viderait la matrice des accès. */
-    const sortie = Object.assign({}, avant, clean);
-    await base(env).put('settings', JSON.stringify(sortie));
+       — enregistrer les disponibilités viderait la matrice des accès.
+
+       La fusion se fait sous file d'attente, et l'objet d'avant est RELU
+       dedans : c'est exactement le même piège que sur le document « data ».
+       Deux écrans d'Administration enregistrés en même temps — les
+       disponibilités d'un côté, la visibilité de l'agenda de l'autre — lisaient
+       la même version et le second effaçait le réglage du premier. */
+    const sortie = await verrou('settings', async () => {
+      const avant = await base(env).get('settings', 'json') || {};
+      const fusion = Object.assign({}, avant, clean);
+      await base(env).put('settings', JSON.stringify(fusion));
+      return fusion;
+    });
     return json(env, sortie);
   }
 
@@ -1863,7 +2561,7 @@ async function handleRappel(request, env) {
   if (!categoriesTickets(env).length) {
     return json(env, { error: 'config', detail:
       'Aucune catégorie de tickets déclarée. Renseignez DISCORD_TICKET_CATEGORIES '
-      + 'dans wrangler.toml, puis redéployez.' }, 500);
+      + 'dans backend/.env, puis redémarrez le conteneur (voir backend/README.md).' }, 500);
   }
 
   const url = new URL(request.url);
@@ -2158,7 +2856,7 @@ async function lireLogs(env) {
       /* INSERT OR IGNORE : un message déjà en base ne compte pas deux fois.
          C'est ce qui autorise à relire sans réfléchir. */
       const req = env.DB.prepare(
-        'INSERT OR IGNORE INTO ventes (msg, ts, nom, cle, qte, brut, part, item, job) '
+        'INSERT IGNORE INTO ventes (msg, ts, nom, cle, qte, brut, part, item, job) '
         + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
       await env.DB.batch(lignes.map(v =>
         req.bind(v.msg, v.ts, v.nom, v.cle, v.qte, v.brut, v.part, v.item, v.job)));
@@ -2194,6 +2892,9 @@ async function lireAlias(env) {
    propose de la rattacher. Une vente jetée en silence, personne ne la
    retrouve ensuite. */
 async function handleQuota(request, env) {
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    return json(env, { error: 'method_not_allowed' }, 405);
+  }
   const s = await currentSession(request, env);
   if (!s) return json(env, { error: 'unauthorized' }, 401);
 
@@ -2210,16 +2911,52 @@ async function handleQuota(request, env) {
   const au = nombre('au', Date.now());
   const du = nombre('du', au - 7 * 24 * 3600 * 1000);
 
+  /* MAX(nom) et non un simple « nom » : MySQL refuse par défaut (mode
+     ONLY_FULL_GROUP_BY) une colonne non agrégée dans un GROUP BY, sauf
+     dépendance fonctionnelle prouvée. ANY_VALUE() lèverait ce refus, mais
+     n'existe que côté MySQL — MariaDB ne la connaît pas. MAX(), lui, est du
+     SQL standard qui marche à l'identique sur les deux moteurs. Toutes les
+     ventes d'une même `cle` normalisée portent en pratique le même `nom`
+     (ou des variantes d'accentuation triviales) : quel que soit celui que
+     MAX() retient, l'affichage reste correct. */
   const r = await env.DB.prepare(
-    'SELECT cle, nom, SUM(qte) AS qte, SUM(brut) AS brut, SUM(part) AS part, '
+    'SELECT cle, MAX(nom) AS nom, SUM(qte) AS qte, SUM(brut) AS brut, SUM(part) AS part, '
     + 'COUNT(*) AS n, MAX(ts) AS dernier FROM ventes '
     + 'WHERE ts >= ? AND ts < ? GROUP BY cle ORDER BY qte DESC'
   ).bind(du, au).all();
-  const lignes = r.results || [];
+
+  /* SUM()/COUNT() reviennent en texte côté MariaDB (voir nombreSQL plus haut
+     dans le fichier) — c'est le bug qui affichait « 0100010 » à la place de
+     110 sur cette page. */
+  const nb = nombreSQL;
+  const lignes = (r.results || []).map(l => ({
+    cle: l.cle,
+    nom: l.nom,
+    qte: nb(l.qte),
+    brut: nb(l.brut),
+    part: nb(l.part),
+    n: nb(l.n),
+    dernier: nb(l.dernier),
+  }));
 
   const data = await base(env).get('data', 'json') || {};
   const roster = Array.isArray(data.rhRoster) ? data.rhRoster : [];
   const alias = await lireAlias(env);
+
+  /* Le filtre posé sur /api/data (voir collectionsLisibles) ne servait à rien
+     tant que cette route-ci restait ouverte : elle lit le même rhRoster et en
+     ressortait le NUMÉRO CIVIL de tout le personnel ayant vendu, à n'importe
+     quelle session valable — accès extérieur compris. Un comptable à qui on
+     n'avait coché que « Facturation » n'avait qu'à appeler /api/quota.
+     Le nom et le poste, eux, restent : ils sont déjà publics par conception
+     (voir handleOrga, qui les sert sans aucune authentification). Ce qui ne
+     doit jamais sortir, et que le commentaire de handleOrga énumère lui-même,
+     c'est le numéro civil — on le retire donc précisément à qui n'a pas le
+     droit de lire le registre, sans casser la page pour autant : un accès
+     extérieur à qui « Quota en direct » a été légitimement coché continue de
+     voir les chiffres de production. */
+  const refusees = collectionsLisibles(s);
+  const civilVisible = !refusees || !refusees.has('rhRoster');
 
   /* Deux chemins vers une fiche : le nom normalisé, ou un alias posé à la
      main. L'alias gagne — c'est une décision humaine. */
@@ -2234,7 +2971,7 @@ async function handleQuota(request, env) {
       : parClef.get(l.cle);
     if (fiche) {
       rattachees.push({
-        civil: String(fiche.id), nom: fiche.name, poste: fiche.poste || '',
+        civil: civilVisible ? String(fiche.id) : '', nom: fiche.name, poste: fiche.poste || '',
         vins: l.qte, brut: l.brut, part: l.part, ventes: l.n, dernier: l.dernier,
         via: civil ? 'alias' : 'nom',
       });
@@ -2270,10 +3007,15 @@ async function handleAlias(request, env) {
   const cle = clefNom(body && body.cle);
   if (!cle) return json(env, { error: 'bad_shape' }, 400);
 
-  const alias = await lireAlias(env);
   const civil = String((body && body.civil) || '').trim();
-  if (civil) alias[cle] = civil; else delete alias[cle];
-  await base(env).put('alias', JSON.stringify(alias));
+  /* Même lecture-modification-écriture que partout ailleurs : deux
+     rattachements faits en même temps s'écrasaient. */
+  const alias = await verrou('alias', async () => {
+    const table = await lireAlias(env);
+    if (civil) table[cle] = civil; else delete table[cle];
+    await base(env).put('alias', JSON.stringify(table));
+    return table;
+  });
   await appendJournal(env, s,
     civil ? `a rattaché les ventes de « ${body.cle} » à la fiche ${civil}`
           : `a détaché les ventes de « ${body.cle} »`, ['rhRoster']);
@@ -2327,7 +3069,14 @@ async function handleData(request, env) {
   if (request.method === 'GET') {
     const d = await base(env).get('data', 'json');
     const m = await base(env).get('datameta', 'json');
-    return json(env, Object.assign({}, d || {}, { _meta: m || { rev: 0 } }));
+
+    /* Un accès extérieur ne reçoit pas l'identité des gens du domaine. */
+    const refusees = collectionsLisibles(s);
+    const sortie = {};
+    for (const [k, v] of Object.entries(d || {})) {
+      if (!refusees || !refusees.has(k)) sortie[k] = v;
+    }
+    return json(env, Object.assign(sortie, { _meta: m || { rev: 0 } }));
   }
 
   if (request.method === 'PUT') {
@@ -2361,30 +3110,38 @@ async function handleData(request, env) {
 
     /* Fusion : on ne remplace que les collections envoyées, les autres
        restent intactes. Deux personnes qui travaillent sur des pages
-       différentes ne s'écrasent donc pas mutuellement. */
-    const current = await base(env).get('data', 'json') || {};
-    for (const [k, v] of Object.entries(body)) {
-      current[String(k).slice(0, 64)] = v;
-    }
+       différentes ne s'écrasent donc pas mutuellement — à condition que la
+       relecture et la réécriture ne se chevauchent pas, d'où la file. */
+    const resultat = await verrou('data', async () => {
+      const current = await base(env).get('data', 'json') || {};
+      for (const [k, v] of Object.entries(body)) {
+        current[String(k).slice(0, 64)] = v;
+      }
 
-    delete current._meta;
-    const out = JSON.stringify(current);
-    if (out.length > DATA_MAX) return json(env, { error: 'too_large' }, 413);
-    await base(env).put('data', out);
+      delete current._meta;
+      const out = JSON.stringify(current);
+      if (out.length > DATA_MAX) return { tropGros: true };
+      await base(env).put('data', out);
 
-    /* La révision s'incrémente à chaque écriture : c'est elle qui prévient
-       les autres navigateurs qu'ils travaillent sur une version périmée. */
-    const prev = await base(env).get('datameta', 'json');
-    const meta = {
-      rev: ((prev && prev.rev) || 0) + 1,
-      by: s.user.name,
-      at: new Date().toISOString(),
-      keys: Object.keys(body),
-    };
-    await base(env).put('datameta', JSON.stringify(meta));
+      /* La révision s'incrémente à chaque écriture : c'est elle qui prévient
+         les autres navigateurs qu'ils travaillent sur une version périmée. */
+      const prev = await base(env).get('datameta', 'json');
+      const meta = {
+        rev: ((prev && prev.rev) || 0) + 1,
+        by: s.user.name,
+        at: new Date().toISOString(),
+        keys: Object.keys(body),
+      };
+      await base(env).put('datameta', JSON.stringify(meta));
+      return { meta };
+    });
+
+    if (resultat.tropGros) return json(env, { error: 'too_large' }, 413);
+    /* Le journal a sa propre file : on l'écrit APRÈS avoir rendu celle du
+       document, pour qu'aucune section n'en attende deux à la fois. */
     if (note) await appendJournal(env, s, note, Object.keys(body));
 
-    return json(env, { ok: true, saved: Object.keys(body), rev: meta.rev });
+    return json(env, { ok: true, saved: Object.keys(body), rev: resultat.meta.rev });
   }
 
   return json(env, { error: 'method_not_allowed' }, 405);
@@ -2440,6 +3197,80 @@ function messageAbsence(nom, ligne, motif) {
        + `> Motif : ${propre(motif || 'non précisé').slice(0, 200)}`;
 }
 
+/* ---------------------------------------------------------------------------
+   QUI est en train d'écrire — et pourquoi ce n'est pas son pseudo
+   ---------------------------------------------------------------------------
+   /api/absence et /api/linterna laissent chacun écrire SA propre ligne. Il
+   fallait donc savoir de qui il s'agit. Elles se fiaient au nom affiché —
+   c'est-à-dire au surnom Discord, que la personne choisit elle-même. Prendre
+   le surnom d'un collègue suffisait alors à écrire à sa place : déclarer une
+   absence sur sa ligne, passer sa fiche en « absent », ou remettre sa récolte
+   Linterna à zéro — donc lui coûter sa prime. Rien ne le signalait, et le
+   journal accusait la victime, puisqu'il n'enregistre qu'un nom.
+
+   L'identité, ici, c'est l'IDENTIFIANT DISCORD. Il est attribué par Discord,
+   il ne se change pas, et le registre le porte déjà (champ `discord` d'une
+   fiche — c'est le lien qu'utilise déjà handleFolkos pour ouvrir le panel).
+   Le pseudo ne sert plus qu'à l'affichage.
+
+   Ce qu'on ne fait PAS : rattacher automatiquement un compte à une fiche
+   parce que les noms se ressemblent. Ce serait refaire le trou par la fenêtre
+   — il suffirait de prendre le surnom de quelqu'un pour hériter de sa fiche.
+   Une fiche qui ne porte pas l'identifiant n'est pas la sienne, point. On
+   signale le rapprochement possible (voir `candidats`), c'est aux RH de le
+   confirmer en inscrivant l'identifiant sur la fiche.
+   --------------------------------------------------------------------------- */
+function ficheParDiscord(roster, idDiscord) {
+  const cible = String(idDiscord || '').trim();
+  if (!cible) return null;
+  return roster.find(f => f && String(f.discord || '').trim() === cible) || null;
+}
+
+function liaisonFiche(roster, session) {
+  const fiche = ficheParDiscord(roster, session.user.id);
+  if (fiche) return { etat: 'liee', fiche, nom: String(fiche.name || '').trim() };
+
+  /* Aucune fiche ne porte cet identifiant. On regarde si le pseudo ressemble
+     à une ou plusieurs fiches — UNIQUEMENT pour le dire. Deux fiches
+     homonymes, ou une fiche déjà rattachée à quelqu'un d'autre, sont des cas
+     que seule une personne peut trancher. */
+  const clef = clefNom(session.user.name);
+  const candidats = clef ? roster.filter(f => f && clefNom(f.name) === clef) : [];
+
+  return {
+    etat: candidats.length === 0 ? 'absente'
+        : candidats.length > 1  ? 'ambigue'
+        : 'a_confirmer',
+    fiche: null,
+    nom: String(session.user.name || '').trim(),
+    candidats: candidats.slice(0, 5).map(f => ({
+      civil: String(f.id || ''),
+      nom: String(f.name || ''),
+      dejaLie: !!String(f.discord || '').trim(),
+    })),
+  };
+}
+
+/* Retrouve MA ligne dans une liste (absences, récoltes).
+   L'identifiant d'abord. À défaut — les lignes d'avant ce correctif n'en
+   portent pas —, on adopte une ligne au nom de la FICHE, et seulement quand
+   la fiche est rattachée : ce nom-là vient du registre, tenu par les RH, pas
+   du surnom que la personne se donne. C'est ce qui rend la reprise des
+   anciennes lignes sûre au lieu de rouvrir la porte. */
+function indexDeMaLigne(liste, session, liaison) {
+  const moi = String(session.user.id);
+  let i = liste.findIndex(x => x && String(x.discord || '').trim() === moi);
+  if (i >= 0) return i;
+
+  if (liaison.fiche) {
+    const clef = clefNom(liaison.fiche.name);
+    i = liste.findIndex(x => x && !String(x.discord || '').trim()
+                          && clefNom(x.name) === clef);
+    if (i >= 0) return i;
+  }
+  return -1;
+}
+
 async function handleAbsence(request, env) {
   if (request.method !== 'POST') return json(env, { error: 'method' }, 405);
 
@@ -2472,48 +3303,66 @@ async function handleAbsence(request, env) {
       'Vous venez de déclarer une absence. Attendez quelques minutes.' }, 429);
   }
 
-  /* Le registre, d'abord. C'est la donnée ; le message n'en est que l'écho. */
-  const nom = String(s.user.name || '').trim();
   const court = d => String(d).slice(0, 5);
   const ligne = indef ? `${court(du)} → indéfini` : `${court(du)} → ${court(au)}`;
 
-  const data = await base(env).get('data', 'json') || {};
-  const abs = Array.isArray(data.rhAbsences) ? data.rhAbsences : [];
-  const row = { name: nom, range: ligne, indef, motif: motif || 'Congé', parSoi: true };
+  /* Même file d'attente que /api/data : la déclaration relit et réécrit le
+     document entier, et ne doit pas se croiser avec un enregistrement du
+     panel — sinon l'un des deux disparaît sans un mot. */
+  const resultat = await verrou('data', async () => {
+    const data = await base(env).get('data', 'json') || {};
+    const roster = Array.isArray(data.rhRoster) ? data.rhRoster : [];
 
-  /* Une deuxième déclaration remplace la première : quelqu'un qui corrige ses
-     dates ne doit pas se retrouver avec deux absences à son nom. */
-  const i = abs.findIndex(a => a && String(a.name || '').trim().toLowerCase() === nom.toLowerCase());
-  if (i >= 0) abs[i] = row; else abs.unshift(row);
-  data.rhAbsences = abs;
+    /* QUI écrit : l'identifiant Discord, jamais le pseudo (voir liaisonFiche).
+       Le nom retenu vient de la FICHE quand elle est rattachée — le registre
+       fait foi —, du pseudo seulement à défaut, et pour l'affichage seul. */
+    const liaison = liaisonFiche(roster, s);
+    const nom = liaison.nom;
+    const row = { name: nom, discord: String(s.user.id), range: ligne,
+                  indef, motif: motif || 'Congé', parSoi: true };
 
-  /* Le registre RH suit, quand la fiche existe : c'est lui que lisent les
-     compteurs d'effectif. Une personne sans fiche déclare quand même son
-     absence — elle ne va pas attendre que les RH la saisissent. */
-  let ficheTrouvee = false;
-  if (Array.isArray(data.rhRoster)) {
-    const f = data.rhRoster.find(e => e && String(e.name || '').trim().toLowerCase() === nom.toLowerCase());
-    if (f) {
-      f.status = 'absent';
-      f.absence = ligne;
-      f.motif = row.motif;
+    const abs = Array.isArray(data.rhAbsences) ? data.rhAbsences : [];
+
+    /* Une deuxième déclaration remplace la première : quelqu'un qui corrige
+       ses dates ne doit pas se retrouver avec deux absences à son nom. */
+    const i = indexDeMaLigne(abs, s, liaison);
+    if (i >= 0) abs[i] = row; else abs.unshift(row);
+    data.rhAbsences = abs;
+
+    /* Le registre RH suit, mais UNIQUEMENT sur la fiche qui porte notre
+       identifiant Discord. C'est ici que se jouait l'usurpation : chercher la
+       fiche par le nom affiché laissait passer sa fiche en « absent » à qui
+       prenait son surnom. Une personne sans fiche rattachée déclare quand
+       même son absence — elle ne va pas attendre les RH —, mais sa
+       déclaration ne touche alors AUCUNE fiche. */
+    let ficheTrouvee = false;
+    if (liaison.fiche) {
+      liaison.fiche.status = 'absent';
+      liaison.fiche.absence = ligne;
+      liaison.fiche.motif = row.motif;
       ficheTrouvee = true;
     }
-  }
 
-  delete data._meta;
-  const out = JSON.stringify(data);
-  if (out.length > DATA_MAX) return json(env, { error: 'too_large' }, 413);
-  await base(env).put('data', out);
+    delete data._meta;
+    const out = JSON.stringify(data);
+    if (out.length > DATA_MAX) return { tropGros: true };
+    await base(env).put('data', out);
 
-  const prev = await base(env).get('datameta', 'json');
-  const meta = {
-    rev: ((prev && prev.rev) || 0) + 1,
-    by: nom,
-    at: new Date().toISOString(),
-    keys: ficheTrouvee ? ['rhAbsences', 'rhRoster'] : ['rhAbsences'],
-  };
-  await base(env).put('datameta', JSON.stringify(meta));
+    const prev = await base(env).get('datameta', 'json');
+    const meta = {
+      rev: ((prev && prev.rev) || 0) + 1,
+      by: nom,
+      at: new Date().toISOString(),
+      keys: ficheTrouvee ? ['rhAbsences', 'rhRoster'] : ['rhAbsences'],
+    };
+    await base(env).put('datameta', JSON.stringify(meta));
+    return { meta, liaison, nom };
+  });
+
+  if (resultat.tropGros) return json(env, { error: 'too_large' }, 413);
+  const meta = resultat.meta;
+  const liaison = resultat.liaison;
+  const nom = resultat.nom;
   await appendJournal(env, s, `a déclaré son absence (${ligne})`, meta.keys);
 
   try { await base(env).put(cle, '1', { expirationTtl: Math.ceil(ABSENCE_MIN_MS / 1000) }); }
@@ -2521,12 +3370,12 @@ async function handleAbsence(request, env) {
 
   /* Le salon, ensuite. Un refus de Discord ne remet pas en cause l'absence. */
   const salon = absenceSalon(env);
-  if (!salon) return json(env, { ok: true, rev: meta.rev, annonce: false, raison: 'pas_de_salon' });
+  if (!salon) return json(env, { ok: true, rev: meta.rev, annonce: false, raison: 'pas_de_salon', liaison });
 
   let annonce = false, detail = null;
   try {
     const r = await botPost(env, `/channels/${salon}/messages`, {
-      content: messageAbsence(nom, ligne, row.motif),
+      content: messageAbsence(nom, ligne, motif || 'Congé'),
       /* Personne n'est mentionné : c'est une information, pas une alerte. */
       allowed_mentions: { parse: [] },
     });
@@ -2534,7 +3383,12 @@ async function handleAbsence(request, env) {
     if (!annonce) detail = 'discord ' + (r && r.status);
   } catch (e) { detail = String((e && e.message) || e); }
 
-  return json(env, { ok: true, rev: meta.rev, annonce, detail });
+  /* `liaison` accompagne la réponse pour que le panel puisse dire à la
+     personne que sa déclaration n'est rattachée à aucune fiche — et aux RH
+     quelle fiche il faudrait compléter. Voir liaisonFiche : `ambigue` veut
+     dire que plusieurs fiches portent ce nom, cas que personne d'autre qu'un
+     humain ne peut trancher. */
+  return json(env, { ok: true, rev: meta.rev, annonce, detail, liaison });
 }
 
 /* ==========================================================================
@@ -2576,41 +3430,72 @@ async function handleLinterna(request, env) {
   if (n > RAISINS_MAX) return json(env, { error: 'nombre', detail:
     `${n.toLocaleString('fr-FR')} raisins, c'est plus que tout ce que le domaine récolte en une saison — vérifiez le chiffre.` }, 400);
 
-  const nom = String(s.user.name || '').trim();
-  const data = await base(env).get('data', 'json') || {};
-  const liste = Array.isArray(data.linterna) ? data.linterna : [];
+  /* Même file d'attente que /api/data. Elle compte doublement ici : un
+     double-clic envoie deux ajouts, et sans file les deux lisaient le même
+     total d'avant — l'un des deux ajouts se perdait, alors que la réponse
+     annonçait « ok » aux deux. */
+  const resultat = await verrou('data', async () => {
+    const data = await base(env).get('data', 'json') || {};
+    const roster = Array.isArray(data.rhRoster) ? data.rhRoster : [];
 
-  const i = liste.findIndex(x => x && String(x.name || '').trim().toLowerCase() === nom.toLowerCase());
-  const avant = i >= 0 ? (Number(liste[i].raisins) || 0) : 0;
-  const apres = mode === 'total' ? n : avant + n;
-  if (apres > RAISINS_MAX) return json(env, { error: 'nombre', detail:
+    /* Même identité que pour l'absence, et l'enjeu est ici plus direct : la
+       récolte vaut de l'argent sur la prime, et le mode « total » REMPLACE la
+       valeur. Se fier au pseudo permettait de remettre la récolte d'un
+       collègue à zéro en prenant son surnom une minute. */
+    const liaison = liaisonFiche(roster, s);
+    const nom = liaison.nom;
+
+    const liste = Array.isArray(data.linterna) ? data.linterna : [];
+
+    const i = indexDeMaLigne(liste, s, liaison);
+    const avant = i >= 0 ? (Number(liste[i].raisins) || 0) : 0;
+    const apres = mode === 'total' ? n : avant + n;
+    if (apres > RAISINS_MAX) return { plafond: true };
+
+    const ligne = { name: nom, discord: String(s.user.id), raisins: apres,
+                    at: new Date().toISOString() };
+    if (i >= 0) liste[i] = ligne; else liste.unshift(ligne);
+    data.linterna = liste;
+
+    delete data._meta;
+    const out = JSON.stringify(data);
+    if (out.length > DATA_MAX) return { tropGros: true };
+    await base(env).put('data', out);
+
+    const prev = await base(env).get('datameta', 'json');
+    const meta = { rev: ((prev && prev.rev) || 0) + 1, by: nom,
+                   at: new Date().toISOString(), keys: ['linterna'] };
+    await base(env).put('datameta', JSON.stringify(meta));
+    return { meta, avant, apres };
+  });
+
+  if (resultat.plafond) return json(env, { error: 'nombre', detail:
     'Ce total dépasse le garde-fou du domaine — corrigez plutôt votre total.' }, 400);
+  if (resultat.tropGros) return json(env, { error: 'too_large' }, 413);
 
-  const ligne = { name: nom, raisins: apres, at: new Date().toISOString() };
-  if (i >= 0) liste[i] = ligne; else liste.unshift(ligne);
-  data.linterna = liste;
-
-  delete data._meta;
-  const out = JSON.stringify(data);
-  if (out.length > DATA_MAX) return json(env, { error: 'too_large' }, 413);
-  await base(env).put('data', out);
-
-  const prev = await base(env).get('datameta', 'json');
-  const meta = { rev: ((prev && prev.rev) || 0) + 1, by: nom,
-                 at: new Date().toISOString(), keys: ['linterna'] };
-  await base(env).put('datameta', JSON.stringify(meta));
+  const { meta, avant, apres, liaison } = resultat;
   await appendJournal(env, s,
     mode === 'total' ? `a corrigé sa récolte Linterna à ${apres}`
                      : `a déclaré ${n} raisin(s) à la Linterna`, ['linterna']);
 
-  return json(env, { ok: true, rev: meta.rev, avant, total: apres });
+  return json(env, { ok: true, rev: meta.rev, avant, total: apres, liaison });
 }
 
-/* GET /api/logout */
+/* POST /api/logout */
 async function handleLogout(request, env) {
-  const sid = bearer(request);
+  /* En GET, cette route se déclenchait depuis n'importe quel site tiers par
+     une simple balise <img src="https://…/api/logout">, cookie de session
+     joint automatiquement (SameSite=None) : de quoi déconnecter quelqu'un en
+     boucle sans qu'il comprenne pourquoi. En POST, elle passe par le contrôle
+     d'origine (voir exigerOrigine). */
+  if (request.method !== 'POST') return json(env, { error: 'method' }, 405);
+
+  const sid = cookieSid(request) || bearer(request);
   if (sid) await base(env).delete('sess:' + sid);
-  return json(env, { ok: true });
+  /* Le cookie est effacé dans tous les cas, même sans jeton reconnu :
+     un navigateur qui porterait un cookie déjà périmé ou invalide doit
+     quand même repartir sans lui. */
+  return json(env, { ok: true }, 200, entetesEffacerCookie());
 }
 
 /* ---------------------------------------------------------------------------
@@ -2646,7 +3531,7 @@ async function handleLogout(request, env) {
 
    Le message part par le BOT, pas par un webhook. Le bot sait déjà écrire
    dans un salon — c'est ainsi que partent les rappels de permis — et un
-   identifiant de salon n'est pas un secret : il se lit dans wrangler.toml,
+   identifiant de salon n'est pas un secret : il se lit dans backend/.env,
    au vu de tous, là où une adresse de webhook aurait dû être posée à part et
    protégée. Une autorisation de moins à faire circuler.
    ========================================================================== */
@@ -2676,7 +3561,7 @@ function instantParis(dateFR, heure) {
   return mur - decalageParis(approx);
 }
 
-/* Les rôles à réveiller, séparés par des virgules dans wrangler.toml. On ne
+/* Les rôles à réveiller, séparés par des virgules dans backend/.env. On ne
    garde que ce qui ressemble à un identifiant Discord : une virgule en trop
    ou un nom de rôle glissé par erreur ne doit pas partir dans le message. */
 function rolesAgenda(env) {
@@ -2787,6 +3672,16 @@ export default {
       return new Response(null, { status: 204, headers: corsHeaders(env) });
     }
 
+    /* Rien d'autre ne se décide avant d'avoir écarté une requête déclenchée
+       par un site tiers (voir exigerOrigine) : pas de lecture en base, pas de
+       session relue, pas d'effet de bord. */
+    if (!exigerOrigine(request, url, env)) {
+      return json(env, { error: 'origine_refusee', detail:
+        "Cette requête vient d'un autre site que le panel. Si vous voyez ce "
+        + "message depuis le panel lui-même, c'est que SITE_URL/SITE_URLS ne "
+        + "correspond pas à l'adresse réellement utilisée (backend/.env)." }, 403);
+    }
+
     /* Garde-fou : une variable oubliée donne un message clair
        plutôt qu'une erreur incompréhensible. */
     for (const key of ['DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET',
@@ -2797,27 +3692,31 @@ export default {
     }
     if (!env.DB) {
       return json(env, { error: 'config', missing: 'DB', detail:
-        "La base D1 n'est pas reliée. Créez-la avec « npx wrangler d1 create marlowe », "
-        + "recopiez son database_id dans wrangler.toml, appliquez schema.sql, puis redéployez." }, 500);
+        "La base MariaDB/MySQL n'est pas reliée. Vérifiez DB_HOST, DB_PORT, DB_USER, "
+        + "DB_PASSWORD et DB_NAME dans backend/.env, et que le serveur de base de données "
+        + "est bien démarré, puis relancez l'API (voir backend/README.md, §2 et §3)." }, 500);
     }
 
     /* Les lignes périmées ne s'effacent pas toutes seules dans SQLite. */
     ctx.waitUntil(menage(env));
 
     try {
-      /* /api/img/{id} porte l'identifiant dans le chemin : le switch ne sait
-         pas filtrer là-dessus, on l'attrape avant. */
-      if (url.pathname.startsWith('/api/img/')) {
-        return await handleImage(request, env, url.pathname.slice('/api/img/'.length));
-      }
-
       switch (url.pathname) {
         case '/api/version':     return json(env, {
           version: VERSION,
-          routes: ['login', 'callback', 'me', 'roles', 'permissions', 'settings', 'orga',
-                   'vitrine', 'upload', 'relais', 'invites', 'invite-login', 'data',
-                   'presence', 'journal', 'logout', 'rappel', 'avertissement',
-                   'dispo', 'absence', 'linterna', 'quota', 'alias', 'journaux'],
+          /* Cette liste sert à vérifier d'un coup d'œil CE QUI EST DÉPLOYÉ :
+             elle doit donc correspondre exactement au switch ci-dessous.
+             Il en manquait trois — 'version' (celle-ci même), 'folkos' et
+             'discord' (le second nom de 'relais') : 24 annoncées pour 27
+             branchées. Une route absente d'ici passe pour non déployée, et
+             c'est précisément le genre de doute que cette route existe pour
+             lever. En ajouter une plus bas sans l'ajouter ici, c'est
+             recommencer. */
+          routes: ['version', 'login', 'callback', 'folkos', 'me', 'roles', 'permissions',
+                   'settings', 'orga', 'vitrine', 'upload', 'relais', 'discord',
+                   'invites', 'invite-login', 'data', 'presence', 'journal', 'logout',
+                   'rappel', 'avertissement', 'dispo', 'absence', 'linterna',
+                   'quota', 'alias', 'journaux'],
           rappelDansLeTexte: true,   /* faux = ancienne version, le rappel partait en embed */
           categoriesTickets: categoriesTickets(env).length,
           salonLogs: /^\d{17,20}$/.test(String(env.DISCORD_LOGS_CHANNEL || '')),
@@ -2863,14 +3762,28 @@ export default {
     } catch (e) {
       const msg = String((e && e.message) || e);
 
-      /* Le plan gratuit compte 1 000 écritures KV par jour, remises à zéro à
-         minuit UTC. Quand le compte est épuisé, chaque écriture lève une
-         erreur peu parlante — autant la traduire. */
-      if (/KV (PUT|DELETE)|limit|429|quota/i.test(msg)) {
-        return json(env, { error: 'quota_kv', detail:
-          "Le quota d'écritures de la base (1 000 par jour sur le plan gratuit) est atteint. "
-          + "Il se remet à zéro à minuit UTC (2 h du matin en France). "
+      /* ⚠️ Ce bloc traduisait une erreur de QUOTA CLOUDFLARE KV — « 1 000
+         écritures par jour, remises à zéro à minuit UTC ». Ce quota n'existe
+         plus depuis la version 2.0 : la base est un MariaDB/MySQL sur le
+         serveur du domaine, sans plafond d'écritures. Pire, le motif
+         reconnaissait le mot « limit » n'importe où dans le message : une
+         erreur MariaDB anodine se déguisait en panne de quota, et le panel
+         conseillait d'attendre minuit pour un problème qui n'attend rien.
+         On garde le principe — traduire une erreur illisible — mais pour les
+         causes que CETTE base peut réellement avoir, et que le README nomme
+         déjà (backend/README.md, §2). */
+      if (/max_allowed_packet|ER_NET_PACKET_TOO_LARGE|Row size too large|ER_TOO_BIG_ROWSIZE/i.test(msg)) {
+        return json(env, { error: 'trop_gros', detail:
+          "Le fichier ou le document dépasse ce que la base accepte en une fois. "
+          + "Augmentez max_allowed_packet dans la configuration MariaDB/MySQL "
+          + "(32M met une marge confortable), puis redémarrez la base. "
           + "Message technique : " + msg }, 503);
+      }
+      if (/ECONNREFUSED|ETIMEDOUT|ER_ACCESS_DENIED|ENOTFOUND|PROTOCOL_CONNECTION_LOST/i.test(msg)) {
+        return json(env, { error: 'base_injoignable', detail:
+          "L'API n'arrive pas à joindre la base de données. Vérifiez qu'elle est démarrée "
+          + "et que DB_HOST, DB_PORT, DB_USER, DB_PASSWORD et DB_NAME sont corrects dans "
+          + "backend/.env. Message technique : " + msg }, 503);
       }
       return json(env, { error: 'server_error', detail: msg }, 500);
     }
