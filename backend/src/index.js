@@ -1620,6 +1620,23 @@ const PDF_MAX   = 12 * 1024 * 1024;   // 12 Mo pour un catalogue complet
 const IMG_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
 const EXT_PAR_TYPE = { 'image/jpeg':'.jpg', 'image/png':'.png', 'image/webp':'.webp', 'application/pdf':'.pdf' };
 
+/* Le type RÉEL d'un fichier, lu dans ses premiers octets.
+   ---------------------------------------------------------------------------
+   Le Content-Type annoncé est écrit par l'appelant : n'importe quel script
+   peut déclarer « image/png » et envoyer autre chose. Ce qui part sur le
+   stockage de l'opérateur, et que le service sert ensuite tel quel, doit
+   donc être vérifié sur son contenu. Quatre signatures, celles des quatre
+   types acceptés ; tout le reste rend null et sera refusé. */
+function typeReel(octets) {
+  const b = new Uint8Array(octets);
+  if (b.length >= 4 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return 'image/png';
+  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image/jpeg';
+  if (b.length >= 12 && b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46
+      && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return 'image/webp';
+  if (b.length >= 5 && b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46 && b[4] === 0x2d) return 'application/pdf';
+  return null;
+}
+
 /* POST /api/upload  —  patron uniquement (ou facturesRecues, voir plus bas)
    ---------------------------------------------------------------------------
    Le fichier part sur le service de stockage de l'opérateur FlashbackFA
@@ -1670,6 +1687,15 @@ async function handleUpload(request, env) {
   const buf = await request.arrayBuffer();
   if (!buf.byteLength) return json(env, { error: 'empty' }, 400);
   if (buf.byteLength > plafond) return json(env, { error: 'too_large', max: plafond }, 413);
+
+  /* Le contenu doit être ce qu'il prétend être (voir typeReel). Un PDF
+     annoncé en image, ou un fichier quelconque annoncé en PDF, est refusé
+     avant de partir sur le stockage. */
+  const reel = typeReel(buf);
+  if (reel !== type) {
+    return json(env, { error: 'bad_content', annonce: type, detecte: reel, detail:
+      "Le contenu du fichier ne correspond pas au type annoncé : il n'est pas envoyé." }, 415);
+  }
 
   const id = [...crypto.getRandomValues(new Uint8Array(10))]
     .map(b => b.toString(36).padStart(2, '0')).join('').slice(0, 20);

@@ -143,6 +143,10 @@ function poserEntetesCadre(resNode) {
      définitif en service — pas dans un code qui tourne aussi en local. */
   resNode.setHeader('X-Content-Type-Options', 'nosniff');
   resNode.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  /* Le panel n'utilise ni caméra, ni micro, ni géolocalisation : on le dit
+     au navigateur, qui refusera alors toute demande en ce sens venue d'un
+     script — le nôtre ou un autre. */
+  resNode.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
 }
 
 async function servirStatique(pathname, resNode) {

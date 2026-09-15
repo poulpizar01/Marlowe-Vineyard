@@ -221,7 +221,21 @@ Pour un déploiement réel, il faut :
    d'arrivée, resterait sur le mauvais domaine.
 
 2. **Un superviseur** qui relance le processus s'il plante ou au redémarrage
-   du serveur — [pm2](https://pm2.keymetrics.io/) est le plus simple.
+   du serveur. Le plus court : **`deploy.sh`**, dans ce dossier, qui installe
+   les dépendances, crée un service systemd, le démarre et vérifie que l'API
+   répond :
+
+   ```bash
+   cd backend
+   ./deploy.sh --first     # premier déploiement
+   ./deploy.sh update      # après un git pull ou un changement du .env
+   ```
+
+   Il lit `PORT` et `SITE_URL` dans `.env`, ne suppose rien d'autre, et
+   refuse de continuer si Node est plus ancien que la version 20 ou si `.env`
+   manque. Ce qui suit — pm2, ou un service systemd écrit à la main — est
+   l'équivalent, pour ceux qui préfèrent le faire eux-mêmes.
+   [pm2](https://pm2.keymetrics.io/) est le plus simple des deux.
 
    **Une instance suffit, plusieurs sont possibles.** Jusqu'à la 1.47.0, il
    fallait un seul processus, sans exception : ce qui empêchait deux
@@ -379,16 +393,24 @@ sudo docker compose --env-file backend/.env -f backend/deploy/docker-compose.yml
 **Le même `up -d` est nécessaire après toute modification du `.env`** — même
 sans changement de code. Le `--build` est inutile dans ce cas, mais inoffensif.
 
-### Sans Docker (pm2 ou systemd)
+### Sans Docker (deploy.sh, pm2 ou systemd)
 
 Le processus lit le code et le `.env` au démarrage : il faut le relancer
 après un `git pull` comme après une modification du `.env`.
 
 ```bash
 git pull origin main
-cd backend && npm install          # si package.json a changé
-pm2 restart marlowe-api            # ou : sudo systemctl restart marlowe-api
+cd backend && ./deploy.sh update   # dépendances, redémarrage, vérification de /api/version
 ```
+
+Ou à la main : `npm install` si `package.json` a changé, puis
+`pm2 restart marlowe-api` ou `sudo systemctl restart marlowe-api`.
+
+Les changements de structure de la base s'appliquent tout seuls au
+démarrage : `schema.sql` pour les tables de base, puis les fichiers de
+`migrations/`, une fois chacun, tracés dans la table `migrations` (voir
+`migrations/README.md`). Le journal affiche `[db] migration appliquée : …`
+pour chaque fichier passé.
 
 ### Vérifier que la mise à jour a bien pris
 

@@ -311,6 +311,43 @@ console.log('\n— Le dépôt de fichiers (service de stockage externe) —');
   dit('un type non prévu est refusé (415)', mauvaisType.status === 415, { statut: mauvaisType.status });
 }
 
+console.log('\n— Le contenu du fichier doit être ce qu\'il prétend —');
+{
+  /* Un « PNG » qui commence par les octets d'un JPEG, et un « PDF » qui
+     n'est pas un PDF : le type annoncé est celui de l'appelant, seul le
+     contenu fait foi (typeReel dans src/index.js). */
+  const fauxPng = await appel('/api/upload', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer S-PATRON', 'Content-Type': 'image/png' },
+    body: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]),
+  });
+  const d1 = await fauxPng.json().catch(() => null);
+  dit('un JPEG annoncé comme PNG est refusé (415)', fauxPng.status === 415 && d1 && d1.error === 'bad_content', { statut: fauxPng.status, corps: d1 });
+  const fauxPdf = await appel('/api/upload', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer S-PATRON', 'Content-Type': 'application/pdf' },
+    body: Buffer.from('bonjour, je ne suis pas un PDF'),
+  });
+  dit('un texte annoncé comme PDF est refusé (415)', fauxPdf.status === 415, { statut: fauxPdf.status });
+  const vraiPdf = await appel('/api/upload', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer S-PATRON', 'Content-Type': 'application/pdf' },
+    body: Buffer.from('%PDF-1.4\n%fin'),
+  });
+  dit('un vrai PDF passe', vraiPdf.status === 200, { statut: vraiPdf.status });
+}
+
+console.log('\n— Les migrations sont tracées —');
+{
+  const t = await DB.prepare("SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'migrations'").bind().first();
+  dit('la table migrations existe', Number(t && t.n) === 1, t);
+  const { readdirSync } = await import('node:fs');
+  const fichiers = readdirSync(new URL('./migrations/', import.meta.url)).filter(f => /^\d{4}_.+\.sql$/.test(f));
+  const faites = await DB.prepare('SELECT COUNT(*) AS n FROM migrations').bind().first();
+  dit('chaque fichier de migration est inscrit comme appliqué', Number(faites && faites.n) === fichiers.length,
+      { fichiers: fichiers.length, inscrites: Number(faites && faites.n) });
+}
+
 console.log("\n— L'échange atomique du contrôle de version —");
 {
   /* casValeur() est ce qui arbitre deux enregistrements simultanés de la

@@ -24,7 +24,7 @@
    ============================================================================ */
 
 import mysql from 'mysql2/promise';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -81,6 +81,58 @@ async function appliquerSchema(pool) {
   }
 }
 
+/* Les migrations : un fichier SQL numéroté par changement de structure,
+   appliqué UNE fois, et tracé.
+   ---------------------------------------------------------------------------
+   schema.sql crée les tables de base et se rejoue sans risque. Mais dès
+   qu'il faut modifier une table existante — ajouter une colonne, un index —
+   « CREATE TABLE IF NOT EXISTS » ne fait rien, et rejouer un ALTER à chaque
+   démarrage finit par échouer. D'où ce mécanisme : les fichiers de
+   backend/migrations/ (NNNN_description.sql, voir le README de ce dossier)
+   sont appliqués dans l'ordre, et chaque nom appliqué est inscrit dans la
+   table `migrations`. Au démarrage suivant, seuls les nouveaux passent.
+
+   Une migration doit être écrite pour pouvoir être rejouée (IF NOT EXISTS,
+   IF EXISTS) : MariaDB ne sait pas annuler un ALTER dans une transaction,
+   donc une migration qui échoue à moitié sera relancée au démarrage suivant. */
+const MIGRATIONS_DIR = path.join(__dirname, '..', 'migrations');
+
+async function appliquerMigrations(pool) {
+  await pool.query(
+    'CREATE TABLE IF NOT EXISTS migrations ('
+    + ' nom VARCHAR(191) NOT NULL PRIMARY KEY,'
+    + ' applique_le DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP'
+    + ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4'
+  );
+  let fichiers = [];
+  try {
+    fichiers = readdirSync(MIGRATIONS_DIR).filter(f => /^\d{4}_.+\.sql$/.test(f)).sort();
+  } catch (e) { return []; /* pas de dossier : rien à appliquer */ }
+
+  const [faites] = await pool.query('SELECT nom FROM migrations');
+  const deja = new Set(faites.map(r => r.nom));
+  const appliquees = [];
+  for (const f of fichiers) {
+    if (deja.has(f)) continue;
+    const sql = readFileSync(path.join(MIGRATIONS_DIR, f), 'utf8');
+    const connexion = await pool.getConnection();
+    try {
+      await connexion.beginTransaction();
+      for (const instruction of decouperSchema(sql)) await connexion.query(instruction);
+      await connexion.query('INSERT INTO migrations (nom) VALUES (?)', [f]);
+      await connexion.commit();
+    } catch (e) {
+      await connexion.rollback().catch(() => {});
+      throw new Error(`Migration ${f} : ${e.message}`);
+    } finally {
+      connexion.release();
+    }
+    console.log(`[db] migration appliquée : ${f}`);
+    appliquees.push(f);
+  }
+  return appliquees;
+}
+
 /* Combien de temps une requête attend son tour sur un document avant d'y
    renoncer (voir binding.verrou). Une écriture prend quelques dizaines de
    millisecondes ; quinze secondes, c'est déjà le signe que quelque chose
@@ -115,6 +167,7 @@ export async function creerBase(config) {
      « ECONNREFUSED », qui ne dit rien à quelqu'un qui ne connaît pas MySQL. */
   try {
     await appliquerSchema(pool);
+    await appliquerMigrations(pool);
   } catch (e) {
     throw new Error(
       "Impossible de se connecter à la base ou d'y créer les tables. "

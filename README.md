@@ -53,12 +53,18 @@ Deux autres copies existent encore et prêtent à confusion :
     données existantes (sessions et clés temporaires retirées).
   - `backend/scripts/` — `tests.mjs` (lance les 18 bancs d'essai) et
     `dump-nettoyer.mjs` (nettoie un dump avant de l'ajouter ici).
+  - `backend/deploy.sh` — déploiement sans Docker : `--first` crée le service
+    systemd et vérifie que l'API répond, `update` met à jour.
   - `backend/deploy/` — `docker-compose.yml` et un exemple de reverse proxy.
+  - `backend/migrations/` — les changements de structure de la base,
+    appliqués une fois chacun au démarrage.
 - **`test-*.mjs`** (à la racine et dans `backend/`) — les bancs d'essai,
   lancés d'un coup par `cd backend && npm test`.
 - **`AUDIT.md`, `AUDIT-PASSAGE-2.md`** — deux rapports d'audit datés, écrits
   sur le dépôt de l'équipe d'origine, conservés comme trace.
 - **`Claude outputs/`** — captures d'écran des rendus successifs du site.
+- **`LICENSE`** — code propriétaire : l'accès est réservé aux collaborateurs
+  autorisés, pour ce projet seulement. Aucune réutilisation ailleurs.
 
 ## Déployer ce projet
 

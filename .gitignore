@@ -59,6 +59,9 @@ desktop.ini
 # Les copies temporaires que les bancs d'essai font de src/index.js.
 .essai-*.mjs
 
+# Les réglages locaux de l'assistant de développement, propres à chaque poste.
+/.claude/
+
 # Les copies de sauvegarde laissées par les scripts.
 *.avant-mariadb
 *.bak
