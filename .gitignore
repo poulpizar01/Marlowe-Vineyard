@@ -36,7 +36,10 @@ backend/.env
 export.json
 export*.json
 donnees.sql
+
 *.sql.gz
+
+
 sauvegardes/
 donnees/
 
