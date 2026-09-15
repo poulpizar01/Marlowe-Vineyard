@@ -5,7 +5,7 @@
   "private": true,
   "description": "Backend de connexion Discord du domaine Marlowe Vineyard — Node.js + MariaDB/MySQL",
   "engines": {
-    "node": ">=18.17"
+    "node": ">=20"
   },
   "scripts": {
     "start": "node src/server.js",

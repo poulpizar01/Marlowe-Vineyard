@@ -13,7 +13,8 @@ voir `.env.example`.
 **Aucun secret n'est dans le dépôt.** Le code peut rester public sans risque :
 les clés vivent dans `.env`, qui n'est jamais commité (voir `.gitignore`).
 
-Comptez une vingtaine de minutes pour la première mise en route.
+Comptez une heure pour la première mise en route, une demi-heure quand le
+serveur, la base et les secrets sont déjà sous la main.
 
 ---
 
@@ -51,10 +52,17 @@ Il faut deux choses sur la machine qui hébergera le backend : **Node.js** et
 
 ### Node.js
 
-Version 18.17 ou plus récente (`node -v` pour vérifier). À défaut :
+Version **20 ou plus récente** (`node -v` pour vérifier). À défaut :
 https://nodejs.org, ou via le gestionnaire de paquets de votre distribution.
+(Le code s'appuie sur l'API Web Crypto globale, que Node 18 n'active pas
+sans option ; l'image Docker fournie est en Node 20.)
 
 ### MariaDB ou MySQL
+
+> **Avec le montage Docker fourni, sautez cette étape** : la base est un
+> conteneur MariaDB créé par `deploy/docker-compose.yml`, avec la base
+> `marlowe` et le compte `marlowe` déjà en place (mot de passe :
+> `MARIADB_PASSWORD` dans `.env`).
 
 N'importe lequel des deux convient, y compris une instance déjà existante sur
 le serveur (mutualisée avec d'autres projets). Sur Debian/Ubuntu, par exemple :
@@ -136,7 +144,8 @@ dans `.env.example`.
 ### Le webhook du salon des runners
 
 `DISCORD_WEBHOOK` est l'adresse qui permet au panel de poster les demandes de
-retrait dans le salon Discord. Pour l'obtenir :
+retrait dans le salon Discord. C'est le responsable du domaine qui la crée
+sur son Discord et vous la transmet ; pour mémoire, la marche à suivre :
 
 1. dans Discord, ouvrez le salon des runners ;
 2. **Modifier le salon ▸ Intégrations ▸ Webhooks ▸ Nouveau webhook** ;
@@ -204,14 +213,12 @@ Pour un déploiement réel, il faut :
    faut au préalable qu'un enregistrement DNS de type A — ou CNAME — pour ce
    domaine pointe vers l'adresse IP du serveur.)
 
-   ⚠️ **Un seul domaine, pas deux.** Cet exemple faisait servir
-   un sous-domaine `api.` distinct, hérité du
-   montage Cloudflare d'avant la version 2.0. Il n'existe plus : depuis que
-   `src/server.js` sert le site ET l'API, c'est le MÊME domaine qui répond aux
-   deux, celui de `SITE_URL`. Un sous-domaine `api.` séparé ferait échouer la
-   connexion de deux façons à la fois : l'adresse de retour déclarée à Discord
-   ne correspondrait plus (§1), et le cookie de session — posé sur l'hôte
-   d'arrivée — resterait sur le mauvais domaine.
+   ⚠️ **Un seul domaine, pas deux.** `src/server.js` sert le site ET l'API :
+   c'est le MÊME domaine qui répond aux deux, celui de `SITE_URL`. Ne mettez
+   pas l'API sur un sous-domaine séparé (`api.…`) : la connexion échouerait
+   de deux façons à la fois — l'adresse de retour déclarée à Discord ne
+   correspondrait plus (§1), et le cookie de session, posé sur l'hôte
+   d'arrivée, resterait sur le mauvais domaine.
 
 2. **Un superviseur** qui relance le processus s'il plante ou au redémarrage
    du serveur — [pm2](https://pm2.keymetrics.io/) est le plus simple.
@@ -225,6 +232,8 @@ Pour un déploiement réel, il faut :
    instances branchées sur la même base MariaDB/MySQL. Voir « Plusieurs
    instances » plus bas avant d'en lancer une deuxième.
 
+   Depuis le dossier `backend/` — le `.env` y est lu au démarrage :
+
    ```bash
    npm install -g pm2
    pm2 start src/server.js --name marlowe-api
@@ -232,7 +241,9 @@ Pour un déploiement réel, il faut :
    pm2 startup   # affiche la commande à lancer une fois pour le démarrage automatique
    ```
 
-   Ou un service systemd, si vous préférez :
+   Ou un service systemd, si vous préférez (`User=` doit être un compte
+   existant : créez-le avec `sudo adduser --system --group marlowe`, ou
+   mettez le vôtre) :
 
    ```ini
    # /etc/systemd/system/marlowe-api.service
@@ -278,9 +289,10 @@ qu'il faut savoir :
   rappel d'agenda est posée en une seule instruction : un événement n'est
   jamais annoncé deux fois.
 - **Ce qu'une instance garde en mémoire ne vaut que pour elle** : le cache
-  des rôles Discord (quelques minutes), le cache de présence. Ce sont des
-  caches, pas des données ; rien ne se perd, une instance peut simplement
-  voir un rôle changé un peu plus tard qu'une autre.
+  des rôles Discord (une minute pour les rôles d'un membre, cinq pour la
+  liste des rôles du serveur). Ce sont des caches, pas des données ; rien ne
+  se perd, une instance peut simplement voir un rôle changé un peu plus tard
+  qu'une autre.
 - **Les sessions sont en base**, pas en mémoire : le répartiteur n'a pas
   besoin de coller une personne à une instance.
 - **Une écriture qui attend son tour plus de 15 secondes est refusée**, en
@@ -318,22 +330,19 @@ toutes hors du code :
 2. le **Redirect** OAuth2 sur le portail développeur Discord (§1) ;
 3. l'entrée du reverse proxy.
 
-Rien dans les fichiers du dépôt : le serveur communique `SITE_URL` au panel
-en servant les pages (liste des adresses acceptées de la page de
-diagnostic, balises `og:url` / `og:image` des aperçus de liens). Le port
-est libre de la même façon : `PORT` dans `.env`, et l'entrée du proxy qui
-pointe dessus.
+Rien à changer dans les fichiers du dépôt : aucun domaine ni port n'y est
+écrit. Les pages portent un repère (`https://adresse-du-site`) que le serveur
+remplace par `SITE_URL` en les servant (balises `og:url` / `og:image` des
+aperçus de liens), il communique de même la liste des adresses acceptées au
+panel, et le panel prend pour repli l'adresse par laquelle il a été ouvert.
+Le port est libre de la même façon : `PORT` dans `.env`, et l'entrée du proxy
+qui pointe dessus.
 
 Deux autres adresses se règlent au même endroit, avec une valeur par défaut
 qui convient à l'opérateur FlashbackFA : `FRAME_ANCESTORS` (qui a le droit
 d'afficher le site dans un cadre, l'ordinateur en jeu) et
 `FOLKOS_SCRIPTS_BASE` (l'hôte des scripts clavier et barre d'adresse de ce
 cadre). Voir `.env.example`.
-
-Aucun domaine ni port n'est écrit dans les fichiers du dépôt : les pages
-portent un repère (`https://adresse-du-site`) que le serveur remplace par
-`SITE_URL` en les servant, et le panel prend pour repli l'adresse par laquelle
-il a été ouvert.
 
 ---
 
@@ -369,6 +378,17 @@ sudo docker compose --env-file backend/.env -f backend/deploy/docker-compose.yml
 
 **Le même `up -d` est nécessaire après toute modification du `.env`** — même
 sans changement de code. Le `--build` est inutile dans ce cas, mais inoffensif.
+
+### Sans Docker (pm2 ou systemd)
+
+Le processus lit le code et le `.env` au démarrage : il faut le relancer
+après un `git pull` comme après une modification du `.env`.
+
+```bash
+git pull origin main
+cd backend && npm install          # si package.json a changé
+pm2 restart marlowe-api            # ou : sudo systemctl restart marlowe-api
+```
 
 ### Vérifier que la mise à jour a bien pris
 
@@ -429,8 +449,9 @@ pas.
 ## Ce qu'il faut retenir
 
 **Les rôles sont revérifiés à chaque appel**, pas seulement à la connexion.
-Quelqu'un qui quitte le Discord ou perd un rôle perd l'accès dans la seconde,
-sans avoir à se déconnecter.
+Quelqu'un qui quitte le Discord ou perd un rôle perd l'accès dans la minute
+(les rôles d'un membre sont gardés en cache soixante secondes), sans avoir à
+se déconnecter.
 
 **`OWNER_IDS` est un trousseau de secours.** Les identifiants qui y figurent
 gardent tous les accès quoi qu'il arrive, et personne ne peut les retirer
@@ -499,16 +520,22 @@ cette base**.
 
 **Le dump est dans le dépôt : `backend/marlowe.sql`**, passé par
 `backend/scripts/dump-nettoyer.mjs` (les sessions en cours et les clés
-temporaires en sont retirées ; le registre, les clients, la facturation, les
-réglages, la matrice, le journal et les ventes y sont). Pour le charger dans
-une base fraîchement créée (§2) :
+temporaires en sont retirées ; tout le reste de la base au moment du dump y
+est : documents du panel, réglages, journal, et les ventes lues dans les
+logs). Pour le charger dans une base fraîchement créée (§2) :
 
 ```bash
 mariadb -u marlowe -p marlowe < backend/marlowe.sql
 ```
 
-Pour refaire un dump plus récent depuis la machine actuelle (montage Docker
-de `deploy/docker-compose.yml`, depuis le dossier du dépôt) :
+Avec le montage Docker, la même commande passe par le conteneur de la base :
+
+```bash
+sudo docker exec -i marlowe-db-1 mariadb -u marlowe -p marlowe < backend/marlowe.sql
+```
+
+Pour faire un dump de l'installation en service — sauvegarde, ou passage
+sur une autre machine — avec le montage Docker, depuis le dossier du dépôt :
 
 ```bash
 MDP=$(grep '^DB_PASSWORD=' backend/.env | cut -d= -f2-)
@@ -535,11 +562,13 @@ mariadb -u marlowe -p marlowe < marlowe-AAAA-MM-JJ.sql
   contient que leurs adresses. Il faut donc reprendre le même
   `STORAGE_TOKEN` — ou, en changeant de stockage, redéposer chaque fichier
   et réécrire ses adresses dans `data`.
-- **Tout le monde se reconnecte une fois** : les sessions (`sess:…` dans
-  `kv`) sont liées au cookie posé sur l'ancien domaine.
-- **Le fichier du dump contient tout le registre du personnel** (identités,
-  téléphones, RIB). Il ne doit jamais approcher ce dépôt — `.gitignore`
-  refuse `*.sql` sous plusieurs noms, mais un `git add -f` passe outre.
+- **Tout le monde se reconnecte une fois** après un changement d'adresse :
+  le cookie de session est lié à l'ancien hôte.
+- **Un dump brut contient les sessions en cours**, qui sont des jetons
+  d'accès valables sept jours, et le registre du personnel. Avant d'en
+  ajouter un au dépôt, passez-le par `backend/scripts/dump-nettoyer.mjs`,
+  qui retire les sessions et les clés temporaires ; le reste est publié en
+  connaissance de cause, le dépôt étant public.
 
 ---
 
