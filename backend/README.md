@@ -499,10 +499,20 @@ ailleurs. Tout ce que le panel a enregistré — registre RH, clients,
 facturation, réglages, matrice des accès, journal, ventes lues dans les logs —
 vit dans les deux tables `kv` et `ventes` de la base MariaDB de
 l'installation actuelle. Pour reprendre l'existant, il faut **un dump de
-cette base**, transmis par la personne qui administre la machine actuelle.
+cette base**.
 
-Sur la machine actuelle (montage Docker de `deploy/docker-compose.yml`,
-depuis le dossier du dépôt) :
+**Le dump est dans le dépôt : `backend/marlowe.sql`**, passé par
+`backend/scripts/dump-nettoyer.mjs` (les sessions en cours et les clés
+temporaires en sont retirées ; le registre, les clients, la facturation, les
+réglages, la matrice, le journal et les ventes y sont). Pour le charger dans
+une base fraîchement créée (§2) :
+
+```bash
+mariadb -u marlowe -p marlowe < backend/marlowe.sql
+```
+
+Pour refaire un dump plus récent depuis la machine actuelle (montage Docker
+de `deploy/docker-compose.yml`, depuis le dossier du dépôt) :
 
 ```bash
 MDP=$(grep '^DB_PASSWORD=' backend/.env | cut -d= -f2-)
