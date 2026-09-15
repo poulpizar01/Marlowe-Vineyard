@@ -26,13 +26,14 @@ Sur https://discord.com/developers/applications
    Ce secret ne s'affiche qu'une fois.
 3. Toujours dans **OAuth2** → **Redirects** → **Add Redirect** :
    ```
-   https://marlowe-vineyard.fbfa.fr/api/callback
+   https://<adresse du site>/api/callback      par exemple https://panel.mon-domaine.fr/api/callback
    ```
    *C'est **l'adresse du site lui-même**, suivie de `/api/callback` — celle qui
-   est dans `SITE_URL`. Depuis la version 2.0, le site et l'API vivent sur le
+   est dans `SITE_URL`, quelle qu'elle soit : l'hébergeur ou vous la
+   choisissez, rien dans le code ne la suppose. Depuis la version 2.0, le site et l'API vivent sur le
    même domaine : `src/server.js` sert les deux, il n'y a plus de sous-domaine
    `api.` séparé (cette page indiquait auparavant
-   `https://api.marlowe-vineyard.fbfa.fr/api/callback`, hérité du montage
+   un sous-domaine `api.` séparé, hérité du montage
    Cloudflare — une adresse que rien ne sert plus aujourd'hui, et Discord
    refuse la connexion tant que la bonne n'est pas déclarée).*
 
@@ -156,12 +157,20 @@ signale simplement qu'il n'est pas configuré.
 
 ## 4. Lancer le serveur
 
+**Le port est libre.** C'est `PORT` dans `.env` — celui que vous choisissez,
+ou celui que l'hébergeur vous impose — et aucun autre fichier ne le suppose :
+8787 n'est que la valeur par défaut des exemples ci-dessous. La seule chose
+qui doit le connaître, c'est l'entrée de votre reverse proxy. La base a son
+propre port, `DB_PORT`, et en Docker elle n'est pas publiée du tout.
+
 > **Avec Docker ?** `backend/deploy/docker-compose.yml` fait tourner l'app et
 > MariaDB dans deux conteneurs, chacun dans sa propre boîte, et publie l'API
-> sur `127.0.0.1:8787` de la machine — il ne reste qu'à mettre votre reverse
-> proxy devant (point 1 ci-dessous, `deploy/Caddyfile.snippet` en donne un
-> exemple). La suite de cette section décrit le montage sans Docker ; les
-> deux fonctionnent sur n'importe quel hébergeur.
+> sur `127.0.0.1` de la machine, au port `PORT` de votre `.env` (lancez
+> compose avec `--env-file backend/.env`, comme dans les commandes plus bas)
+> — il ne reste qu'à mettre votre reverse proxy devant (point 1 ci-dessous,
+> `deploy/Caddyfile.snippet` en donne un exemple). La suite de cette section
+> décrit le montage sans Docker ; les deux fonctionnent sur n'importe quel
+> hébergeur.
 
 Pour tester en local :
 
@@ -177,8 +186,8 @@ machine elle-même, donc par le reverse proxy décrit ci-dessous, jamais
 directement depuis Internet. `HOST=0.0.0.0` dans `.env` l'ouvre à toutes
 les interfaces — à ne faire que si le proxy tourne sur une autre machine, et
 alors c'est au pare-feu de fermer le port. (Dans Docker, le
-`docker-compose.yml` règle `HOST` tout seul, et ne publie aucun port sur
-la machine : c'est le proxy, sur le réseau Docker, qui joint le conteneur.)
+`docker-compose.yml` règle `HOST` tout seul et publie le port `PORT` sur
+`127.0.0.1` de la machine, jamais sur les autres interfaces.)
 
 Pour un déploiement réel, il faut :
 
@@ -190,8 +199,8 @@ Pour un déploiement réel, il faut :
    mauvaise adresse. Exemple minimal avec Caddy :
 
    ```
-   marlowe-vineyard.fbfa.fr {
-     reverse_proxy localhost:8787
+   votre-domaine.fr {
+     reverse_proxy localhost:8787      # 8787 → la valeur de PORT dans .env
    }
    ```
 
@@ -200,7 +209,7 @@ Pour un déploiement réel, il faut :
    domaine pointe vers l'adresse IP du serveur.)
 
    ⚠️ **Un seul domaine, pas deux.** Cet exemple faisait servir
-   `api.marlowe-vineyard.fbfa.fr` — un sous-domaine `api.` distinct, hérité du
+   un sous-domaine `api.` distinct, hérité du
    montage Cloudflare d'avant la version 2.0. Il n'existe plus : depuis que
    `src/server.js` sert le site ET l'API, c'est le MÊME domaine qui répond aux
    deux, celui de `SITE_URL`. Un sous-domaine `api.` séparé ferait échouer la
@@ -325,16 +334,10 @@ d'afficher le site dans un cadre, l'ordinateur en jeu) et
 `FOLKOS_SCRIPTS_BASE` (l'hôte des scripts clavier et barre d'adresse de ce
 cadre). Voir `.env.example`.
 
-Facultatif : pour que les valeurs de repli écrites dans le dépôt suivent
-elles aussi (utiles seulement si le panel est ouvert sans ce serveur), une
-commande les met à jour :
-
-```bash
-node scripts/changer-adresse.mjs https://nouvelle.adresse.fr            # pour de bon
-node scripts/changer-adresse.mjs https://nouvelle.adresse.fr --essai    # montre sans écrire
-```
-
-Elle ne touche jamais `.env`, et rappelle en sortie ce qui reste à faire.
+Aucun domaine ni port n'est écrit dans les fichiers du dépôt : les pages
+portent un repère (`https://adresse-du-site`) que le serveur remplace par
+`SITE_URL` en les servant, et le panel prend pour repli l'adresse par laquelle
+il a été ouvert.
 
 ---
 
@@ -363,9 +366,9 @@ git pull origin main
 
 # RECONSTRUIT l'image avec le nouveau code, puis remplace le conteneur.
 # C'est « up -d --build », jamais « restart ».
-sudo docker compose -f backend/deploy/docker-compose.yml up -d --build marlowe-app
+sudo docker compose --env-file backend/.env -f backend/deploy/docker-compose.yml up -d --build marlowe-app
 
-sudo docker compose -f backend/deploy/docker-compose.yml logs --tail=30 marlowe-app
+sudo docker compose --env-file backend/.env -f backend/deploy/docker-compose.yml logs --tail=30 marlowe-app
 ```
 
 **Le même `up -d` est nécessaire après toute modification du `.env`** — même
@@ -393,8 +396,8 @@ backend (par opposition à l'ancienne version Cloudflare), pas un numéro.
 
 ## Vérifier que ça marche
 
-Ouvrez `<adresse du site>/api/me` dans un navigateur — aujourd'hui
-`https://marlowe-vineyard.fbfa.fr/api/me` (voir SITE_URL dans `.env`).
+Ouvrez `<adresse du site>/api/me` dans un navigateur (l'adresse est celle
+de SITE_URL dans `.env`).
 La réponse attendue est `{"error":"unauthorized"}` — c'est **normal et bon signe** :
 le serveur répond, et il refuse une requête sans session.
 

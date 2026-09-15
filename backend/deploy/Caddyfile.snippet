@@ -6,11 +6,11 @@
 # 8787 par le port choisi (PORT dans .env, ou « ports: » du docker-compose).
 
 # MARLOWE VINEYARD
-http://marlowe-vineyard.fbfa.fr {
+http://votre-domaine.fr {
 	redir https://{host}{uri} permanent
 }
 
-marlowe-vineyard.fbfa.fr {
+votre-domaine.fr {
 	encode zstd gzip
 
 	# Aucun dossier de service ne doit sortir. Le serveur applicatif a déjà
@@ -39,6 +39,5 @@ marlowe-vineyard.fbfa.fr {
 #   · SITE_URLS dans backend/.env      (sans quoi les enregistrements sont
 #                                       refusés, et le cookie de session est
 #                                       perdu à la connexion) ;
-#   · la liste des adresses du site   (node backend/scripts/changer-adresse.mjs).
 # Et pensez au Redirect OAuth2 côté Discord, qui doit correspondre à SITE_URL.
 # ---------------------------------------------------------------------------

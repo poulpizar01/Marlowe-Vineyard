@@ -9,10 +9,8 @@
    Une chaîne VIDE veut dire « la même origine que la page » : c'est le bon
    réglage depuis que backend/src/server.js sert le site ET l'API sur le même
    conteneur, le même domaine. CORS disparaît entièrement, et l'adresse reste
-   correcte
-   quelle que soit l'adresse du jour — celle du domaine, ou
-   marlowe-vineyard.fbfa.fr le jour où l'opérateur FlashbackFA y pointera le
-   DNS — rien à changer ici pour cette bascule-là.
+   correcte quelle que soit l'adresse du jour : un changement de domaine ne
+   demande rien ici.
 
    Ce fichier est la seule source. S'il fallait un jour séparer à nouveau le
    site et l'API sur deux domaines, c'est la seule ligne à modifier — et il

@@ -5559,11 +5559,9 @@ window.onload = function(){
      diagnostic et un message d'erreur — la vraie décision est prise côté
      serveur (exigerOrigine dans backend/src/index.js).
 
-     La liste écrite en dur ci-dessous n'est qu'un repli, pour un panel
-     ouvert sans ce serveur (copie statique, fichier local). */
-  const SITE_ATTENDUES_DEFAUT = [
-    'https://marlowe-vineyard.fbfa.fr',
-  ];
+     Sans ce serveur (copie statique, fichier local), le repli est l'adresse
+     par laquelle la page a été ouverte — aucun domaine n'est écrit ici. */
+  const SITE_ATTENDUES_DEFAUT = /^https?:$/.test(location.protocol) ? [location.origin] : [];
   const SITE_ATTENDUES = (Array.isArray(window.MARLOWE_SITES) && window.MARLOWE_SITES.length)
     ? window.MARLOWE_SITES.slice() : SITE_ATTENDUES_DEFAUT;
   const SITE_ATTENDU = SITE_ATTENDUES[0];

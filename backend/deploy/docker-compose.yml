@@ -1,11 +1,15 @@
 # backend/deploy/docker-compose.yml
 # Lancer depuis le dossier du dépôt :
-#     sudo docker compose -f backend/deploy/docker-compose.yml up -d --build
+#     sudo docker compose --env-file backend/.env -f backend/deploy/docker-compose.yml up -d --build
+#
+# « --env-file backend/.env » sert à UNE chose : lire PORT pour choisir le
+# port publié sur la machine (voir « ports: » plus bas). Sans lui, c'est 8787.
 #
 # Deux conteneurs : l'app (site + API, voir backend/Dockerfile) et sa base
 # MariaDB, chacun dans sa boîte. Le port de l'API n'est publié que sur
-# 127.0.0.1 de la machine : c'est votre reverse proxy (Caddy, nginx…) qui
-# porte le HTTPS devant — voir deploy/Caddyfile.snippet et backend/README.md §4.
+# 127.0.0.1 de la machine, et la base n'est pas publiée du tout : c'est votre
+# reverse proxy (Caddy, nginx…) qui porte le HTTPS devant — voir
+# deploy/Caddyfile.snippet et backend/README.md §4.
 #
 # UNE INSTANCE SUFFIT — PLUSIEURS SONT POSSIBLES DEPUIS LA 1.48.0
 # ----------------------------------------------------------------------------
@@ -40,17 +44,19 @@ services:
       DB_PORT: "3306"
       DB_NAME: marlowe
       DB_USER: marlowe
-      # Dans le conteneur, l'API écoute toujours sur 8787 et sur toutes les
-      # interfaces du conteneur : le proxy y arrive par le réseau Docker, pas
-      # par 127.0.0.1. Ces deux valeurs priment sur PORT/HOST laissés dans
-      # ../.env — le port côté MACHINE se choisit dans « ports: » ci-dessous.
+      # À L'INTÉRIEUR du conteneur, l'API écoute toujours sur 8787 et sur
+      # toutes les interfaces du conteneur : le proxy y arrive par le réseau
+      # Docker, pas par 127.0.0.1. Ces deux valeurs priment sur PORT/HOST de
+      # ../.env — le port côté MACHINE, lui, se règle juste en dessous.
       PORT: "8787"
       HOST: "0.0.0.0"
     ports:
-      # <port sur la machine>:<port dans le conteneur>. Publié sur 127.0.0.1
-      # SEULEMENT : l'API n'est jamais joignable depuis Internet sans passer
-      # par votre reverse proxy. Changez le premier nombre si 8787 est pris.
-      - "127.0.0.1:8787:8787"
+      # <port sur la machine>:<port dans le conteneur>. Le port sur la machine
+      # est PORT de backend/.env (celui que vous ou l'hébergeur avez choisi),
+      # à condition de lancer compose avec « --env-file backend/.env » ; sinon
+      # 8787. Publié sur 127.0.0.1 SEULEMENT : l'API n'est jamais joignable
+      # depuis Internet sans passer par votre reverse proxy.
+      - "127.0.0.1:${PORT:-8787}:8787"
     depends_on:
       marlowe-db:
         condition: service_healthy
