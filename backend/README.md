@@ -131,20 +131,41 @@ npm install
 cp .env.example .env
 ```
 
-Ouvrez `.env` et remplissez au minimum :
+Ouvrez `.env` et remplissez. Chaque variable est commentée dans le fichier ;
+voici qui fournit quoi.
 
-| Variable | Valeur |
-|---|---|
-| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | les identifiants de la base créée à l'étape 2 |
-| `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `DISCORD_BOT_TOKEN` | récupérés à l'étape 1 |
-| `DISCORD_GUILD_ID` | l'identifiant du serveur Discord |
-| `SITE_URL` | l'adresse du site, sans slash final |
-| `PATRON_ROLES` | les rôles ayant tous les droits, séparés par des virgules |
-| `OWNER_IDS` | les identifiants Discord ayant un accès permanent |
+**Obligatoire — le serveur le signale au démarrage si l'une manque**
 
-Toutes les autres variables (rôles, salons, FolkOS…) sont commentées dans
-`.env.example` — reprenez les valeurs déjà en place si vous migrez depuis la
-version Cloudflare, elles n'ont pas changé.
+| Variable | Valeur | Qui la fournit |
+|---|---|---|
+| `PORT` | le port d'écoute, 8787 par défaut | la personne qui déploie, ou l'hébergeur |
+| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | la base créée à l'étape 2 | la personne qui déploie |
+| `MARIADB_PASSWORD` | le même mot de passe, **seulement** pour le montage Docker | la personne qui déploie |
+| `SITE_URL` | l'adresse du site en https, sans slash final | la personne qui déploie, ou l'hébergeur |
+| `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `DISCORD_BOT_TOKEN`, `DISCORD_GUILD_ID` | l'application Discord de l'étape 1 | **le responsable du domaine**, en privé |
+| `STORAGE_TOKEN` | le jeton du stockage de l'opérateur (images et PDF) | **le responsable du domaine**, en privé |
+| `OWNER_IDS` | l'identifiant Discord d'au moins une personne, accès de secours | le responsable du domaine |
+
+**Selon ce que le domaine utilise — vide, la fonction est simplement inactive**
+
+| Variable | Sert à | Qui la fournit |
+|---|---|---|
+| `DISCORD_LOGS_CHANNEL` | lire les ventes dans le salon des logs (quotas) | le responsable du domaine |
+| `DISCORD_WEBHOOK`, `DISCORD_RUNNER_ROLE`, `DISCORD_DISPO_ROLE` | le bouton « Je suis disponible » et les demandes de retrait | le responsable du domaine |
+| `DISCORD_AGENDA_CHANNEL`, `DISCORD_AGENDA_ROLES` | les rappels d'agenda | le responsable du domaine |
+| `DISCORD_ABSENCE_CHANNEL` | annoncer une absence déclarée | le responsable du domaine |
+| `DISCORD_TICKET_CATEGORIES` | le rappel de permis dans les tickets | le responsable du domaine |
+| `PATRON_ROLES` | les rôles Discord qui ont tous les droits | le responsable du domaine |
+| `FOLKOS_ID_BASE`, `FOLKOS_CLIENT_ID`, `FOLKOS_CLIENT_SECRET` | la connexion depuis le jeu | l'opérateur du jeu |
+
+Les identifiants de salons et de rôles se lisent dans Discord, mode
+développeur activé, clic droit sur le salon ou le rôle ▸ **Copier
+l'identifiant**. Le responsable du domaine peut les transmettre en même temps
+que les secrets.
+
+**À laisser tels quels, sauf cas particulier** : `HOST`, `SITE_URLS`,
+`FRAME_ANCESTORS`, `FOLKOS_SCRIPTS_BASE`, `STORAGE_BASE`. Chacun est expliqué
+dans `.env.example`.
 
 ### Le webhook du salon des runners
 
