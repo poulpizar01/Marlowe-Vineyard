@@ -4,18 +4,28 @@ Le site du domaine viticole Marlowe Vineyard (FlashbackFA, San Andreas) : la
 vitrine publique et l'espace membre (RH, quotas, facturation, agenda…) du
 domaine.
 
+## Pour la personne qui déploie
+
+**Tout est ici, et seulement ici.** Le site, l'API, le schéma de la base,
+la base elle-même (`backend/marlowe.sql`), les tests et la marche à suivre.
+Commencez par **[backend/README.md](backend/README.md)** : il se lit de haut
+en bas, comptez une heure la première fois. Il ne vous manquera que ce qui
+ne peut pas être dans un dépôt public — les identifiants de l'application
+Discord et le jeton du stockage —, que le responsable du domaine vous
+transmet en privé (backend/README.md, §3, dit qui fournit quoi).
+
 ## Quel dépôt fait foi
 
 **Celui-ci — `poulpizar01/Marlowe-Vineyard`.** C'est le code que ces
 README décrivent et que les bancs d'essai éprouvent.
 
-Deux autres copies existent et prêtent à confusion :
+Deux autres copies existent encore et prêtent à confusion :
 
-- **`Poloveni/Marlow-Vineyard`**, le dépôt de l'équipe d'origine, d'où vient
-  l'installation qui tourne sur `marlowvineyard.duckdns.org`. Les deux
-  rapports d'audit à la racine (`AUDIT.md`, `AUDIT-PASSAGE-2.md`) ont été
-  écrits sur lui et citent ses commits. Il n'est pas suivi ici : une
-  correction faite là-bas n'arrive pas ici toute seule.
+- **`Poloveni/Marlow-Vineyard`**, l'ancien dépôt de travail, sur lequel les
+  deux rapports d'audit à la racine (`AUDIT.md`, `AUDIT-PASSAGE-2.md`) ont
+  été écrits. Il n'est plus suivi. L'installation qui en était issue
+  (`marlowvineyard.duckdns.org`) est arrêtée et son adresse supprimée ; sa
+  base est le dump `backend/marlowe.sql` de ce dépôt.
 - **L'ancien GitHub Pages** (`poulpizar01.github.io/Marlowe-Vineyard`), qui
   sert encore une copie statique du site d'avant la version Node.js. Il ne
   parle à aucune API et n'est plus mis à jour ; à désactiver dans les
