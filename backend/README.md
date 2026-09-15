@@ -17,64 +17,30 @@ Comptez une vingtaine de minutes pour la première mise en route.
 
 ---
 
-## 1. Créer l'application Discord
+## 1. L'application Discord — rien à faire ici
 
-**Qui fait quoi.** L'application Discord et son bot appartiennent au
-responsable du domaine, pas à l'hébergeur : c'est lui qui les crée sur son
-compte Discord, invite le bot sur le serveur du domaine, et garde la main
-dessus. L'hébergeur n'a **rien** à faire dans cette section : il reçoit les
-quatre valeurs qui en sortent (identifiant d'application, secret, jeton du
-bot, identifiant du serveur) et les copie dans `.env` à l'étape 3. Il n'a
-pas non plus à installer ou faire tourner un bot : le backend parle à
-Discord lui-même, avec le jeton.
+L'application Discord et son bot appartiennent au responsable du domaine :
+ils existent déjà, sur son compte, et il garde la main dessus. Le backend
+n'a besoin d'aucun bot à installer ou à faire tourner : il parle à Discord
+lui-même, avec le jeton.
 
-Sur https://discord.com/developers/applications
+Ce que vous recevez de lui, en privé, à copier dans  à l'étape 3 :
 
-1. **New Application** → nom : `Marlowe Vineyard`.
-2. Onglet **OAuth2** → notez le **Client ID**, puis **Reset Secret** et notez le **Client Secret**.
-   Ce secret ne s'affiche qu'une fois.
-3. Toujours dans **OAuth2** → **Redirects** → **Add Redirect** :
-   ```
-   https://<adresse du site>/api/callback      par exemple https://panel.mon-domaine.fr/api/callback
-   ```
-   *C'est **l'adresse du site lui-même**, suivie de `/api/callback` — celle qui
-   est dans `SITE_URL`, quelle qu'elle soit : l'hébergeur ou vous la
-   choisissez, rien dans le code ne la suppose. Depuis la version 2.0, le site et l'API vivent sur le
-   même domaine : `src/server.js` sert les deux, il n'y a plus de sous-domaine
-   `api.` séparé (cette page indiquait auparavant
-   un sous-domaine `api.` séparé, hérité du montage
-   Cloudflare — une adresse que rien ne sert plus aujourd'hui, et Discord
-   refuse la connexion tant que la bonne n'est pas déclarée).*
+| Valeur | Variable |
+|---|---|
+| l'identifiant de l'application |  |
+| le secret de l'application |  |
+| le jeton du bot |  |
+| l'identifiant du serveur Discord |  |
 
-   *La règle, si le domaine change : le serveur construit lui-même l'adresse de
-   retour à partir du domaine par lequel le navigateur est arrivé. Ce qui doit
-   figurer ici, c'est donc exactement l'adresse que les gens tapent, suivie de
-   `/api/callback` — et il faut la corriger ici EN MÊME TEMPS que `SITE_URL`.
-   C'est l'oubli le plus fréquent.*
-4. Onglet **Bot** → **Add Bot** → **Reset Token** et notez le **token du bot**.
-5. Toujours onglet **Bot** → activez **Message Content Intent**. Sans elle,
-   la lecture des logs de vente reçoit des embeds vides, sans erreur visible.
-
-### Inviter le bot sur le serveur
-
-Le bot n'a besoin d'aucune permission particulière : il doit simplement être
-présent sur le serveur pour pouvoir lire la liste des rôles et vérifier qui en
-est membre (et, s'il a le droit d'écrire dans les salons concernés, poster les
-rappels d'agenda).
-
-Ouvrez cette adresse en remplaçant `VOTRE_CLIENT_ID` :
-
-```
-https://discord.com/oauth2/authorize?client_id=VOTRE_CLIENT_ID&scope=bot&permissions=0
-```
-
-### Récupérer les identifiants
-
-Dans Discord : **Paramètres ▸ Avancés ▸ Mode développeur** (à activer).
-Ensuite, clic droit ▸ **Copier l'identifiant** :
-
-- sur le **nom du serveur** → `DISCORD_GUILD_ID`
-- sur **votre pseudo** → votre identifiant, pour `OWNER_IDS`
+Ce que vous lui donnez en retour, **avant** le premier essai de connexion :
+**l'adresse du site**, celle de . Il doit la déclarer dans le
+portail développeur Discord (OAuth2 ▸ Redirects) sous la forme
+. Tant que ce n'est pas fait, Discord
+refuse la connexion. Le serveur construit cette adresse de retour à partir
+du domaine par lequel le navigateur arrive : ce qui est déclaré chez Discord
+doit être exactement l'adresse que les gens tapent, suivie de
+.
 
 ---
 
@@ -244,7 +210,7 @@ Pour un déploiement réel, il faut :
    `src/server.js` sert le site ET l'API, c'est le MÊME domaine qui répond aux
    deux, celui de `SITE_URL`. Un sous-domaine `api.` séparé ferait échouer la
    connexion de deux façons à la fois : l'adresse de retour déclarée à Discord
-   ne correspondrait plus (§1.3), et le cookie de session — posé sur l'hôte
+   ne correspondrait plus (§1), et le cookie de session — posé sur l'hôte
    d'arrivée — resterait sur le mauvais domaine.
 
 2. **Un superviseur** qui relance le processus s'il plante ou au redémarrage
@@ -290,7 +256,7 @@ Pour un déploiement réel, il faut :
    sudo systemctl enable --now marlowe-api
    ```
 
-**Retournez ensuite sur le portail Discord** (étape 1.3) et vérifiez que
+**Retournez ensuite sur le portail Discord** (§1) et vérifiez que
 l'adresse collée dans les **Redirects** correspond bien à votre domaine réel
 suivi de `/api/callback`.
 
@@ -349,7 +315,7 @@ lequel la requête est arrivée. Changer de domaine demande donc trois choses,
 toutes hors du code :
 
 1. `SITE_URL` (et `SITE_URLS` le temps d'une bascule) dans `.env` ;
-2. le **Redirect** OAuth2 sur le portail développeur Discord (§1.3) ;
+2. le **Redirect** OAuth2 sur le portail développeur Discord (§1) ;
 3. l'entrée du reverse proxy.
 
 Rien dans les fichiers du dépôt : le serveur communique `SITE_URL` au panel
