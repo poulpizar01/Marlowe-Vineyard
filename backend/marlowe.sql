@@ -69,11 +69,6 @@ INSERT INTO `kv` VALUES
 ('datameta','{\"rev\":1,\"by\":\"Erwan Valmora\",\"at\":\"2026-09-12T04:37:12.860Z\",\"keys\":[\"comRunner\"]}',NULL),
 ('journal','[{\"at\":\"2026-09-12T04:37:12.862Z\",\"by\":\"Erwan Valmora\",\"id\":\"356404251905228802\",\"texte\":\"s\'est annoncé disponible\",\"keys\":[\"comRunner\"]}]',NULL),
 ('logs:apres','1549430013726564395',NULL),
-('logs:etat','{\"at\":\"2026-09-15T15:12:00.497Z\",\"lus\":0,\"gardees\":0,\"ecartees\":0,\"dernier\":\"1549430013726564395\",\"erreur\":null}',NULL),
-('sess:4229f3c2-3a5f-4dee-9f0e-d2bc9ef8323e','{\"id\":\"826526979204841482\",\"name\":\"Diego\",\"avatar\":\"https://cdn.discordapp.com/avatars/826526979204841482/2e05d6308ec2d6fe2658a6f674b2c8eb.png?size=64\"}',1789975763813),
-('sess:78aec1aa-225f-4bce-9730-6b89cbf353f5','{\"id\":\"356404251905228802\",\"name\":\"Erwan Valmora\",\"avatar\":\"https://cdn.discordapp.com/avatars/356404251905228802/166458b5d2298401b08a67de22bd40d3.png?size=64\"}',1789772301230),
-('sess:a896379d-929f-4995-993e-3e0fb77d1be5','{\"id\":\"186397473374208000\",\"name\":\"Poulpizar\",\"avatar\":\"https://cdn.discordapp.com/avatars/186397473374208000/f40c1ce4d6fa80a5be588d5a4f1d3ab4.png?size=64\"}',1789668110957),
-('sess:d6c62c59-a02a-44d6-ab02-604faf956997','{\"id\":\"826526979204841482\",\"name\":\"Diego\",\"avatar\":\"https://cdn.discordapp.com/avatars/826526979204841482/2e05d6308ec2d6fe2658a6f674b2c8eb.png?size=64\"}',1789999669050),
 ('settings','{\"visibleRoles\":[\"👑・Patron\",\"👑・Co Patron\",\"⚜️ ▬▬▬▬▬  Responsable  ▬▬▬▬▬ ⚜️\",\"⚜️・DRH\",\"🎉・responsable événementiel\",\"🤝・Responsable Commercial\",\"👑・Directeur Des Responsables-Runners\",\"🚛・Responsable Runner\",\"🛒・Responsable Magasin\",\"📞・Responsable Communication\",\"🛒・Assistant(e) magasin\",\"🤝・Commercial\",\"🛒・Vendeur\",\"🍾・Chef de Culture\",\"🍷・Ouvrier Viticole\",\"🍇・Saisonnier\"],\"dispoRoles\":[\"👑・Patron\",\"👑・Co Patron\",\"⚜️・DRH\",\"🤝・Responsable Commercial\",\"👑・Directeur Des Responsables-Runners\",\"🚛・Responsable Runner\",\"🛒・Responsable Magasin\",\"📞・Responsable Communication\",\"🛒・Assistant(e) magasin\"]}',NULL);
 /*!40000 ALTER TABLE `kv` ENABLE KEYS */;
 UNLOCK TABLES;

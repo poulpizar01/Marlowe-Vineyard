@@ -67,18 +67,46 @@ function cleDe(ligne) {
 
 let gardees = 0;
 const retirees = [], toutes = [];
-const lignes = sql.split('\n').map(l => {
-  const m = l.match(/^INSERT INTO `kv` VALUES (.*);\r?$/);
-  if (!m) return l;
+
+/* Filtre le contenu « (…),(…),(…) » d'un INSERT de kv et rend l'instruction
+   à écrire à la place, ou un commentaire s'il ne reste rien. */
+function filtrer(valeurs) {
   const conservees = [];
-  for (const ligne of lignesDe(m[1])) {
+  for (const ligne of lignesDe(valeurs)) {
     const cle = cleDe(ligne);
     toutes.push({ cle, octets: ligne.length });
     if (cle !== null && estTemporaire(cle)) retirees.push(cle);
     else { conservees.push(ligne); gardees++; }
   }
-  return conservees.length ? 'INSERT INTO `kv` VALUES ' + conservees.join(',') + ';' : '-- (lignes temporaires retirées par dump-nettoyer.mjs)';
-});
+  return conservees.length
+    ? 'INSERT INTO `kv` VALUES\n' + conservees.join(',\n') + ';'
+    : '-- (lignes temporaires retirées par dump-nettoyer.mjs)';
+}
+
+/* Deux mises en forme existent selon la version de mariadb-dump :
+     · tout sur une ligne :  INSERT INTO `kv` VALUES (…),(…);
+     · une ligne par enregistrement (MariaDB 10.11 et suivants) :
+           INSERT INTO `kv` VALUES
+           (…),
+           (…);
+   On accepte les deux. */
+const source = sql.split('\n').map(l => l.replace(/\r$/, ''));
+const lignes = [];
+for (let i = 0; i < source.length; i++) {
+  const l = source[i];
+  const uneLigne = l.match(/^INSERT INTO `kv` VALUES (.*);$/);
+  if (uneLigne) { lignes.push(filtrer(uneLigne[1])); continue; }
+  if (/^INSERT INTO `kv` VALUES\s*$/.test(l)) {
+    const bloc = [];
+    while (++i < source.length) {
+      bloc.push(source[i]);
+      if (/;\s*$/.test(source[i])) break;
+    }
+    lignes.push(filtrer(bloc.join('\n').replace(/;\s*$/, '')));
+    continue;
+  }
+  lignes.push(l);
+}
 
 if (lister) {
   console.log('Clés de kv dans le dump :');
