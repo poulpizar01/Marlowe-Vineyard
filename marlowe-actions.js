@@ -3423,7 +3423,7 @@ window.onload = function(){
   /* Les anciens employés — ceux qui ont démissionné.
      -------------------------------------------------------------------------
      Un départ RETIRE la fiche du registre : plus rien ne rattache leurs
-     ventes, et le Worker les range parmi les lignes « non rattachées » de
+     ventes, et le serveur les range parmi les lignes « non rattachées » de
      Quota en direct. Leur production de la semaine appartient pourtant au
      domaine et doit être déclarée. Elle entre donc d'office dans le bilan,
      sans qu'il y ait rien à cliquer — mais avec la production SEULE : ni
@@ -3455,7 +3455,7 @@ window.onload = function(){
 
   async function chargerQuotaSemaine() {
     if (typeof bcRows === 'undefined') return;
-    /* En démo il n'y a pas de Worker : on prend le même jeu que la page
+    /* En démo il n'y a pas de serveur : on prend le même jeu que la page
        Quota, pour que la mention « hors registre » se voie. */
     if (estDemo()) {
       const d = qdDemo();
@@ -3467,7 +3467,7 @@ window.onload = function(){
     const A = window.MarloweAuth;
     if (!A || !A.apiBrut) return;
     const r = await A.apiBrut(`/api/quota?du=${qdLundi(0)}&au=${Date.now()}`);
-    /* Un Worker muet ne doit rien vider : on garde ce qu'on avait. */
+    /* Un serveur muet ne doit rien vider : on garde ce qu'on avait. */
     if (!r || !r.ok || !r.data || !Array.isArray(r.data.orphelines)) return;
     bcOrphelins = r.data.orphelines;
     qdVinsSemaine = new Map((r.data.rattachees || [])
@@ -5405,7 +5405,7 @@ window.onload = function(){
     refreshWeekHeaders();
     renderEligibilite();
     renderBilan();
-    /* Les ventes des partants arrivent du Worker, donc après coup : le bilan
+    /* Les ventes des partants arrivent du serveur, donc après coup : le bilan
        se redessine tout seul quand elles tombent. */
     chargerQuotaSemaine();
     renderWeekHistory();
@@ -9211,7 +9211,7 @@ window.onload = function(){
       if (res.status === 503 && data.error === 'webhook_invalide') {
         avertirTexte("Le salon Discord est relié, mais l'adresse enregistrée n'en est pas une.\n\n"
             + "Sur le serveur : modifiez DISCORD_WEBHOOK dans backend/.env, puis redémarrez "
-            + "le conteneur (docker compose restart marlowe-app — voir backend/README.md).\n\n"
+            + "l'API (backend/README.md, « Mettre à jour une installation qui tourne déjà »).\n\n"
             + "La demande reste visible dans le fil ci-dessous.");
         return;
       }
@@ -9742,15 +9742,13 @@ window.onload = function(){
       } else if (r.status === 503 && d.error === 'webhook_invalide') {
         dire('', '');
         dire('Conclusion', "le secret existe, mais son contenu n'est pas une");
-        dire('', "adresse de webhook. Réenregistrez-le :");
-        dire('', '    sudo nano /opt/marlowe/backend/.env   # DISCORD_WEBHOOK=...');
-        dire('', '    sudo docker compose -f /opt/marlowe/backend/deploy/docker-compose.yml restart marlowe-app');
+        dire('', "adresse de webhook. Sur le serveur, corrigez DISCORD_WEBHOOK dans");
+        dire('', "backend/.env puis redéployez l'API (backend/README.md, « Mettre à jour »).");
       } else if (r.status === 503) {
         dire('', '');
         dire('Conclusion', "le webhook n'est pas enregistré côté serveur.");
-        dire('', 'Sur le VPS :');
-        dire('', '    sudo nano /opt/marlowe/backend/.env   # DISCORD_WEBHOOK=...');
-        dire('', '    sudo docker compose -f /opt/marlowe/backend/deploy/docker-compose.yml restart marlowe-app');
+        dire('', "Sur le serveur, ajoutez DISCORD_WEBHOOK=… dans backend/.env puis");
+        dire('', "redéployez l'API (backend/README.md, « Mettre à jour »).");
       } else if (r.status === 429) {
         dire('', '');
         dire('Conclusion', 'trop de demandes coup sur coup. Attendez 30 s.');
@@ -9760,14 +9758,14 @@ window.onload = function(){
       } else if (r.status === 404) {
         dire('', '');
         dire('Conclusion', "le serveur ne connaît pas encore /api/relais.");
-        dire('', "Le conteneur n'a sans doute pas été reconstruit après un déploiement récent :");
-        dire('', '    cd /opt/marlowe && git pull && sudo docker compose -f backend/deploy/docker-compose.yml up -d --build');
+        dire('', "Le serveur n'a sans doute pas été redéployé après la dernière mise à jour :");
+        dire('', "voir backend/README.md, « Mettre à jour une installation qui tourne déjà ».");
       } else if (r.status === 500) {
         dire('', '');
         dire('Conclusion', "le serveur a planté pendant le traitement. Le");
         dire('', "détail ci-dessus est le message exact de l'erreur.");
-        dire('', "Pour la voir en direct, sur le VPS :");
-        dire('', '    sudo docker logs -f marlowe-app-1');
+        dire('', "Pour la voir en direct : les journaux du serveur (pm2 logs, journalctl");
+        dire('', "ou docker compose logs, selon le montage — voir backend/README.md).");
         dire('', "puis recliquez sur ce bouton.");
       } else if (r.status === 502) {
         dire('', '');
@@ -9798,7 +9796,7 @@ window.onload = function(){
    --------------------------------------------------------------------------
    La pastille se règle ici, dans le registre, comme n'importe quelle autre
    donnée de fiche. Le rappel, lui, ne part JAMAIS d'ici : le navigateur ne
-   connaît que le n° civil, et c'est le Worker qui relit l'identifiant Discord
+   connaît que le n° civil, et c'est le serveur qui relit l'identifiant Discord
    en base, cherche le ticket et écrit. Un employé connecté ne peut donc pas
    faire écrire le domaine à qui il veut en bricolant sa requête.
    ========================================================================== */
@@ -9842,7 +9840,7 @@ window.onload = function(){
       { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Paris' });
   }
 
-  /* Ce que dit le panel quand le Worker refuse. Chaque cas a sa phrase : un
+  /* Ce que dit le panel quand le serveur refuse. Chaque cas a sa phrase : un
      « échec » générique laisse la personne devant un mur. */
   function phraseRefus(r, quoi) {
     const d = (r.data && r.data.detail) ? ' (' + r.data.detail + ')' : '';
@@ -9880,9 +9878,9 @@ window.onload = function(){
          cherche une permission Discord qui n'est pas en cause. */
       case 'not_found':
         return 'Cette version du serveur ne connaît pas encore cette fonction. '
-             + 'Le conteneur doit être reconstruit (cd /opt/marlowe && git pull && '
-             + 'sudo docker compose -f backend/deploy/docker-compose.yml up -d --build), '
-             + 'puis /api/version doit afficher la version attendue.';
+             + 'Le serveur doit être redéployé (backend/README.md, « Mettre à jour une '
+             + 'installation qui tourne déjà »), puis /api/version doit afficher la '
+             + 'version attendue.';
       default:          return `Le serveur a refusé (${(r.data && r.data.error) || r.status})${d}.`;
     }
   }
@@ -9974,7 +9972,7 @@ window.onload = function(){
 /* ==========================================================================
    QUOTA EN DIRECT — les ventes lues dans les logs Discord
    --------------------------------------------------------------------------
-   Cette page ne calcule rien elle-même : elle demande au Worker, qui a lu le
+   Cette page ne calcule rien elle-même : elle demande au serveur, qui a lu le
    salon des logs et rangé chaque vente sous l'identifiant de son message.
 
    Elle est VOLONTAIREMENT à part du Tableau de bord, qui reste alimenté par
@@ -10039,7 +10037,7 @@ window.onload = function(){
      — parce qu'on le compare à l'horodatage réel de messages Discord. Deux
      objets différents, deux fonctions.
 
-     Le Worker filtre en « ts >= du ET ts < au ». Une semaine complète va donc
+     Le serveur filtre en « ts >= du ET ts < au ». Une semaine complète va donc
      du lundi 00 h 00 au lundi suivant 00 h 00 EXCLU — ce qui couvre très
      exactement jusqu'au dimanche 23 h 59 min 59 s 999. Pas de seconde perdue
      entre deux semaines, et aucune vente comptée deux fois. */
@@ -10343,7 +10341,7 @@ window.onload = function(){
     qdDessiner();
   }
 
-  /* En démo il n'y a pas de Worker. On montre à quoi ressemble la page pleine
+  /* En démo il n'y a pas de serveur. On montre à quoi ressemble la page pleine
      — y compris une ligne non rattachée, qui est le cas qu'on veut voir. */
   function qdDemo() {
     const base = (typeof rhRosterData !== 'undefined' ? rhRosterData : []).slice(0, 6);
@@ -10391,7 +10389,7 @@ window.onload = function(){
 
   document.addEventListener('click', async ev => {
     if (!ev.target.closest('#qdRelire')) return;
-    if (estDemo()) { toast('(démo) Le Worker relirait le salon.'); return; }
+    if (estDemo()) { toast('(démo) Le serveur relirait le salon.'); return; }
     const b = ev.target.closest('#qdRelire');
     b.disabled = true;
     const r = await window.MarloweAuth.apiBrut('/api/journaux', { method: 'POST' });

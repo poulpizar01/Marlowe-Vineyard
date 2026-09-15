@@ -1,23 +1,27 @@
 /* ============================================================================
-   MARLOWE VINEYARD — Backend d'authentification Discord
-   Cloudflare Worker · aucune dépendance
+   MARLOWE VINEYARD — l'API du panel (connexion Discord, RH, quotas, agenda…)
    ----------------------------------------------------------------------------
-   Ce Worker fait trois choses :
-     1. connecter un membre via Discord (OAuth2),
-     2. vérifier qu'il est bien sur le serveur du domaine et lire ses rôles,
-     3. stocker la matrice des accès réglée par le patron.
+   Ce fichier contient toute la logique métier : les routes, l'OAuth Discord,
+   la matrice des accès, les quotas, les rappels. Il est servi par
+   src/server.js (Node.js) et parle à MariaDB/MySQL par src/db.js.
 
-   Les secrets ne sont JAMAIS dans ce fichier : ils vivent dans les variables
-   d'environnement Cloudflare. Ce code peut donc rester public sans risque.
+   Il est né Worker Cloudflare, et en garde la forme : un objet exporté avec
+   fetch() et scheduled(), un `env` reçu en paramètre, une façade base(env)
+   qui imite l'API D1. Quelques commentaires plus bas racontent encore des
+   décisions prises pour Cloudflare (quotas KV, isolats) : elles expliquent
+   POURQUOI le code est fait ainsi, elles ne décrivent plus où il tourne.
 
-   Voir README.md pour le déploiement.
+   Les secrets ne sont JAMAIS dans ce fichier : ils vivent dans backend/.env,
+   jamais commité. Ce code peut donc rester public sans risque.
+
+   Voir backend/README.md pour le déploiement.
    ============================================================================ */
 
 import { readFileSync } from 'node:fs';
 
 const DISCORD = 'https://discord.com/api/v10';
 
-/* La version du Worker EN LIGNE.
+/* La version du serveur EN LIGNE.
    ---------------------------------------------------------------------------
    Elle existe pour une seule raison, apprise à la dure : un correctif serveur
    qui n'a pas été redéployé se comporte exactement comme un correctif qui ne
@@ -101,8 +105,8 @@ function allowedOrigin(env, request) {
    connue.
 
    Une variable de module qui retiendrait « l'origine en cours » serait plus
-   courte et FAUSSE : un Worker traite plusieurs requêtes en parallèle dans le
-   même isolat, et deux appels qui s'entrelacent sur un await se voleraient
+   courte et FAUSSE : le serveur traite plusieurs requêtes en parallèle dans
+   le même processus, et deux appels qui s'entrelacent sur un await se voleraient
    leur origine. Le bug ne se verrait qu'en charge, donc jamais en test.
    -------------------------------------------------------------------------- */
 function ajusterCors(reponse, request, env) {
@@ -175,19 +179,18 @@ function errorPage(title, message, env, statut = 403) {
 }
 
 /* ---------------------------------------------------------------------------
-   Cache en mémoire vive — et pas dans KV
+   Cache en mémoire vive — et pas en base
    ---------------------------------------------------------------------------
-   Le plan gratuit de Cloudflare KV autorise 1 000 ÉCRITURES par jour (les
-   lectures, elles, sont 100 fois plus généreuses). Or les caches courts de ce
-   Worker écrivaient dans KV : les rôles d'un membre toutes les 60 secondes,
-   soit près de 1 500 écritures par jour et par personne connectée. Le quota
-   partait en fumée avant midi, et TOUTE écriture suivante levait une erreur —
-   connexion impossible, enregistrement impossible.
+   Un cache de quelques dizaines de secondes (les rôles d'un membre, la liste
+   des rôles du serveur) n'a aucun besoin d'être durable : il vit dans la
+   mémoire du processus et ne coûte rien. Il disparaît au redémarrage, et
+   chaque instance a le sien : au pire on réinterroge Discord, ce qui est
+   précisément ce que le cache évitait — jamais une erreur.
 
-   Un cache de quelques dizaines de secondes n'a aucun besoin d'être durable.
-   Il vit ici, dans la mémoire de l'isolat Cloudflare, et ne coûte rien. Il
-   disparaît quand l'isolat est recyclé : au pire on réinterroge Discord, ce
-   qui est précisément ce que le cache évitait — jamais une erreur. */
+   (Historique : à l'époque Cloudflare, ces caches écrivaient dans KV, dont le
+   plan gratuit plafonnait à 1 000 écritures par jour — le quota partait en
+   fumée avant midi et bloquait toute écriture. C'est de là que vient ce
+   choix.) */
 const memoire = new Map();
 
 function memGet(cle) {
@@ -804,8 +807,8 @@ async function handleCallback(request, env, url) {
 
   /* Les comptes listés dans OWNER_IDS gardent l'accès même hors du serveur :
      ce sont les développeurs du site, et ils doivent pouvoir intervenir sans
-     dépendre de leur présence sur le Discord du domaine. La liste vit dans les
-     variables d'environnement Cloudflare, personne ne peut s'y ajouter. */
+     dépendre de leur présence sur le Discord du domaine. La liste vit dans
+     backend/.env, sur le serveur : personne ne peut s'y ajouter depuis le panel. */
   const proprietaire = ownerIds(env).includes(String(me.id));
 
   if (!member && !proprietaire) {
@@ -1788,7 +1791,7 @@ function lienCanva(brut) {
 
 /* POST /api/discord  —  relais vers le salon des runners
    ---------------------------------------------------------------------------
-   L'adresse du webhook est un secret Cloudflare, jamais envoyé au navigateur :
+   L'adresse du webhook est un secret du .env, jamais envoyé au navigateur :
    une URL de webhook est une autorisation d'écriture, et n'importe qui pourrait
    poster dans le salon en la lisant dans le code de la page.
 
@@ -2366,8 +2369,8 @@ async function handleSettings(request, env) {
       catégories déclarées, le salon où l'identifiant de la personne a une
       permission posée à son nom.
 
-   Le bot du VPS n'intervient à aucun moment : le Worker détient le token et
-   parle à Discord directement, comme il le fait déjà pour lire les rôles.
+   Aucun bot à faire tourner à côté : le serveur détient le token et parle à
+   Discord directement, comme il le fait déjà pour lire les rôles.
    --------------------------------------------------------------------------- */
 
 /* Une relance par personne toutes les 24 h. Le bouton n'est pas une arme. */
@@ -2696,8 +2699,8 @@ async function handleRappel(request, env) {
 
    Deux choses à savoir avant de lire ce code.
 
-   1. Le VPS n'intervient pas. Le Worker lit le salon lui-même, en REST, avec
-      le token du bot. Ton bot peut être éteint. En revanche l'intention
+   1. Aucun bot à faire tourner à côté. Le serveur lit le salon lui-même, en
+      REST, avec le token du bot. En revanche l'intention
       « Contenu des messages » doit être activée dans le portail développeur :
       elle vaut aussi pour les réponses REST, et sans elle Discord renvoie des
       embeds vides — silencieusement.
@@ -3198,7 +3201,7 @@ async function handleData(request, env) {
    · le nom vient de la SESSION, jamais du corps de la requête. On ne déclare
      que sa propre absence — sinon n'importe qui mettrait le voisin en congé ;
 
-   · c'est le WORKER qui écrit dans le registre, pas le navigateur. Écrire
+   · c'est le SERVEUR qui écrit dans le registre, pas le navigateur. Écrire
      rhAbsences depuis le panel exige le droit sur la page Recrutement : le
      donner à toute l'équipe pour cette seule fonction ouvrirait aussi la
      suppression des absences des autres. Ici, la seule ligne qu'une personne
@@ -3548,14 +3551,14 @@ async function handleLogout(request, env) {
 
    Quatre décisions qui méritent d'être écrites :
 
-   · l'heure de l'agenda est celle de PARIS, pas celle du Worker. Un événement
+   · l'heure de l'agenda est celle de PARIS, pas celle du serveur. Un événement
      saisi « 18:00 » se joue à 18 h au domaine, quel que soit le fuseau de la
      machine qui lit. Le décalage se relit à l'instant visé et non à l'instant
      courant : une semaine qui enjambe le changement d'heure décalerait le
      rappel d'une heure entière ;
 
    · la fenêtre fait dix minutes, alors que le passage revient toutes les deux.
-     Un cron qui saute un tour — Cloudflare n'en garantit aucun — ne doit pas
+     Un passage qui saute un tour — redémarrage, machine chargée — ne doit pas
      faire perdre le rappel ;
 
    · la clé anti-doublon est posée AVANT l'envoi. Un salon qui reçoit le même
@@ -3677,10 +3680,10 @@ async function rappelsAgenda(env) {
 }
 
 export default {
-  /* Le passage périodique : le Worker va lire le salon des logs tout seul.
-     Aucune ligne à écrire sur le VPS, et le bot peut être éteint. Une erreur
-     ici ne doit jamais faire tomber le Worker : elle est rangée dans
-     logs:etat, et le panel l'affiche à la place des chiffres. */
+  /* Le passage périodique (toutes les deux minutes, voir server.js) : le
+     serveur va lire le salon des logs tout seul, aucun bot à faire tourner à
+     côté. Une erreur ici ne doit jamais faire tomber le serveur : elle est
+     rangée dans logs:etat, et le panel l'affiche à la place des chiffres. */
   async scheduled(evenement, env, ctx) {
     /* Une instance à la fois. Chaque processus a son propre node-cron, donc
        avec plusieurs instances la tâche se déclencherait partout à la même

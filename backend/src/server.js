@@ -59,8 +59,10 @@ const TYPES_MIME = {
   '.webmanifest': 'application/manifest+json',
 };
 
-/* La CSP qui autorise l'affichage dans l'ordinateur en jeu (FolkOS / FiveM) —
-   voir docs/A-TRANSMETTRE-AU-RESPONSABLE.md. Sans elle l'iframe reste
+/* La CSP qui autorise l'affichage dans l'ordinateur en jeu (FolkOS / FiveM).
+   C'est une exigence de l'opérateur : le panel est encadré par l'ordinateur
+   en jeu, et l'en-tête doit lister nui://game, cfx-nui-external-iframe et
+   *.fbfa.fr. Sans elle l'iframe reste
    blanche, sans le moindre message d'erreur. X-Frame-Options ne doit JAMAIS
    être posé : il contredirait frame-ancestors et bloquerait l'affichage même
    quand la CSP est correcte.

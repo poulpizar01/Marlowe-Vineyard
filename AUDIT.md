@@ -1,3 +1,10 @@
+> **Rapport daté** (premier passage, 9–10 septembre 2026), écrit sur le dépôt de l'équipe d'origine,
+> `Poloveni/Marlow-Vineyard` : les commits qu'il cite sont les siens. Il est
+> conservé comme trace du raisonnement. Ce qu'il décrit comme « à faire » ou
+> « assumé » a pu être réglé depuis — en particulier la contrainte d'un seul
+> processus (§7 ter du second passage), levée en 1.48.0 par un verrou tenu par
+> la base. L'état courant est celui de `backend/README.md`.
+
 # Audit du dépôt Marlowe Vineyard
 
 **Dépôt** : https://github.com/Poloveni/Marlow-Vineyard

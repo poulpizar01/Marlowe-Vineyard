@@ -12,7 +12,7 @@
    change — aucune autre ligne du panel n'est touchée.
 
    ----------------------------------------------------------------------------
-   CONTRAT ATTENDU DU BACKEND (à implémenter côté Cloudflare Worker)
+   CONTRAT ATTENDU DU BACKEND (backend/src/index.js)
    ----------------------------------------------------------------------------
    GET  {API_BASE}/api/login
         → redirige vers Discord (OAuth2, scopes: identify guilds.members.read)
@@ -377,7 +377,7 @@
   /* Qui peut annoncer une disponibilité dans le salon des runners.
      ------------------------------------------------------------------------
      Même règle exactement que côté serveur, et c'est voulu : le panel cache
-     le bouton, le Worker refuse l'appel. Les deux doivent dire la même chose,
+     le bouton, le serveur refuse l'appel. Les deux doivent dire la même chose,
      sinon on obtient un bouton qui s'affiche puis répond « interdit ».
 
      Une liste vide ne laisse passer que le patron. Un réglage jamais touché

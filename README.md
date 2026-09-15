@@ -12,9 +12,10 @@ README décrivent et que les bancs d'essai éprouvent.
 Deux autres copies existent et prêtent à confusion :
 
 - **`Poloveni/Marlow-Vineyard`**, le dépôt de l'équipe d'origine, d'où vient
-  l'installation qui tourne sur `marlowvineyard.duckdns.org`. Les commits
-  cités dans `docs/MISE-A-JOUR-NICOLAS.md` sont les siens. Il n'est pas
-  suivi ici : une correction faite là-bas n'arrive pas ici toute seule.
+  l'installation qui tourne sur `marlowvineyard.duckdns.org`. Les deux
+  rapports d'audit à la racine (`AUDIT.md`, `AUDIT-PASSAGE-2.md`) ont été
+  écrits sur lui et citent ses commits. Il n'est pas suivi ici : une
+  correction faite là-bas n'arrive pas ici toute seule.
 - **L'ancien GitHub Pages** (`poulpizar01.github.io/Marlowe-Vineyard`), qui
   sert encore une copie statique du site d'avant la version Node.js. Il ne
   parle à aucune API et n'est plus mis à jour ; à désactiver dans les

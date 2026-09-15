@@ -1,6 +1,6 @@
 /* Banc d'essai de la reconnaissance du rôle « patron ».
    ---------------------------------------------------------------------------
-   PATRON_ROLES est tapé à la main dans wrangler.toml ; le nom du rôle vit sur
+   PATRON_ROLES est tapé à la main dans backend/.env ; le nom du rôle vit sur
    Discord et s'écrit comme on veut. Une comparaison caractère par caractère
    n'en reconnaissait qu'une seule forme, et le patron du domaine se retrouvait
    sans les droits du patron sans que rien ne dise pourquoi.

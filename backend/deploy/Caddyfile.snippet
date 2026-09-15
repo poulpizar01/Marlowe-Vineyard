@@ -1,6 +1,9 @@
-# À déposer dans /opt/vps-proxy/sites.d/marlowe.caddy sur le VPS partagé.
-# Caddy gère le HTTPS tout seul (Let's Encrypt), à la première requête sur
-# le domaine — à condition que le DNS pointe déjà vers cette machine.
+# Exemple de reverse proxy Caddy devant l'API (avec ou sans Docker).
+# Caddy gère le HTTPS tout seul (Let's Encrypt) à la première requête sur le
+# domaine — à condition que le DNS pointe déjà vers cette machine — et pose
+# les en-têtes X-Forwarded-* dont le serveur a besoin (backend/README.md §4).
+# Remplacez le domaine par le vôtre (celui de SITE_URL dans backend/.env), et
+# 8787 par le port choisi (PORT dans .env, ou « ports: » du docker-compose).
 
 # MARLOWE VINEYARD
 http://marlowe-vineyard.fbfa.fr {
@@ -22,7 +25,7 @@ marlowe-vineyard.fbfa.fr {
 	}
 
 	handle {
-		reverse_proxy marlowe-app-1:8787 {
+		reverse_proxy 127.0.0.1:8787 {
 			header_up X-Real-IP {remote_host}
 		}
 	}
@@ -36,6 +39,6 @@ marlowe-vineyard.fbfa.fr {
 #   · SITE_URLS dans backend/.env      (sans quoi les enregistrements sont
 #                                       refusés, et le cookie de session est
 #                                       perdu à la connexion) ;
-#   · SITE_ATTENDUES dans marlowe-actions.js.
+#   · la liste des adresses du site   (node backend/scripts/changer-adresse.mjs).
 # Et pensez au Redirect OAuth2 côté Discord, qui doit correspondre à SITE_URL.
 # ---------------------------------------------------------------------------

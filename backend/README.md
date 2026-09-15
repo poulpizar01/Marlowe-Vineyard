@@ -103,9 +103,8 @@ FLUSH PRIVILEGES;
 C'est pour ça que le compte a besoin du droit `CREATE` (d'où `GRANT ALL`
 ci-dessus) : le serveur rejoue `CREATE TABLE IF NOT EXISTS` à **chaque**
 démarrage, et MariaDB vérifie le droit avant de regarder si la table existe.
-Un compte limité à `SELECT, INSERT, UPDATE, DELETE` — comme le proposait
-une ancienne version de `docs/A-TRANSMETTRE-AU-RESPONSABLE.md` — fait
-échouer le démarrage, même sur une base déjà remplie.
+Un compte limité à `SELECT, INSERT, UPDATE, DELETE` fait échouer le
+démarrage, même sur une base déjà remplie.
 
 > **Un PDF de catalogue pèse jusqu'à 12 Mo.** Si un dépôt échoue avec une
 > erreur du type « packet too large », augmentez `max_allowed_packet` dans la
@@ -158,11 +157,11 @@ signale simplement qu'il n'est pas configuré.
 ## 4. Lancer le serveur
 
 > **Avec Docker ?** `backend/deploy/docker-compose.yml` fait tourner l'app et
-> MariaDB dans deux conteneurs, chacun dans sa propre boîte. Attention : ce
-> fichier suppose un Caddy déjà partagé entre plusieurs projets sur le VPS
-> (voir l'avertissement en tête du fichier) — sur un VPS neuf ou différent,
-> il faut d'abord en retirer le réseau `caddy` externe. La suite de cette
-> section (sans Docker) fonctionne elle sur n'importe quel hébergeur.
+> MariaDB dans deux conteneurs, chacun dans sa propre boîte, et publie l'API
+> sur `127.0.0.1:8787` de la machine — il ne reste qu'à mettre votre reverse
+> proxy devant (point 1 ci-dessous, `deploy/Caddyfile.snippet` en donne un
+> exemple). La suite de cette section décrit le montage sans Docker ; les
+> deux fonctionnent sur n'importe quel hébergeur.
 
 Pour tester en local :
 
@@ -296,9 +295,7 @@ Rien à modifier dans `marlowe-auth.js` : `MODE` est déjà réglé sur
 `'discord'`, et `API_BASE` vaut `''` (voir `marlowe-config.js` à la racine du
 dépôt) — une chaîne vide veut dire « la même origine que la page », ce qui
 est le cas ici puisque `src/server.js` sert le site ET l'API depuis le même
-processus (voir `backend/deploy/docker-compose.yml` et
-`docs/A-TRANSMETTRE-AU-RESPONSABLE.md`, « montage B »). Aucun CORS à régler,
-aucune adresse à recopier.
+processus. Aucun CORS à régler, aucune adresse à recopier.
 
 S'il fallait un jour séparer le site de l'API sur deux domaines, la seule
 ligne à changer serait `window.MARLOWE_API_BASE` dans `marlowe-config.js`.
@@ -359,7 +356,7 @@ existante. Il ne relit ni le code, ni le `.env`. (Vécu : un jeton Discord
 ajouté au `.env` puis un `restart` — l'API a continué pendant un moment à se
 plaindre d'une configuration manquante qui était pourtant bien sur le disque.)
 
-### La séquence, depuis `/opt/marlowe` sur le serveur
+### La séquence, depuis le dossier du dépôt sur le serveur
 
 ```bash
 git pull origin main
@@ -501,10 +498,10 @@ vit dans les deux tables `kv` et `ventes` de la base MariaDB de
 l'installation actuelle. Pour reprendre l'existant, il faut **un dump de
 cette base**, transmis par la personne qui administre la machine actuelle.
 
-Sur la machine actuelle (montage Docker de `deploy/docker-compose.yml`) :
+Sur la machine actuelle (montage Docker de `deploy/docker-compose.yml`,
+depuis le dossier du dépôt) :
 
 ```bash
-cd /opt/marlowe
 MDP=$(grep '^DB_PASSWORD=' backend/.env | cut -d= -f2-)
 sudo docker exec -e MYSQL_PWD="$MDP" marlowe-db-1 \
   mariadb-dump -u marlowe --single-transaction marlowe > marlowe-$(date +%F).sql
