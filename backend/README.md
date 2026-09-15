@@ -24,23 +24,23 @@ ils existent déjà, sur son compte, et il garde la main dessus. Le backend
 n'a besoin d'aucun bot à installer ou à faire tourner : il parle à Discord
 lui-même, avec le jeton.
 
-Ce que vous recevez de lui, en privé, à copier dans  à l'étape 3 :
+Ce que vous recevez de lui, en privé, à copier dans `.env` à l'étape 3 :
 
 | Valeur | Variable |
 |---|---|
-| l'identifiant de l'application |  |
-| le secret de l'application |  |
-| le jeton du bot |  |
-| l'identifiant du serveur Discord |  |
+| l'identifiant de l'application | `DISCORD_CLIENT_ID` |
+| le secret de l'application | `DISCORD_CLIENT_SECRET` |
+| le jeton du bot | `DISCORD_BOT_TOKEN` |
+| l'identifiant du serveur Discord | `DISCORD_GUILD_ID` |
 
 Ce que vous lui donnez en retour, **avant** le premier essai de connexion :
-**l'adresse du site**, celle de . Il doit la déclarer dans le
+**l'adresse du site**, celle de `SITE_URL`. Il doit la déclarer dans le
 portail développeur Discord (OAuth2 ▸ Redirects) sous la forme
-. Tant que ce n'est pas fait, Discord
+`https://<adresse du site>/api/callback`. Tant que ce n'est pas fait, Discord
 refuse la connexion. Le serveur construit cette adresse de retour à partir
 du domaine par lequel le navigateur arrive : ce qui est déclaré chez Discord
 doit être exactement l'adresse que les gens tapent, suivie de
-.
+`/api/callback`.
 
 ---
 
