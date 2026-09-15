@@ -96,9 +96,11 @@ Deux autres copies existent encore et prêtent à confusion :
 
 ## Déployer ce projet
 
-Toute la marche à suivre — créer l'application Discord, préparer le
-serveur, configurer `.env`, lancer l'API (avec ou sans Docker), brancher le
-site — est dans **[backend/README.md](backend/README.md)**.
+Toute la marche à suivre — préparer le serveur et la base, configurer
+`.env` avec les valeurs reçues du responsable du domaine, lancer l'API (avec
+ou sans Docker), charger les données, mettre à jour — est dans
+**[backend/README.md](backend/README.md)**. L'application Discord existe
+déjà : la personne qui déploie n'a rien à y créer.
 
 Pour vérifier le code sans rien installer : `cd backend && npm test` lance
 les 18 bancs d'essai du dépôt (voir backend/README.md, « Lancer les bancs
