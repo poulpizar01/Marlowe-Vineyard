@@ -90,7 +90,6 @@ Deux autres copies existent encore et prêtent à confusion :
   lancés d'un coup par `cd backend && npm test`.
 - **`AUDIT.md`, `AUDIT-PASSAGE-2.md`** — deux rapports d'audit datés, écrits
   sur le dépôt de l'équipe d'origine, conservés comme trace.
-- **`Claude outputs/`** — captures d'écran des rendus successifs du site.
 - **`LICENSE`** — code propriétaire : l'accès est réservé aux collaborateurs
   autorisés, pour ce projet seulement. Aucune réutilisation ailleurs.
 

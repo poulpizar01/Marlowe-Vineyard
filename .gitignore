@@ -66,3 +66,6 @@ desktop.ini
 *.avant-mariadb
 *.bak
 *.orig
+
+# Les captures d'écran de travail restent sur le poste, pas dans le dépôt.
+/Claude outputs/
