@@ -19,6 +19,15 @@ Comptez une vingtaine de minutes pour la première mise en route.
 
 ## 1. Créer l'application Discord
 
+**Qui fait quoi.** L'application Discord et son bot appartiennent au
+responsable du domaine, pas à l'hébergeur : c'est lui qui les crée sur son
+compte Discord, invite le bot sur le serveur du domaine, et garde la main
+dessus. L'hébergeur n'a **rien** à faire dans cette section : il reçoit les
+quatre valeurs qui en sortent (identifiant d'application, secret, jeton du
+bot, identifiant du serveur) et les copie dans `.env` à l'étape 3. Il n'a
+pas non plus à installer ou faire tourner un bot : le backend parle à
+Discord lui-même, avec le jeton.
+
 Sur https://discord.com/developers/applications
 
 1. **New Application** → nom : `Marlowe Vineyard`.

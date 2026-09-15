@@ -26,20 +26,18 @@ backend/.env
 #  LES DONNÉES DU DOMAINE
 # ---------------------------------------------------------------------------
 #  Le registre du personnel contient des identités civiles, des téléphones,
-#  des RIB et des identifiants Discord. Un export produit pendant la migration
-#  MariaDB contient TOUT ça d'un bloc.
+#  des RIB et des identifiants Discord. Un export de la base contient TOUT
+#  ça d'un bloc — et les sessions en cours, qui sont des jetons d'accès.
 #
-#  ⚠️  C'est le risque le plus concret de ce dépôt : un « git add . » lancé
-#      depuis un dossier où traîne un export publie le fichier du personnel
-#      en entier. Une fois poussé, le supprimer ne suffit plus — il faut
-#      réécrire l'historique ET considérer les données comme divulguées.
+#  Un seul export est dans le dépôt, par décision : backend/marlowe.sql,
+#  passé par backend/scripts/dump-nettoyer.mjs (sessions et clés temporaires
+#  retirées). Tout autre export doit passer par le même script AVANT d'être
+#  ajouté, et une fois poussé, le supprimer ne suffit plus : il reste dans
+#  l'historique, il faut le réécrire ET considérer les données divulguées.
 export.json
 export*.json
 donnees.sql
-
 *.sql.gz
-
-
 sauvegardes/
 donnees/
 
