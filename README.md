@@ -14,6 +14,34 @@ ne peut pas être dans un dépôt public — les identifiants de l'application
 Discord et le jeton du stockage —, que le responsable du domaine vous
 transmet en privé (backend/README.md, §3, dit qui fournit quoi).
 
+### Démarrer, en résumé
+
+Il faut **Node.js 20 ou plus** et **MariaDB ou MySQL** (ou Docker, qui
+fournit la base). Pas de compilation : un seul processus Node sert le site
+et l'API.
+
+```bash
+git clone https://github.com/poulpizar01/Marlowe-Vineyard.git
+cd Marlowe-Vineyard/backend
+cp .env.example .env            # puis remplir : base, port, adresse, Discord, stockage
+npm install
+npm start                       # crée les tables, écoute sur 127.0.0.1:<PORT>
+```
+
+Charger les données existantes : `mariadb -u marlowe -p marlowe < marlowe.sql`.
+
+Pour la mise en service, un service qui redémarre tout seul et une
+vérification que l'API répond :
+
+```bash
+./deploy.sh --first             # ensuite : ./deploy.sh update après chaque git pull
+```
+
+Il reste alors l'entrée du reverse proxy vers `127.0.0.1:<PORT>`, et le
+Redirect OAuth2 chez Discord (`https://<adresse du site>/api/callback`),
+déclaré par le responsable du domaine. Le montage Docker équivalent est dans
+`backend/deploy/docker-compose.yml`.
+
 ## Quel dépôt fait foi
 
 **Celui-ci — `poulpizar01/Marlowe-Vineyard`.** C'est le code que ces
